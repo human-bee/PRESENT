@@ -7,10 +7,39 @@ export const mcpAppWidgetSchema = z.object({
   serverName: z.string().optional().describe('Named MCP server to resolve from config'),
   resourceUri: z.string().optional().describe('Override UI resource URI (ui://...)'),
   args: z.record(z.string(), z.any()).optional().describe('Tool arguments'),
-  syncSource: z.enum(['timeline']).optional().describe('Canonical sync source to hydrate into iframe'),
+  preferredWidth: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Preferred intrinsic width for canvas auto-fit'),
+  preferredHeight: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Preferred intrinsic height for canvas auto-fit'),
+  minWidth: z.number().int().positive().optional().describe('Minimum width for canvas auto-fit'),
+  minHeight: z.number().int().positive().optional().describe('Minimum height for canvas auto-fit'),
+  autoFitWidth: z.boolean().optional().describe('Allow canvas auto-fit to follow measured width'),
+  autoFitHeight: z.boolean().optional().describe('Allow canvas auto-fit to follow measured height'),
+  sizingPolicyOverride: z
+    .enum(['always_fit', 'fit_until_user_resize', 'scale_only'])
+    .optional()
+    .describe('Optional canvas sizing policy override'),
+  syncSource: z
+    .enum(['timeline'])
+    .optional()
+    .describe('Canonical sync source to hydrate into iframe'),
   syncRoom: z.string().optional().describe('Room to read canonical timeline state from'),
   syncComponentId: z.string().optional().describe('Timeline component id to sync from'),
-  syncIntervalMs: z.number().int().min(1000).max(30000).optional().describe('Polling interval for canonical sync'),
+  syncIntervalMs: z
+    .number()
+    .int()
+    .min(1000)
+    .max(30000)
+    .optional()
+    .describe('Polling interval for canonical sync'),
   autoRun: z.boolean().optional().describe('Run tool automatically when mounted'),
   runId: z.string().optional().describe('Change to force a tool rerun'),
   displayMode: z.string().optional().describe('Requested display mode (inline, panel, modal)'),
@@ -21,4 +50,8 @@ export const mcpAppWidgetSchema = z.object({
 
 export type McpAppWidgetProps = z.infer<typeof mcpAppWidgetSchema> & {
   __custom_message_id?: string;
+  state?: Record<string, unknown>;
+  updateState?: (
+    patch: Record<string, unknown> | ((prev: Record<string, unknown>) => Record<string, unknown>),
+  ) => void;
 };

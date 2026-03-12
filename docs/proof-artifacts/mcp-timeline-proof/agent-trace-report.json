@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-03-11T23:28:13.767Z",
+  "generatedAt": "2026-03-12T01:09:50.780Z",
   "baseUrl": "http://localhost:3010",
-  "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+  "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
   "timelineComponentId": "mcp-timeline-widget-proof",
   "timelineRunResponse": {
     "ok": true,
@@ -9,10 +9,10 @@
     "payload": {
       "status": "queued",
       "task": {
-        "id": "0fae0d07-34b8-4d22-8616-e2982c3fef58",
-        "created_at": "2026-03-11T23:27:34.825+00:00",
-        "updated_at": "2026-03-11T23:27:34.825+00:00",
-        "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+        "id": "5a30a8ad-bf3c-423e-88c2-eb2f93e19463",
+        "created_at": "2026-03-12T01:08:04.813+00:00",
+        "updated_at": "2026-03-12T01:08:04.813+00:00",
+        "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
         "task": "timeline.patch",
         "params": {
           "ops": [
@@ -88,8 +88,8 @@
                 "summary": "Finalize script, supers, and CTA for the hero broadcast spot.",
                 "dueLabel": "Jan 30",
                 "blockedBy": [],
-                "createdAt": 1773271654815,
-                "updatedAt": 1773271654815,
+                "createdAt": 1773277682042,
+                "updatedAt": 1773277682042,
                 "sprintLabel": "Week 1"
               },
               "type": "upsert_item"
@@ -112,8 +112,8 @@
                 "blockedBy": [
                   "item-script"
                 ],
-                "createdAt": 1773271654815,
-                "updatedAt": 1773271654815,
+                "createdAt": 1773277682042,
+                "updatedAt": 1773277682042,
                 "sprintLabel": "Week 1"
               },
               "type": "upsert_item"
@@ -136,8 +136,8 @@
                 "blockedBy": [
                   "item-shoot"
                 ],
-                "createdAt": 1773271654815,
-                "updatedAt": 1773271654815,
+                "createdAt": 1773277682042,
+                "updatedAt": 1773277682042,
                 "sprintLabel": "Week 2"
               },
               "type": "upsert_item"
@@ -160,8 +160,8 @@
                 "blockedBy": [
                   "item-master"
                 ],
-                "createdAt": 1773271654815,
-                "updatedAt": 1773271654815,
+                "createdAt": 1773277682042,
+                "updatedAt": 1773277682042,
                 "startLabel": "Feb 7"
               },
               "type": "upsert_item"
@@ -184,8 +184,8 @@
                 "blockedBy": [
                   "item-shoot"
                 ],
-                "createdAt": 1773271654815,
-                "updatedAt": 1773271654815,
+                "createdAt": 1773277682042,
+                "updatedAt": 1773277682042,
                 "sprintLabel": "Week 2"
               },
               "type": "upsert_item"
@@ -209,8 +209,8 @@
                   "item-paid-social",
                   "item-master"
                 ],
-                "createdAt": 1773271654815,
-                "updatedAt": 1773271654815,
+                "createdAt": 1773277682042,
+                "updatedAt": 1773277682042,
                 "startLabel": "Feb 8"
               },
               "type": "upsert_item"
@@ -272,35 +272,35 @@
                 "status": "queued",
                 "target": "linear",
                 "summary": "Linear export staged for roadmap review.",
-                "queuedAt": 1773271654815,
-                "updatedAt": 1773271654815
+                "queuedAt": 1773277682042,
+                "updatedAt": 1773277682042
               }
             }
           ],
-          "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+          "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
           "task": "timeline.patch",
           "source": "tool",
           "lockKey": "widget:mcp-timeline-widget-proof",
           "summary": "Seed deterministic timeline proof snapshot.",
-          "traceId": "timeline-proof-trace-1773271654815",
-          "intentId": "timeline-proof-intent-1773271654815",
+          "traceId": "timeline-proof-trace-1773277682042",
+          "intentId": "timeline-proof-intent-1773277682042",
           "metadata": {
             "runtimeScope": "local"
           },
-          "requestId": "timeline-proof-1773271654815",
+          "requestId": "timeline-proof-1773277682042",
           "componentId": "mcp-timeline-widget-proof",
           "runtimeScope": "local",
-          "idempotencyKey": "timeline-proof-1773271654815"
+          "idempotencyKey": "timeline-proof-1773277682042"
         },
         "status": "running",
         "priority": 0,
         "run_at": null,
         "attempt": 0,
         "error": null,
-        "request_id": "timeline-proof-1773271654815",
-        "dedupe_key": "timeline-proof-1773271654815",
+        "request_id": "timeline-proof-1773277682042",
+        "dedupe_key": "timeline-proof-1773277682042",
         "resource_keys": [
-          "room:canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+          "room:canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
           "timeline:mcp-timeline-widget-proof",
           "runtime-scope:local",
           "lock:widget:mcp-timeline-widget-proof",
@@ -312,15 +312,15 @@
         "result": null,
         "trace_id": null
       },
-      "taskId": "0fae0d07-34b8-4d22-8616-e2982c3fef58",
-      "requestId": "timeline-proof-1773271654815",
-      "traceId": "timeline-proof-trace-1773271654815",
-      "intentId": "timeline-proof-intent-1773271654815"
+      "taskId": "5a30a8ad-bf3c-423e-88c2-eb2f93e19463",
+      "requestId": "timeline-proof-1773277682042",
+      "traceId": "timeline-proof-trace-1773277682042",
+      "intentId": "timeline-proof-intent-1773277682042"
     }
   },
   "timelineTask": {
-    "id": "0fae0d07-34b8-4d22-8616-e2982c3fef58",
-    "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+    "id": "5a30a8ad-bf3c-423e-88c2-eb2f93e19463",
+    "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
     "task": "timeline.patch",
     "status": "succeeded",
     "attempt": 0,
@@ -334,12 +334,12 @@
       "status": "completed",
       "deduped": false,
       "lockKey": "widget:mcp-timeline-widget-proof",
-      "executionId": "0fae0d07-34b8-4d22-8616-e2982c3fef58",
-      "idempotencyKey": "timeline-proof-1773271654815"
+      "executionId": "5a30a8ad-bf3c-423e-88c2-eb2f93e19463",
+      "idempotencyKey": "timeline-proof-1773277682042"
     },
-    "request_id": "timeline-proof-1773271654815",
-    "created_at": "2026-03-11T23:27:34.825+00:00",
-    "updated_at": "2026-03-11T23:27:42.373691+00:00",
+    "request_id": "timeline-proof-1773277682042",
+    "created_at": "2026-03-12T01:08:04.813+00:00",
+    "updated_at": "2026-03-12T01:08:11.88965+00:00",
     "trace_id": null
   },
   "timelineValidation": {
@@ -352,27 +352,27 @@
       "payload": {
         "status": "queued",
         "task": {
-          "id": "56a2d810-976e-4036-9446-4a662e4477ee",
-          "created_at": "2026-03-11T23:27:43.608+00:00",
-          "updated_at": "2026-03-11T23:27:43.608+00:00",
-          "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+          "id": "8998b7ad-815b-4d1d-ac9a-c579fecb3441",
+          "created_at": "2026-03-12T01:08:58.617+00:00",
+          "updated_at": "2026-03-12T01:08:58.617+00:00",
+          "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
           "task": "fairy.intent",
           "params": {
-            "id": "timeline-turn-proof-intent-1773271663448",
-            "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+            "id": "timeline-turn-proof-intent-1773277692225",
+            "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
             "model": "claude-haiku-4-5",
             "source": "voice",
             "lockKey": "widget:mcp-timeline-widget-proof",
             "message": "rename timeline to Super Bowl Ad Sprint",
-            "traceId": "timeline-turn-proof-trace-1773271663448",
+            "traceId": "timeline-turn-proof-trace-1773277692225",
             "metadata": {
-              "traceId": "timeline-turn-proof-trace-1773271663448",
-              "intentId": "timeline-turn-proof-intent-1773271663448",
+              "traceId": "timeline-turn-proof-trace-1773277692225",
+              "intentId": "timeline-turn-proof-intent-1773277692225",
               "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
               "configVersion": "74aba2730c70"
             },
             "provider": "anthropic",
-            "requestId": "timeline-turn-proof-1773271663448",
+            "requestId": "timeline-turn-proof-1773277692225",
             "componentId": "mcp-timeline-widget-proof",
             "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
             "configVersion": "74aba2730c70",
@@ -385,10 +385,10 @@
           "run_at": null,
           "attempt": 0,
           "error": null,
-          "request_id": "timeline-turn-proof-1773271663448",
+          "request_id": "timeline-turn-proof-1773277692225",
           "dedupe_key": null,
           "resource_keys": [
-            "room:canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+            "room:canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
             "canvas:intent",
             "runtime-scope:whiteboard-jamie-q02f56az.livekit.cloud",
             "lock:widget:mcp-timeline-widget-proof"
@@ -398,53 +398,28 @@
           "result": null,
           "trace_id": null
         },
-        "taskId": "56a2d810-976e-4036-9446-4a662e4477ee",
-        "requestId": "timeline-turn-proof-1773271663448",
-        "traceId": "timeline-turn-proof-trace-1773271663448",
-        "intentId": "timeline-turn-proof-intent-1773271663448"
+        "taskId": "8998b7ad-815b-4d1d-ac9a-c579fecb3441",
+        "requestId": "timeline-turn-proof-1773277692225",
+        "traceId": "timeline-turn-proof-trace-1773277692225",
+        "intentId": "timeline-turn-proof-intent-1773277692225"
       }
     },
     "task": {
-      "id": "56a2d810-976e-4036-9446-4a662e4477ee",
-      "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+      "id": "8998b7ad-815b-4d1d-ac9a-c579fecb3441",
+      "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
       "task": "fairy.intent",
-      "status": "succeeded",
-      "attempt": 0,
-      "error": null,
-      "result": {
-        "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
-        "status": "queued",
-        "deduped": false,
-        "lockKey": "widget:mcp-timeline-widget-proof",
-        "payload": {
-          "message": "rename timeline to Super Bowl Ad Sprint",
-          "metadata": {
-            "intent": {
-              "id": "timeline-turn-proof-intent-1773271663448",
-              "kind": "canvas",
-              "source": "voice",
-              "confidence": 0.2
-            },
-            "traceId": "timeline-turn-proof-trace-1773271663448",
-            "intentId": "timeline-turn-proof-intent-1773271663448",
-            "spectrum": 0.5,
-            "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
-            "configVersion": "74aba2730c70",
-            "contextProfile": "standard"
-          },
-          "requestId": "timeline-turn-proof-intent-1773271663448"
-        },
-        "requestId": "timeline-turn-proof-intent-1773271663448",
-        "executionId": "56a2d810-976e-4036-9446-4a662e4477ee",
-        "idempotencyKey": null
-      },
-      "request_id": "timeline-turn-proof-1773271663448",
-      "created_at": "2026-03-11T23:27:43.608+00:00",
-      "updated_at": "2026-03-11T23:28:04.987951+00:00",
+      "status": "failed",
+      "attempt": 4,
+      "error": "Cannot read properties of undefined (reading '_zod')",
+      "result": null,
+      "request_id": "timeline-turn-proof-1773277692225",
+      "created_at": "2026-03-12T01:08:58.617+00:00",
+      "updated_at": "2026-03-12T01:09:29.816122+00:00",
       "trace_id": null
     },
     "validation": {
-      "status": "ok"
+      "status": "warning",
+      "message": "fairy.intent task ended with status=failed error=Cannot read properties of undefined (reading '_zod')"
     }
   },
   "timelineTurnResults": [
@@ -455,38 +430,38 @@
         "payload": {
           "status": "queued",
           "task": {
-            "id": "33fb355b-d479-4c8e-b225-6d3fe9ce0822",
-            "created_at": "2026-03-11T23:28:05.263+00:00",
-            "updated_at": "2026-03-11T23:28:05.263+00:00",
-            "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+            "id": "1fb1de12-823e-4e9c-8979-1268d93142dc",
+            "created_at": "2026-03-12T01:09:30.361+00:00",
+            "updated_at": "2026-03-12T01:09:30.361+00:00",
+            "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
             "task": "timeline.turn",
             "params": {
-              "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+              "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
               "task": "timeline.turn",
               "prompt": "add blocker talent rights clearance to creative lane",
               "source": "voice",
               "lockKey": "widget:mcp-timeline-widget-proof",
               "summary": "Deterministic follow-up: add a blocker for talent rights clearance.",
-              "traceId": "timeline-turn-proof-trace-1773271685251",
-              "intentId": "timeline-turn-proof-intent-1773271685251",
+              "traceId": "timeline-turn-proof-trace-1773277769944",
+              "intentId": "timeline-turn-proof-intent-1773277769944",
               "metadata": {
                 "runtimeScope": "local"
               },
-              "requestId": "timeline-turn-proof-1773271685251",
+              "requestId": "timeline-turn-proof-1773277769944",
               "componentId": "mcp-timeline-widget-proof",
               "instruction": "add blocker talent rights clearance to creative lane",
               "runtimeScope": "local",
-              "idempotencyKey": "timeline-turn-proof-1773271685251"
+              "idempotencyKey": "timeline-turn-proof-1773277769944"
             },
             "status": "running",
             "priority": 0,
             "run_at": null,
             "attempt": 0,
             "error": null,
-            "request_id": "timeline-turn-proof-1773271685251",
-            "dedupe_key": "timeline-turn-proof-1773271685251",
+            "request_id": "timeline-turn-proof-1773277769944",
+            "dedupe_key": "timeline-turn-proof-1773277769944",
             "resource_keys": [
-              "room:canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+              "room:canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
               "timeline:mcp-timeline-widget-proof",
               "runtime-scope:local",
               "lock:widget:mcp-timeline-widget-proof",
@@ -498,15 +473,15 @@
             "result": null,
             "trace_id": null
           },
-          "taskId": "33fb355b-d479-4c8e-b225-6d3fe9ce0822",
-          "requestId": "timeline-turn-proof-1773271685251",
-          "traceId": "timeline-turn-proof-trace-1773271685251",
-          "intentId": "timeline-turn-proof-intent-1773271685251"
+          "taskId": "1fb1de12-823e-4e9c-8979-1268d93142dc",
+          "requestId": "timeline-turn-proof-1773277769944",
+          "traceId": "timeline-turn-proof-trace-1773277769944",
+          "intentId": "timeline-turn-proof-intent-1773277769944"
         }
       },
       "task": {
-        "id": "33fb355b-d479-4c8e-b225-6d3fe9ce0822",
-        "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+        "id": "1fb1de12-823e-4e9c-8979-1268d93142dc",
+        "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
         "task": "timeline.turn",
         "status": "succeeded",
         "attempt": 0,
@@ -520,12 +495,12 @@
           "status": "completed",
           "deduped": false,
           "lockKey": "widget:mcp-timeline-widget-proof",
-          "executionId": "33fb355b-d479-4c8e-b225-6d3fe9ce0822",
-          "idempotencyKey": "timeline-turn-proof-1773271685251"
+          "executionId": "1fb1de12-823e-4e9c-8979-1268d93142dc",
+          "idempotencyKey": "timeline-turn-proof-1773277769944"
         },
-        "request_id": "timeline-turn-proof-1773271685251",
-        "created_at": "2026-03-11T23:28:05.263+00:00",
-        "updated_at": "2026-03-11T23:28:06.52106+00:00",
+        "request_id": "timeline-turn-proof-1773277769944",
+        "created_at": "2026-03-12T01:09:30.361+00:00",
+        "updated_at": "2026-03-12T01:09:40.824033+00:00",
         "trace_id": null
       },
       "validation": {
@@ -539,38 +514,38 @@
         "payload": {
           "status": "queued",
           "task": {
-            "id": "c0e51245-85cd-4509-9d7b-8c0b8fec8015",
-            "created_at": "2026-03-11T23:28:06.95+00:00",
-            "updated_at": "2026-03-11T23:28:06.95+00:00",
-            "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+            "id": "ce6886da-43aa-4b82-a0af-4a924ee2df42",
+            "created_at": "2026-03-12T01:09:42.139+00:00",
+            "updated_at": "2026-03-12T01:09:42.139+00:00",
+            "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
             "task": "timeline.turn",
             "params": {
-              "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+              "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
               "task": "timeline.turn",
               "prompt": "finish hero master and legal supers depends on talent rights clearance",
               "source": "voice",
               "lockKey": "widget:mcp-timeline-widget-proof",
               "summary": "Deterministic follow-up: connect rights clearance to the hero master dependency chain.",
-              "traceId": "timeline-turn-proof-trace-1773271686942",
-              "intentId": "timeline-turn-proof-intent-1773271686942",
+              "traceId": "timeline-turn-proof-trace-1773277781961",
+              "intentId": "timeline-turn-proof-intent-1773277781961",
               "metadata": {
                 "runtimeScope": "local"
               },
-              "requestId": "timeline-turn-proof-1773271686942",
+              "requestId": "timeline-turn-proof-1773277781961",
               "componentId": "mcp-timeline-widget-proof",
               "instruction": "finish hero master and legal supers depends on talent rights clearance",
               "runtimeScope": "local",
-              "idempotencyKey": "timeline-turn-proof-1773271686942"
+              "idempotencyKey": "timeline-turn-proof-1773277781961"
             },
             "status": "running",
             "priority": 0,
             "run_at": null,
             "attempt": 0,
             "error": null,
-            "request_id": "timeline-turn-proof-1773271686942",
-            "dedupe_key": "timeline-turn-proof-1773271686942",
+            "request_id": "timeline-turn-proof-1773277781961",
+            "dedupe_key": "timeline-turn-proof-1773277781961",
             "resource_keys": [
-              "room:canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+              "room:canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
               "timeline:mcp-timeline-widget-proof",
               "runtime-scope:local",
               "lock:widget:mcp-timeline-widget-proof",
@@ -582,15 +557,15 @@
             "result": null,
             "trace_id": null
           },
-          "taskId": "c0e51245-85cd-4509-9d7b-8c0b8fec8015",
-          "requestId": "timeline-turn-proof-1773271686942",
-          "traceId": "timeline-turn-proof-trace-1773271686942",
-          "intentId": "timeline-turn-proof-intent-1773271686942"
+          "taskId": "ce6886da-43aa-4b82-a0af-4a924ee2df42",
+          "requestId": "timeline-turn-proof-1773277781961",
+          "traceId": "timeline-turn-proof-trace-1773277781961",
+          "intentId": "timeline-turn-proof-intent-1773277781961"
         }
       },
       "task": {
-        "id": "c0e51245-85cd-4509-9d7b-8c0b8fec8015",
-        "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+        "id": "ce6886da-43aa-4b82-a0af-4a924ee2df42",
+        "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
         "task": "timeline.turn",
         "status": "succeeded",
         "attempt": 0,
@@ -604,12 +579,12 @@
           "status": "completed",
           "deduped": false,
           "lockKey": "widget:mcp-timeline-widget-proof",
-          "executionId": "c0e51245-85cd-4509-9d7b-8c0b8fec8015",
-          "idempotencyKey": "timeline-turn-proof-1773271686942"
+          "executionId": "ce6886da-43aa-4b82-a0af-4a924ee2df42",
+          "idempotencyKey": "timeline-turn-proof-1773277781961"
         },
-        "request_id": "timeline-turn-proof-1773271686942",
-        "created_at": "2026-03-11T23:28:06.95+00:00",
-        "updated_at": "2026-03-11T23:28:08.196307+00:00",
+        "request_id": "timeline-turn-proof-1773277781961",
+        "created_at": "2026-03-12T01:09:42.139+00:00",
+        "updated_at": "2026-03-12T01:09:43.413363+00:00",
         "trace_id": null
       },
       "validation": {
@@ -623,38 +598,38 @@
         "payload": {
           "status": "queued",
           "task": {
-            "id": "1935e283-6837-4a01-b821-1c62aaecd783",
-            "created_at": "2026-03-11T23:28:08.66+00:00",
-            "updated_at": "2026-03-11T23:28:08.66+00:00",
-            "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+            "id": "f76d544d-cdbe-4930-b5c9-b24b14eba14f",
+            "created_at": "2026-03-12T01:09:43.947+00:00",
+            "updated_at": "2026-03-12T01:09:43.947+00:00",
+            "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
             "task": "timeline.turn",
             "params": {
-              "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+              "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
               "task": "timeline.turn",
               "prompt": "mark finish hero master and legal supers blocked",
               "source": "voice",
               "lockKey": "widget:mcp-timeline-widget-proof",
               "summary": "Deterministic follow-up: mark the hero master blocked until rights are cleared.",
-              "traceId": "timeline-turn-proof-trace-1773271688649",
-              "intentId": "timeline-turn-proof-intent-1773271688649",
+              "traceId": "timeline-turn-proof-trace-1773277783938",
+              "intentId": "timeline-turn-proof-intent-1773277783938",
               "metadata": {
                 "runtimeScope": "local"
               },
-              "requestId": "timeline-turn-proof-1773271688649",
+              "requestId": "timeline-turn-proof-1773277783938",
               "componentId": "mcp-timeline-widget-proof",
               "instruction": "mark finish hero master and legal supers blocked",
               "runtimeScope": "local",
-              "idempotencyKey": "timeline-turn-proof-1773271688649"
+              "idempotencyKey": "timeline-turn-proof-1773277783938"
             },
             "status": "running",
             "priority": 0,
             "run_at": null,
             "attempt": 0,
             "error": null,
-            "request_id": "timeline-turn-proof-1773271688649",
-            "dedupe_key": "timeline-turn-proof-1773271688649",
+            "request_id": "timeline-turn-proof-1773277783938",
+            "dedupe_key": "timeline-turn-proof-1773277783938",
             "resource_keys": [
-              "room:canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+              "room:canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
               "timeline:mcp-timeline-widget-proof",
               "runtime-scope:local",
               "lock:widget:mcp-timeline-widget-proof",
@@ -666,15 +641,15 @@
             "result": null,
             "trace_id": null
           },
-          "taskId": "1935e283-6837-4a01-b821-1c62aaecd783",
-          "requestId": "timeline-turn-proof-1773271688649",
-          "traceId": "timeline-turn-proof-trace-1773271688649",
-          "intentId": "timeline-turn-proof-intent-1773271688649"
+          "taskId": "f76d544d-cdbe-4930-b5c9-b24b14eba14f",
+          "requestId": "timeline-turn-proof-1773277783938",
+          "traceId": "timeline-turn-proof-trace-1773277783938",
+          "intentId": "timeline-turn-proof-intent-1773277783938"
         }
       },
       "task": {
-        "id": "1935e283-6837-4a01-b821-1c62aaecd783",
-        "room": "canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c",
+        "id": "f76d544d-cdbe-4930-b5c9-b24b14eba14f",
+        "room": "canvas-dev-d1ec2e8f-c532-47cd-93dc-8bdc40153f98",
         "task": "timeline.turn",
         "status": "succeeded",
         "attempt": 0,
@@ -688,12 +663,12 @@
           "status": "completed",
           "deduped": false,
           "lockKey": "widget:mcp-timeline-widget-proof",
-          "executionId": "1935e283-6837-4a01-b821-1c62aaecd783",
-          "idempotencyKey": "timeline-turn-proof-1773271688649"
+          "executionId": "f76d544d-cdbe-4930-b5c9-b24b14eba14f",
+          "idempotencyKey": "timeline-turn-proof-1773277783938"
         },
-        "request_id": "timeline-turn-proof-1773271688649",
-        "created_at": "2026-03-11T23:28:08.66+00:00",
-        "updated_at": "2026-03-11T23:28:09.622682+00:00",
+        "request_id": "timeline-turn-proof-1773277783938",
+        "created_at": "2026-03-12T01:09:43.947+00:00",
+        "updated_at": "2026-03-12T01:09:44.854073+00:00",
         "trace_id": null
       },
       "validation": {
@@ -712,91 +687,91 @@
   "blockedStatusRendered": true,
   "dependencyRendered": true,
   "traceTaskSource": "timeline",
-  "traceId": "timeline-turn-proof-trace-1773271688649",
+  "traceId": "timeline-turn-proof-trace-1773277783938",
   "traceEvents": [
     {
-      "id": "5fa3d4f7-f5fa-44c5-a787-1e0c301786aa",
-      "trace_id": "timeline-proof-trace-1773271654815",
-      "task_id": "0fae0d07-34b8-4d22-8616-e2982c3fef58",
+      "id": "aab18066-844f-482c-bd5a-121fa94daea1",
+      "trace_id": "timeline-proof-trace-1773277682042",
+      "task_id": "5a30a8ad-bf3c-423e-88c2-eb2f93e19463",
       "task": "timeline.patch",
       "stage": "queued",
       "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:27:35.094+00:00",
+      "created_at": "2026-03-12T01:08:05.201+00:00",
       "payload": {
         "queueMode": "local_scope_direct_claim",
         "runtimeScope": "local"
       }
     },
     {
-      "id": "328b050e-c77c-4c87-b6fd-447de780c9e4",
-      "trace_id": "timeline-proof-trace-1773271654815",
-      "task_id": "0fae0d07-34b8-4d22-8616-e2982c3fef58",
+      "id": "0bff0f46-b33c-431c-9fcd-54fa75df7698",
+      "trace_id": "timeline-proof-trace-1773277682042",
+      "task_id": "5a30a8ad-bf3c-423e-88c2-eb2f93e19463",
       "task": "timeline.patch",
       "stage": "claimed",
       "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:27:35.918+00:00",
+      "created_at": "2026-03-12T01:08:05.713+00:00",
       "payload": {
         "claimMode": "local_scope_direct_claim",
         "runtimeScope": "local"
       }
     },
     {
-      "id": "8fd37704-d8e9-467a-8588-edd9a1909a46",
-      "trace_id": "timeline-proof-trace-1773271654815",
-      "task_id": "0fae0d07-34b8-4d22-8616-e2982c3fef58",
+      "id": "f65c4605-b1cb-49d4-a95f-588cbe65417b",
+      "trace_id": "timeline-proof-trace-1773277682042",
+      "task_id": "5a30a8ad-bf3c-423e-88c2-eb2f93e19463",
       "task": "timeline.patch",
       "stage": "executing",
       "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:27:35.919+00:00",
+      "created_at": "2026-03-12T01:08:05.714+00:00",
       "payload": {
         "model": null,
         "route": "other",
         "provider": "unknown",
-        "workerId": "conductor-78047-7c256fb4",
-        "workerPid": "78047",
-        "leaseToken": "12472fda-ddaa-4f02-8cef-847b40b0cee5",
-        "workerHost": "Bens-MacBook-Pro.local",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "7dc49704-72b0-4dcc-aa02-e56be8bb3af4",
+        "workerHost": "Bens-MBP",
         "providerPath": "unknown",
         "providerSource": "unknown",
         "providerRequestId": null
       }
     },
     {
-      "id": "67ffc854-6779-4126-b519-c7951acb613f",
-      "trace_id": "timeline-proof-trace-1773271654815",
-      "task_id": "0fae0d07-34b8-4d22-8616-e2982c3fef58",
+      "id": "58069326-2f35-4bff-a3df-e0749690b568",
+      "trace_id": "timeline-proof-trace-1773277682042",
+      "task_id": "5a30a8ad-bf3c-423e-88c2-eb2f93e19463",
       "task": "timeline.patch",
       "stage": "completed",
       "status": "succeeded",
-      "latency_ms": 6479,
-      "created_at": "2026-03-11T23:27:42.398+00:00",
+      "latency_ms": 6221,
+      "created_at": "2026-03-12T01:08:11.938+00:00",
       "payload": {
         "model": null,
         "route": "other",
         "deduped": false,
         "lockKey": "widget:mcp-timeline-widget-proof",
         "provider": "unknown",
-        "workerId": "conductor-78047-7c256fb4",
-        "workerPid": "78047",
-        "leaseToken": "12472fda-ddaa-4f02-8cef-847b40b0cee5",
-        "workerHost": "Bens-MacBook-Pro.local",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "7dc49704-72b0-4dcc-aa02-e56be8bb3af4",
+        "workerHost": "Bens-MBP",
         "providerPath": "unknown",
         "providerSource": "unknown",
         "providerRequestId": null
       }
     },
     {
-      "id": "911bd600-9721-4bd9-9d5b-be78d62e1f0d",
-      "trace_id": "timeline-turn-proof-trace-1773271663448",
+      "id": "998b35ac-0b6c-4885-802b-317f62270cbc",
+      "trace_id": "timeline-turn-proof-trace-1773277692225",
       "task_id": null,
       "task": "fairy.intent",
       "stage": "api_received",
       "status": "ok",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:27:43.542+00:00",
+      "created_at": "2026-03-12T01:08:57.038+00:00",
       "payload": {
         "model": "claude-haiku-4-5",
         "provider": "anthropic",
@@ -806,291 +781,310 @@
       }
     },
     {
-      "id": "2c6abbd5-5aeb-47a7-840a-629135c721e1",
-      "trace_id": "timeline-turn-proof-trace-1773271663448",
-      "task_id": "56a2d810-976e-4036-9446-4a662e4477ee",
-      "task": "fairy.intent",
-      "stage": "queued",
-      "status": "queued",
-      "latency_ms": null,
-      "created_at": "2026-03-11T23:27:43.782+00:00",
-      "payload": null
-    },
-    {
-      "id": "885db33d-2356-45db-b12e-a1093f780d02",
-      "trace_id": "timeline-turn-proof-trace-1773271663448",
-      "task_id": "56a2d810-976e-4036-9446-4a662e4477ee",
-      "task": "fairy.intent",
-      "stage": "claimed",
-      "status": "running",
-      "latency_ms": null,
-      "created_at": "2026-03-11T23:27:44.31+00:00",
-      "payload": null
-    },
-    {
-      "id": "4292ead7-e979-4eaa-b648-4feb918f8131",
-      "trace_id": "timeline-turn-proof-trace-1773271663448",
-      "task_id": "56a2d810-976e-4036-9446-4a662e4477ee",
+      "id": "3f15abbd-b3f9-4819-878d-48fad956049c",
+      "trace_id": "timeline-turn-proof-trace-1773277692225",
+      "task_id": "8998b7ad-815b-4d1d-ac9a-c579fecb3441",
       "task": "fairy.intent",
       "stage": "executing",
       "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:27:44.311+00:00",
+      "created_at": "2026-03-12T01:08:59.317+00:00",
       "payload": {
         "route": "visual",
         "workerId": "conductor-36-98c8350c",
         "workerPid": "36",
-        "leaseToken": "d9ea447b-6d31-4bbd-9ad9-d39df97ad670",
+        "leaseToken": "d7c268c2-a784-4820-baad-1d7a78d9f5de",
         "workerHost": "f8152f2e162b"
       }
     },
     {
-      "id": "89b13e44-5141-483d-bdfc-f24ce0011771",
-      "trace_id": "timeline-turn-proof-trace-1773271663448",
-      "task_id": "574cf602-e700-435f-8aea-ec901f23a956",
-      "task": "canvas.followup",
-      "stage": "queued",
-      "status": "queued",
+      "id": "b2ebc522-8c32-4383-a48e-dedbf9e4fcca",
+      "trace_id": "timeline-turn-proof-trace-1773277692225",
+      "task_id": "8998b7ad-815b-4d1d-ac9a-c579fecb3441",
+      "task": "fairy.intent",
+      "stage": "claimed",
+      "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:28:03.675+00:00",
+      "created_at": "2026-03-12T01:08:59.317+00:00",
       "payload": null
     },
     {
-      "id": "eef4e179-d466-410d-9f47-183c14be8379",
-      "trace_id": "timeline-turn-proof-trace-1773271663448",
-      "task_id": "56a2d810-976e-4036-9446-4a662e4477ee",
+      "id": "c9a7c125-585f-4761-a354-84628e7997ae",
+      "trace_id": "timeline-turn-proof-trace-1773277692225",
+      "task_id": "8998b7ad-815b-4d1d-ac9a-c579fecb3441",
       "task": "fairy.intent",
-      "stage": "completed",
-      "status": "succeeded",
-      "latency_ms": 20775,
-      "created_at": "2026-03-11T23:28:05.087+00:00",
+      "stage": "queued",
+      "status": "queued",
+      "latency_ms": null,
+      "created_at": "2026-03-12T01:08:59.342+00:00",
+      "payload": null
+    },
+    {
+      "id": "a47c4e07-d12c-4ed4-b17c-add9b22ff58b",
+      "trace_id": "timeline-turn-proof-trace-1773277692225",
+      "task_id": "8998b7ad-815b-4d1d-ac9a-c579fecb3441",
+      "task": "fairy.intent",
+      "stage": "failed",
+      "status": "failed",
+      "latency_ms": null,
+      "created_at": "2026-03-12T01:09:21.071+00:00",
       "payload": {
+        "error": "requested room does not exist",
         "route": "visual",
-        "deduped": false,
         "lockKey": "widget:mcp-timeline-widget-proof",
+        "retryAt": "2026-03-12T01:09:21.648Z",
         "workerId": "conductor-36-98c8350c",
         "workerPid": "36",
-        "leaseToken": "d9ea447b-6d31-4bbd-9ad9-d39df97ad670",
         "workerHost": "f8152f2e162b"
       }
     },
     {
-      "id": "e2a01993-ee3b-4f12-b36d-52cb4070bdf0",
-      "trace_id": "timeline-turn-proof-trace-1773271685251",
-      "task_id": "33fb355b-d479-4c8e-b225-6d3fe9ce0822",
+      "id": "9ab3a81d-50de-45cb-9cad-b989170aca12",
+      "trace_id": "timeline-turn-proof-trace-1773277692225",
+      "task_id": "8998b7ad-815b-4d1d-ac9a-c579fecb3441",
+      "task": "fairy.intent",
+      "stage": "claimed",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T01:09:24.538+00:00",
+      "payload": null
+    },
+    {
+      "id": "9f58adbf-a927-4ca4-b084-2bbbc9e484b3",
+      "trace_id": "timeline-turn-proof-trace-1773277692225",
+      "task_id": "8998b7ad-815b-4d1d-ac9a-c579fecb3441",
+      "task": "fairy.intent",
+      "stage": "claimed",
+      "status": "scope_mismatch_requeued",
+      "latency_ms": null,
+      "created_at": "2026-03-12T01:09:24.658+00:00",
+      "payload": {
+        "retryAt": "2026-03-12T01:09:24.842Z",
+        "skipKey": "skip-host:bens-mbp",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "workerHost": "Bens-MBP",
+        "taskRuntimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
+        "workerRuntimeScope": "local"
+      }
+    },
+    {
+      "id": "5b5e2715-9c6a-4f88-9f3d-bbc639ff00b9",
+      "trace_id": "timeline-turn-proof-trace-1773277769944",
+      "task_id": "1fb1de12-823e-4e9c-8979-1268d93142dc",
       "task": "timeline.turn",
       "stage": "queued",
       "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:28:05.491+00:00",
+      "created_at": "2026-03-12T01:09:30.681+00:00",
       "payload": {
         "queueMode": "local_scope_direct_claim",
         "runtimeScope": "local"
       }
     },
     {
-      "id": "174859c3-5c26-4d03-b480-601bd8c83997",
-      "trace_id": "timeline-turn-proof-trace-1773271685251",
-      "task_id": "33fb355b-d479-4c8e-b225-6d3fe9ce0822",
+      "id": "87db1a89-392a-4b96-851d-37d0846f06b8",
+      "trace_id": "timeline-turn-proof-trace-1773277769944",
+      "task_id": "1fb1de12-823e-4e9c-8979-1268d93142dc",
       "task": "timeline.turn",
       "stage": "claimed",
       "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:28:05.728+00:00",
+      "created_at": "2026-03-12T01:09:31.292+00:00",
       "payload": {
         "claimMode": "local_scope_direct_claim",
         "runtimeScope": "local"
       }
     },
     {
-      "id": "5b125e52-7063-4ec2-9b2e-fec6ebdfaa80",
-      "trace_id": "timeline-turn-proof-trace-1773271685251",
-      "task_id": "33fb355b-d479-4c8e-b225-6d3fe9ce0822",
+      "id": "7abfa4d0-d252-4b9c-b618-88589423150a",
+      "trace_id": "timeline-turn-proof-trace-1773277769944",
+      "task_id": "1fb1de12-823e-4e9c-8979-1268d93142dc",
       "task": "timeline.turn",
       "stage": "executing",
       "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:28:05.729+00:00",
+      "created_at": "2026-03-12T01:09:31.297+00:00",
       "payload": {
         "model": null,
         "route": "other",
         "provider": "unknown",
-        "workerId": "conductor-78047-7c256fb4",
-        "workerPid": "78047",
-        "leaseToken": "893d0db7-55c9-45e0-ad36-fd2eaad0ae70",
-        "workerHost": "Bens-MacBook-Pro.local",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "0b277cbf-1050-4338-9a08-595f016208aa",
+        "workerHost": "Bens-MBP",
         "providerPath": "unknown",
         "providerSource": "unknown",
         "providerRequestId": null
       }
     },
     {
-      "id": "da111d9a-9746-4d25-bf35-4f0e68b1529b",
-      "trace_id": "timeline-turn-proof-trace-1773271685251",
-      "task_id": "33fb355b-d479-4c8e-b225-6d3fe9ce0822",
+      "id": "f9bbb9ee-6b08-4f6f-a006-a1d88a3a1fa0",
+      "trace_id": "timeline-turn-proof-trace-1773277769944",
+      "task_id": "1fb1de12-823e-4e9c-8979-1268d93142dc",
       "task": "timeline.turn",
       "stage": "completed",
       "status": "succeeded",
-      "latency_ms": 799,
-      "created_at": "2026-03-11T23:28:06.529+00:00",
+      "latency_ms": 9567,
+      "created_at": "2026-03-12T01:09:40.865+00:00",
       "payload": {
         "model": null,
         "route": "other",
         "deduped": false,
         "lockKey": "widget:mcp-timeline-widget-proof",
         "provider": "unknown",
-        "workerId": "conductor-78047-7c256fb4",
-        "workerPid": "78047",
-        "leaseToken": "893d0db7-55c9-45e0-ad36-fd2eaad0ae70",
-        "workerHost": "Bens-MacBook-Pro.local",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "0b277cbf-1050-4338-9a08-595f016208aa",
+        "workerHost": "Bens-MBP",
         "providerPath": "unknown",
         "providerSource": "unknown",
         "providerRequestId": null
       }
     },
     {
-      "id": "22a7f21c-6a42-4bfa-b011-7aae270b1be1",
-      "trace_id": "timeline-turn-proof-trace-1773271686942",
-      "task_id": "c0e51245-85cd-4509-9d7b-8c0b8fec8015",
+      "id": "da4115d9-3e14-4b46-8c0d-2cbc1fbb25fa",
+      "trace_id": "timeline-turn-proof-trace-1773277781961",
+      "task_id": "ce6886da-43aa-4b82-a0af-4a924ee2df42",
       "task": "timeline.turn",
       "stage": "queued",
       "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:28:07.185+00:00",
+      "created_at": "2026-03-12T01:09:42.45+00:00",
       "payload": {
         "queueMode": "local_scope_direct_claim",
         "runtimeScope": "local"
       }
     },
     {
-      "id": "9cd0342c-4ed6-49d2-9392-3cc921cc4cb9",
-      "trace_id": "timeline-turn-proof-trace-1773271686942",
-      "task_id": "c0e51245-85cd-4509-9d7b-8c0b8fec8015",
-      "task": "timeline.turn",
-      "stage": "executing",
-      "status": "running",
-      "latency_ms": null,
-      "created_at": "2026-03-11T23:28:07.371+00:00",
-      "payload": {
-        "model": null,
-        "route": "other",
-        "provider": "unknown",
-        "workerId": "conductor-78047-7c256fb4",
-        "workerPid": "78047",
-        "leaseToken": "131b2186-70f9-4e79-9307-68c3fd55ca3d",
-        "workerHost": "Bens-MacBook-Pro.local",
-        "providerPath": "unknown",
-        "providerSource": "unknown",
-        "providerRequestId": null
-      }
-    },
-    {
-      "id": "865f00e4-884d-49fc-829b-68eb9e62f311",
-      "trace_id": "timeline-turn-proof-trace-1773271686942",
-      "task_id": "c0e51245-85cd-4509-9d7b-8c0b8fec8015",
+      "id": "b50f5cd9-19a8-4815-8e4c-966a6db9fc7b",
+      "trace_id": "timeline-turn-proof-trace-1773277781961",
+      "task_id": "ce6886da-43aa-4b82-a0af-4a924ee2df42",
       "task": "timeline.turn",
       "stage": "claimed",
       "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:28:07.371+00:00",
+      "created_at": "2026-03-12T01:09:42.821+00:00",
       "payload": {
         "claimMode": "local_scope_direct_claim",
         "runtimeScope": "local"
       }
     },
     {
-      "id": "c31d210f-c44e-42db-bf12-afaa715ad16d",
-      "trace_id": "timeline-turn-proof-trace-1773271686942",
-      "task_id": "c0e51245-85cd-4509-9d7b-8c0b8fec8015",
+      "id": "214ab721-8917-476b-af9f-72a48eda98ac",
+      "trace_id": "timeline-turn-proof-trace-1773277781961",
+      "task_id": "ce6886da-43aa-4b82-a0af-4a924ee2df42",
       "task": "timeline.turn",
-      "stage": "completed",
-      "status": "succeeded",
-      "latency_ms": 843,
-      "created_at": "2026-03-11T23:28:08.214+00:00",
+      "stage": "executing",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T01:09:42.824+00:00",
       "payload": {
         "model": null,
         "route": "other",
-        "deduped": false,
-        "lockKey": "widget:mcp-timeline-widget-proof",
         "provider": "unknown",
-        "workerId": "conductor-78047-7c256fb4",
-        "workerPid": "78047",
-        "leaseToken": "131b2186-70f9-4e79-9307-68c3fd55ca3d",
-        "workerHost": "Bens-MacBook-Pro.local",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "4d93ecb8-88e4-4793-bd4e-422997aeb262",
+        "workerHost": "Bens-MBP",
         "providerPath": "unknown",
         "providerSource": "unknown",
         "providerRequestId": null
       }
     },
     {
-      "id": "218dbcb9-f083-400d-b2c5-e260c10e837d",
-      "trace_id": "timeline-turn-proof-trace-1773271688649",
-      "task_id": "1935e283-6837-4a01-b821-1c62aaecd783",
+      "id": "e8360f32-8fa3-46ce-a8ba-d8052cf2be19",
+      "trace_id": "timeline-turn-proof-trace-1773277781961",
+      "task_id": "ce6886da-43aa-4b82-a0af-4a924ee2df42",
+      "task": "timeline.turn",
+      "stage": "completed",
+      "status": "succeeded",
+      "latency_ms": 627,
+      "created_at": "2026-03-12T01:09:43.452+00:00",
+      "payload": {
+        "model": null,
+        "route": "other",
+        "deduped": false,
+        "lockKey": "widget:mcp-timeline-widget-proof",
+        "provider": "unknown",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "4d93ecb8-88e4-4793-bd4e-422997aeb262",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
+        "providerRequestId": null
+      }
+    },
+    {
+      "id": "dc3cbe21-1212-413c-82b4-dc5a568af6a0",
+      "trace_id": "timeline-turn-proof-trace-1773277783938",
+      "task_id": "f76d544d-cdbe-4930-b5c9-b24b14eba14f",
       "task": "timeline.turn",
       "stage": "queued",
       "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:28:08.881+00:00",
+      "created_at": "2026-03-12T01:09:44.212+00:00",
       "payload": {
         "queueMode": "local_scope_direct_claim",
         "runtimeScope": "local"
       }
     },
     {
-      "id": "92c1a649-b1d2-4fb3-8631-ca70977c5b99",
-      "trace_id": "timeline-turn-proof-trace-1773271688649",
-      "task_id": "1935e283-6837-4a01-b821-1c62aaecd783",
-      "task": "timeline.turn",
-      "stage": "executing",
-      "status": "running",
-      "latency_ms": null,
-      "created_at": "2026-03-11T23:28:09.031+00:00",
-      "payload": {
-        "model": null,
-        "route": "other",
-        "provider": "unknown",
-        "workerId": "conductor-78047-7c256fb4",
-        "workerPid": "78047",
-        "leaseToken": "9173c225-e03e-48ce-b94d-8b7619948d4c",
-        "workerHost": "Bens-MacBook-Pro.local",
-        "providerPath": "unknown",
-        "providerSource": "unknown",
-        "providerRequestId": null
-      }
-    },
-    {
-      "id": "ed1e4f80-e6b5-42c6-9201-fd6c3e8c9832",
-      "trace_id": "timeline-turn-proof-trace-1773271688649",
-      "task_id": "1935e283-6837-4a01-b821-1c62aaecd783",
+      "id": "ae8841c8-e934-4900-81c3-f5a6a017fdd0",
+      "trace_id": "timeline-turn-proof-trace-1773277783938",
+      "task_id": "f76d544d-cdbe-4930-b5c9-b24b14eba14f",
       "task": "timeline.turn",
       "stage": "claimed",
       "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-11T23:28:09.031+00:00",
+      "created_at": "2026-03-12T01:09:44.316+00:00",
       "payload": {
         "claimMode": "local_scope_direct_claim",
         "runtimeScope": "local"
       }
     },
     {
-      "id": "ba41c747-5314-47da-a335-70820c254393",
-      "trace_id": "timeline-turn-proof-trace-1773271688649",
-      "task_id": "1935e283-6837-4a01-b821-1c62aaecd783",
+      "id": "4a5f05cf-7d2d-4949-ac5d-6f57166f4941",
+      "trace_id": "timeline-turn-proof-trace-1773277783938",
+      "task_id": "f76d544d-cdbe-4930-b5c9-b24b14eba14f",
+      "task": "timeline.turn",
+      "stage": "executing",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T01:09:44.316+00:00",
+      "payload": {
+        "model": null,
+        "route": "other",
+        "provider": "unknown",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "794f4054-81ae-4c3e-bb82-032ea028c262",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
+        "providerRequestId": null
+      }
+    },
+    {
+      "id": "27495a36-d380-40d9-b8e3-57d0d36b52b6",
+      "trace_id": "timeline-turn-proof-trace-1773277783938",
+      "task_id": "f76d544d-cdbe-4930-b5c9-b24b14eba14f",
       "task": "timeline.turn",
       "stage": "completed",
       "status": "succeeded",
-      "latency_ms": 611,
-      "created_at": "2026-03-11T23:28:09.642+00:00",
+      "latency_ms": 573,
+      "created_at": "2026-03-12T01:09:44.889+00:00",
       "payload": {
         "model": null,
         "route": "other",
         "deduped": false,
         "lockKey": "widget:mcp-timeline-widget-proof",
         "provider": "unknown",
-        "workerId": "conductor-78047-7c256fb4",
-        "workerPid": "78047",
-        "leaseToken": "9173c225-e03e-48ce-b94d-8b7619948d4c",
-        "workerHost": "Bens-MacBook-Pro.local",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "794f4054-81ae-4c3e-bb82-032ea028c262",
+        "workerHost": "Bens-MBP",
         "providerPath": "unknown",
         "providerSource": "unknown",
         "providerRequestId": null

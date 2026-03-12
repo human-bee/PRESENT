@@ -44,6 +44,37 @@ export const DEFAULT_TIMELINE_SYNC_INTERVAL_MS = 2500;
 
 const logger = createLogger('timeline-task-runner');
 
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+export const estimateTimelineWidgetFrame = (document?: TimelineDocument) => {
+  const lanes = Array.isArray(document?.lanes) ? document!.lanes : [];
+  const items = Array.isArray(document?.items) ? document!.items : [];
+  const dependencyCount = Array.isArray(document?.dependencies) ? document!.dependencies.length : 0;
+  const laneCount = Math.max(1, lanes.length || (items.length > 0 ? 1 : 0));
+  const laneItemCounts = lanes.map(
+    (lane) => items.filter((item) => item.laneId === lane.id).length,
+  );
+  const unassignedItems = items.filter((item) => !item.laneId).length;
+  const densestLaneCount = Math.max(1, ...laneItemCounts, unassignedItems);
+  const stagedExports = Array.isArray(document?.sync?.pendingExports)
+    ? document!.sync.pendingExports.length
+    : 0;
+  const wideLaneBudget = clamp(laneCount, 1, 4);
+  const preferredWidth = clamp(640 + (wideLaneBudget - 1) * 170, 640, 1180);
+  const preferredHeight = clamp(
+    430 + densestLaneCount * 118 + dependencyCount * 10 + stagedExports * 18,
+    520,
+    1040,
+  );
+
+  return {
+    preferredWidth,
+    preferredHeight,
+    minWidth: 560,
+    minHeight: 420,
+  };
+};
+
 export const buildTimelineWidgetPatch = (args: {
   room: string;
   componentId: string;
@@ -51,6 +82,7 @@ export const buildTimelineWidgetPatch = (args: {
   syncStatus?: 'idle' | 'live' | 'staged' | 'error';
   syncError?: string | null;
 }): JsonObject => {
+  const frame = estimateTimelineWidgetFrame(args.document);
   const exportStages = Array.isArray(args.document?.sync?.pendingExports)
     ? args.document!.sync.pendingExports
     : [];
@@ -61,6 +93,13 @@ export const buildTimelineWidgetPatch = (args: {
   return {
     title: args.document?.title ?? 'Live Roadmap',
     resourceUri: TIMELINE_RESOURCE_URI,
+    preferredWidth: frame.preferredWidth,
+    preferredHeight: frame.preferredHeight,
+    minWidth: frame.minWidth,
+    minHeight: frame.minHeight,
+    autoFitWidth: false,
+    autoFitHeight: true,
+    sizingPolicyOverride: 'always_fit',
     syncSource: 'timeline',
     syncRoom: args.room,
     syncComponentId: args.componentId,
@@ -107,7 +146,10 @@ export async function broadcastTimelineWidgetRefresh(args: {
 }
 
 const summarizeTimelineInstruction = (parsed: TimelineTaskInput) =>
-  parsed.instruction?.trim() || parsed.prompt?.trim() || parsed.summary?.trim() || 'Timeline updated.';
+  parsed.instruction?.trim() ||
+  parsed.prompt?.trim() ||
+  parsed.summary?.trim() ||
+  'Timeline updated.';
 
 async function commitAndBroadcastTimelineOps(args: {
   room: string;
@@ -163,41 +205,47 @@ export async function runTimelinePatchTask(parsed: TimelineTaskInput) {
     : false;
   const ops: TimelineOp[] = [
     ...(!hasMetaUpdate
-      ? [{
-          type: 'set_meta' as const,
-          title: typeof parsed.title === 'string' ? parsed.title : undefined,
-          subtitle: typeof parsed.subtitle === 'string' ? parsed.subtitle : undefined,
-          horizonLabel: typeof parsed.horizonLabel === 'string' ? parsed.horizonLabel : undefined,
-        }]
+      ? [
+          {
+            type: 'set_meta' as const,
+            title: typeof parsed.title === 'string' ? parsed.title : undefined,
+            subtitle: typeof parsed.subtitle === 'string' ? parsed.subtitle : undefined,
+            horizonLabel: typeof parsed.horizonLabel === 'string' ? parsed.horizonLabel : undefined,
+          },
+        ]
       : []),
     ...(!hasSyncOverride
-      ? [{
-          type: 'set_sync_state' as const,
-          sync: {
-            ...record.document.sync,
-            status: 'live',
-            lastSyncedAt: now,
-            lastError: undefined,
-            retryMs: undefined,
-            pendingExports: record.document.sync?.pendingExports ?? [],
+      ? [
+          {
+            type: 'set_sync_state' as const,
+            sync: {
+              ...record.document.sync,
+              status: 'live',
+              lastSyncedAt: now,
+              lastError: undefined,
+              retryMs: undefined,
+              pendingExports: record.document.sync?.pendingExports ?? [],
+            },
           },
-        }]
+        ]
       : []),
     ...(Array.isArray(parsed.ops) ? parsed.ops : []),
     ...(!hasAppendEvent
-      ? [{
-          type: 'append_event' as const,
-          event: {
-            id: `evt-${now}`,
-            source,
-            requestId: parsed.requestId,
-            traceId: parsed.traceId,
-            intentId: parsed.intentId,
-            idempotencyKey: parsedIdempotencyKey ?? undefined,
-            summary: summary.slice(0, 200),
-            createdAt: now,
+      ? [
+          {
+            type: 'append_event' as const,
+            event: {
+              id: `evt-${now}`,
+              source,
+              requestId: parsed.requestId,
+              traceId: parsed.traceId,
+              intentId: parsed.intentId,
+              idempotencyKey: parsedIdempotencyKey ?? undefined,
+              summary: summary.slice(0, 200),
+              createdAt: now,
+            },
           },
-        }]
+        ]
       : []),
   ];
 
@@ -235,8 +283,7 @@ export async function runTimelineRunTask(parsed: TimelineTaskInput) {
       typeof parsed.contextBundle === 'string' && parsed.contextBundle.trim().length > 0
         ? parsed.contextBundle.trim()
         : undefined,
-    contextProfile:
-      typeof parsed.contextProfile === 'string' ? parsed.contextProfile : undefined,
+    contextProfile: typeof parsed.contextProfile === 'string' ? parsed.contextProfile : undefined,
     title: typeof parsed.title === 'string' ? parsed.title : undefined,
     subtitle: typeof parsed.subtitle === 'string' ? parsed.subtitle : undefined,
     horizonLabel: typeof parsed.horizonLabel === 'string' ? parsed.horizonLabel : undefined,
@@ -301,8 +348,7 @@ export async function runTimelineTurnTask(parsed: TimelineTaskInput) {
     source: parsed.source ?? 'manual',
     document: record.document,
     contextBundle: resolution.fallbackContextBundle ?? parsed.contextBundle,
-    contextProfile:
-      typeof parsed.contextProfile === 'string' ? parsed.contextProfile : undefined,
+    contextProfile: typeof parsed.contextProfile === 'string' ? parsed.contextProfile : undefined,
     title: typeof parsed.title === 'string' ? parsed.title : undefined,
     subtitle: typeof parsed.subtitle === 'string' ? parsed.subtitle : undefined,
     horizonLabel: typeof parsed.horizonLabel === 'string' ? parsed.horizonLabel : undefined,

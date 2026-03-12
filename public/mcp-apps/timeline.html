@@ -33,12 +33,14 @@
       html,
       body {
         margin: 0;
+        height: 100%;
         min-height: 100%;
       }
 
       body {
         color: var(--ink);
         font-family: 'Avenir Next', 'Manrope', 'Segoe UI', sans-serif;
+        overflow: hidden;
         background:
           radial-gradient(1000px 400px at 0% 0%, rgba(126, 159, 143, 0.18), transparent 58%),
           radial-gradient(900px 340px at 100% 0%, rgba(208, 176, 118, 0.18), transparent 56%),
@@ -61,12 +63,16 @@
       main {
         position: relative;
         width: min(1240px, 100%);
+        height: 100%;
         margin: 0 auto;
-        padding: 18px;
+        padding: 14px;
       }
 
       .shell {
         position: relative;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
         overflow: hidden;
         border: 1px solid rgba(23, 33, 29, 0.08);
         border-radius: 28px;
@@ -216,7 +222,11 @@
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         gap: 14px;
-        padding: 0 22px 22px;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        align-content: start;
+        padding: 0 22px 18px;
       }
 
       .lane {
@@ -455,6 +465,7 @@
 
       .footer {
         display: flex;
+        flex: 0 0 auto;
         flex-wrap: wrap;
         gap: 10px 18px;
         padding: 15px 22px 20px;
@@ -482,6 +493,7 @@
 
       @media (max-width: 680px) {
         main {
+          height: 100%;
           padding: 12px;
         }
 
@@ -569,6 +581,9 @@
       const componentEl = document.getElementById('timeline-component');
       const versionEl = document.getElementById('timeline-version');
       const updatedEl = document.getElementById('timeline-updated');
+      const shellEl = document.querySelector('.shell');
+      const mainEl = document.querySelector('main');
+      let layoutFrame = 0;
 
       const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
       const asArray = (value) => (Array.isArray(value) ? value : []);
@@ -599,6 +614,44 @@
           hour: '2-digit',
           minute: '2-digit',
         }).format(date);
+      };
+
+      const reportLayout = () => {
+        layoutFrame = 0;
+        const width = Math.ceil(
+          Math.max(
+            shellEl ? shellEl.scrollWidth : 0,
+            mainEl ? mainEl.scrollWidth : 0,
+            shellEl ? shellEl.getBoundingClientRect().width : 0,
+            document.documentElement ? document.documentElement.scrollWidth : 0,
+            document.body ? document.body.scrollWidth : 0,
+          ),
+        ) || undefined;
+        const height = Math.ceil(
+          Math.max(
+            mainEl ? mainEl.scrollHeight : 0,
+            shellEl ? shellEl.scrollHeight : 0,
+            shellEl ? shellEl.getBoundingClientRect().height : 0,
+            document.documentElement ? document.documentElement.scrollHeight : 0,
+            document.body ? document.body.scrollHeight : 0,
+          ),
+        ) || undefined;
+        if (!width && !height) return;
+        window.parent.postMessage(
+          {
+            type: 'present:mcp-app-layout',
+            payload: {
+              width,
+              height,
+            },
+          },
+          '*',
+        );
+      };
+
+      const scheduleLayoutReport = () => {
+        if (layoutFrame) cancelAnimationFrame(layoutFrame);
+        layoutFrame = requestAnimationFrame(reportLayout);
       };
 
       const summarizeOwner = (lane, items) => {
@@ -797,6 +850,7 @@
           .join('');
 
         emptyStateEl.style.display = lanes.length > 0 ? 'none' : 'block';
+        scheduleLayoutReport();
       };
 
       const isValidSnapshot = (snapshot) =>
@@ -812,6 +866,24 @@
         if (!isValidSnapshot(data.payload)) return;
         render(data.payload);
       });
+
+      if (typeof ResizeObserver === 'function') {
+        const layoutObserver = new ResizeObserver(() => {
+          scheduleLayoutReport();
+        });
+        if (mainEl) layoutObserver.observe(mainEl);
+        if (shellEl) layoutObserver.observe(shellEl);
+      }
+
+      window.addEventListener('resize', () => {
+        scheduleLayoutReport();
+      });
+
+      window.addEventListener('load', () => {
+        scheduleLayoutReport();
+      });
+
+      scheduleLayoutReport();
     </script>
   </body>
 </html>

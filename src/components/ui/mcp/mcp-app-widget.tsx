@@ -1,8 +1,16 @@
-"use client";
+'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppBridge, PostMessageTransport, buildAllowAttribute } from '@modelcontextprotocol/ext-apps/app-bridge';
-import type { McpUiDisplayMode, McpUiHostContext, McpUiTheme } from '@modelcontextprotocol/ext-apps';
+import {
+  AppBridge,
+  PostMessageTransport,
+  buildAllowAttribute,
+} from '@modelcontextprotocol/ext-apps/app-bridge';
+import type {
+  McpUiDisplayMode,
+  McpUiHostContext,
+  McpUiTheme,
+} from '@modelcontextprotocol/ext-apps';
 import { cn } from '@/lib/utils';
 import { useComponentRegistration } from '@/lib/component-registry';
 import { waitForMcpReady } from '@/lib/mcp-bridge';
@@ -25,6 +33,13 @@ type McpAppWidgetState = {
   serverName?: string;
   resourceUri?: string;
   args?: Record<string, unknown>;
+  preferredWidth?: number;
+  preferredHeight?: number;
+  minWidth?: number;
+  minHeight?: number;
+  autoFitWidth?: boolean;
+  autoFitHeight?: boolean;
+  sizingPolicyOverride?: 'always_fit' | 'fit_until_user_resize' | 'scale_only';
   syncSource?: 'timeline';
   syncRoom?: string;
   syncComponentId?: string;
@@ -43,6 +58,11 @@ type TimelineSyncSnapshot = {
   version?: number;
   lastUpdated?: number;
   syncedAt: number;
+};
+
+type ReportedMcpAppLayout = {
+  width?: number;
+  height?: number;
 };
 
 const HOST_INFO = { name: 'PRESENT', version: '0.1.0' };
@@ -144,6 +164,7 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     messageId: propMessageId,
     contextKey,
     className,
+    updateState,
     ...rest
   } = props;
 
@@ -160,6 +181,13 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     serverName: rest.serverName,
     resourceUri: rest.resourceUri,
     args: rest.args,
+    preferredWidth: rest.preferredWidth,
+    preferredHeight: rest.preferredHeight,
+    minWidth: rest.minWidth,
+    minHeight: rest.minHeight,
+    autoFitWidth: rest.autoFitWidth,
+    autoFitHeight: rest.autoFitHeight,
+    sizingPolicyOverride: rest.sizingPolicyOverride,
     syncSource: rest.syncSource,
     syncRoom: rest.syncRoom,
     syncComponentId: rest.syncComponentId,
@@ -183,6 +211,7 @@ export function McpAppWidget(props: McpAppWidgetProps) {
   const lastRunKeyRef = useRef<string>('');
   const latestTimelineSnapshotRef = useRef<TimelineSyncSnapshot | null>(null);
   const lastTimelineSyncSignatureRef = useRef<string>('');
+  const lastReportedLayoutRef = useRef<ReportedMcpAppLayout | null>(null);
 
   const registryProps = useMemo(
     () => ({
@@ -192,6 +221,13 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       serverName: state.serverName,
       resourceUri: state.resourceUri,
       args: state.args,
+      preferredWidth: state.preferredWidth,
+      preferredHeight: state.preferredHeight,
+      minWidth: state.minWidth,
+      minHeight: state.minHeight,
+      autoFitWidth: state.autoFitWidth,
+      autoFitHeight: state.autoFitHeight,
+      sizingPolicyOverride: state.sizingPolicyOverride,
       syncSource: state.syncSource,
       syncRoom: state.syncRoom,
       syncComponentId: state.syncComponentId,
@@ -212,7 +248,36 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       serverUrl: typeof patch.serverUrl === 'string' ? patch.serverUrl : prev.serverUrl,
       serverName: typeof patch.serverName === 'string' ? patch.serverName : prev.serverName,
       resourceUri: typeof patch.resourceUri === 'string' ? patch.resourceUri : prev.resourceUri,
-      args: typeof patch.args === 'object' && patch.args ? (patch.args as Record<string, unknown>) : prev.args,
+      args:
+        typeof patch.args === 'object' && patch.args
+          ? (patch.args as Record<string, unknown>)
+          : prev.args,
+      preferredWidth:
+        typeof patch.preferredWidth === 'number' && Number.isFinite(patch.preferredWidth)
+          ? patch.preferredWidth
+          : prev.preferredWidth,
+      preferredHeight:
+        typeof patch.preferredHeight === 'number' && Number.isFinite(patch.preferredHeight)
+          ? patch.preferredHeight
+          : prev.preferredHeight,
+      minWidth:
+        typeof patch.minWidth === 'number' && Number.isFinite(patch.minWidth)
+          ? patch.minWidth
+          : prev.minWidth,
+      minHeight:
+        typeof patch.minHeight === 'number' && Number.isFinite(patch.minHeight)
+          ? patch.minHeight
+          : prev.minHeight,
+      autoFitWidth:
+        typeof patch.autoFitWidth === 'boolean' ? patch.autoFitWidth : prev.autoFitWidth,
+      autoFitHeight:
+        typeof patch.autoFitHeight === 'boolean' ? patch.autoFitHeight : prev.autoFitHeight,
+      sizingPolicyOverride:
+        patch.sizingPolicyOverride === 'always_fit' ||
+        patch.sizingPolicyOverride === 'fit_until_user_resize' ||
+        patch.sizingPolicyOverride === 'scale_only'
+          ? patch.sizingPolicyOverride
+          : prev.sizingPolicyOverride,
       syncSource: patch.syncSource === 'timeline' ? 'timeline' : prev.syncSource,
       syncRoom: typeof patch.syncRoom === 'string' ? patch.syncRoom : prev.syncRoom,
       syncComponentId:
@@ -227,7 +292,13 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     }));
   }, []);
 
-  useComponentRegistration(messageId, 'McpAppWidget', registryProps, contextKey || 'canvas', applyPatch);
+  useComponentRegistration(
+    messageId,
+    'McpAppWidget',
+    registryProps,
+    contextKey || 'canvas',
+    applyPatch,
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -284,9 +355,7 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       1000,
       Math.min(
         30_000,
-        Math.round(
-          coerceFiniteNumber(state.syncIntervalMs) ?? DEFAULT_TIMELINE_SYNC_INTERVAL_MS,
-        ),
+        Math.round(coerceFiniteNumber(state.syncIntervalMs) ?? DEFAULT_TIMELINE_SYNC_INTERVAL_MS),
       ),
     );
     return { enabled, room, componentId, intervalMs };
@@ -313,6 +382,82 @@ export function McpAppWidget(props: McpAppWidgetProps) {
   }, []);
 
   useEffect(() => {
+    if (!updateState) return;
+
+    if (state.syncSource === 'timeline') {
+      updateState((prevState) => {
+        const current = isRecord(prevState) ? prevState : {};
+        const next = { ...current };
+        let changed = false;
+        if (next.autoFitWidth !== false) {
+          next.autoFitWidth = false;
+          changed = true;
+        }
+        if (next.sizingPolicyOverride !== 'always_fit') {
+          next.sizingPolicyOverride = 'always_fit';
+          changed = true;
+        }
+        if ('reportedContentWidth' in next) {
+          delete next.reportedContentWidth;
+          changed = true;
+        }
+        return changed ? next : current;
+      });
+    }
+
+    const handleMessage = (event: MessageEvent) => {
+      const iframeWindow = iframeRef.current?.contentWindow;
+      if (!iframeWindow || event.source !== iframeWindow) return;
+      const data = event.data;
+      if (!isRecord(data) || data.type !== 'present:mcp-app-layout') return;
+      const payload = isRecord(data.payload) ? data.payload : data;
+      const nextWidth =
+        state.syncSource === 'timeline'
+          ? undefined
+          : coerceFiniteNumber(payload.width ?? payload.contentWidth);
+      const nextHeight = coerceFiniteNumber(payload.height ?? payload.contentHeight);
+      if (nextWidth == null && nextHeight == null) return;
+
+      const roundedWidth = nextWidth != null ? Math.max(1, Math.ceil(nextWidth)) : undefined;
+      const roundedHeight = nextHeight != null ? Math.max(1, Math.ceil(nextHeight)) : undefined;
+      const prev = lastReportedLayoutRef.current;
+      const widthChanged =
+        roundedWidth != null && Math.abs((prev?.width ?? roundedWidth) - roundedWidth) > 4;
+      const heightChanged =
+        roundedHeight != null && Math.abs((prev?.height ?? roundedHeight) - roundedHeight) > 4;
+      if (!widthChanged && !heightChanged && prev) return;
+
+      lastReportedLayoutRef.current = {
+        width: roundedWidth ?? prev?.width,
+        height: roundedHeight ?? prev?.height,
+      };
+
+      updateState((prevState) => {
+        const current = isRecord(prevState) ? prevState : {};
+        const currentWidth = coerceFiniteNumber(current.reportedContentWidth);
+        const currentHeight = coerceFiniteNumber(current.reportedContentHeight);
+        if (
+          (roundedWidth == null || currentWidth === roundedWidth) &&
+          (roundedHeight == null || currentHeight === roundedHeight)
+        ) {
+          return current;
+        }
+        return {
+          ...current,
+          ...(roundedWidth != null ? { reportedContentWidth: roundedWidth } : {}),
+          ...(roundedHeight != null ? { reportedContentHeight: roundedHeight } : {}),
+          reportedLayoutAt: Date.now(),
+        };
+      });
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [state.syncSource, updateState]);
+
+  useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
@@ -320,7 +465,10 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       if (!timelineSync.enabled) return;
       const snapshot = latestTimelineSnapshotRef.current;
       if (!snapshot) return;
-      if (snapshot.room !== timelineSync.room || snapshot.componentId !== timelineSync.componentId) {
+      if (
+        snapshot.room !== timelineSync.room ||
+        snapshot.componentId !== timelineSync.componentId
+      ) {
         return;
       }
       publishTimelineSnapshot(snapshot);
@@ -432,10 +580,7 @@ export function McpAppWidget(props: McpAppWidgetProps) {
         });
         consecutiveFailures = 0;
       } catch (syncError) {
-        if (
-          cancelled ||
-          (syncError instanceof DOMException && syncError.name === 'AbortError')
-        ) {
+        if (cancelled || (syncError instanceof DOMException && syncError.name === 'AbortError')) {
           return;
         }
         const errorMessage =
@@ -766,7 +911,7 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     <div
       ref={containerRef}
       className={cn(
-        'flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-lg',
+        'flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-lg',
         className,
       )}
     >
@@ -790,7 +935,7 @@ export function McpAppWidget(props: McpAppWidgetProps) {
         <iframe
           ref={iframeRef}
           title={title}
-          className="h-full w-full flex-1 bg-white"
+          className="block min-h-0 w-full flex-1 bg-white"
           sandbox="allow-scripts"
           allow={allowAttr || undefined}
           srcDoc={resourceHtml}

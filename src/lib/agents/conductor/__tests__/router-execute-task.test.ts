@@ -372,6 +372,13 @@ describe('conductor router executeTask', () => {
         params: expect.objectContaining({
           type: 'McpAppWidget',
           messageId: 'timeline-widget-intent-timeline',
+          props: expect.objectContaining({
+            sizingPolicyOverride: 'always_fit',
+            autoFitWidth: false,
+            autoFitHeight: true,
+            preferredWidth: expect.any(Number),
+            preferredHeight: expect.any(Number),
+          }),
         }),
       }),
     );
