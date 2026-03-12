@@ -5,7 +5,6 @@ import type * as MonacoEditor from 'monaco-editor';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Awareness } from 'y-protocols/awareness';
 import * as Y from 'yjs';
-import { MonacoBinding } from 'y-monaco';
 
 type SyncStatus = 'connecting' | 'synced' | 'offline' | 'error';
 
@@ -21,7 +20,7 @@ type CollaborationSnapshot = {
   };
 };
 
-type ResetMonacoEditorProps = {
+export type ResetMonacoEditorProps = {
   workspaceSessionId: string;
   filePath: string;
   initialValue: string;
@@ -257,7 +256,7 @@ export function ResetMonacoEditor({
     Array<{ identity: string; displayName: string; updatedAt: string }>
   >([]);
   const editorRef = useRef<MonacoEditor.editor.IStandaloneCodeEditor | null>(null);
-  const bindingRef = useRef<MonacoBinding | null>(null);
+  const bindingRef = useRef<{ destroy: () => void } | null>(null);
   const ydocRef = useRef<Y.Doc | null>(null);
   const awarenessRef = useRef<Awareness | null>(null);
   const syncSessionRef = useRef<ResetYjsSyncSession | null>(null);
@@ -322,8 +321,14 @@ export function ResetMonacoEditor({
       return;
     }
 
-    bindingRef.current?.destroy();
-    bindingRef.current = new MonacoBinding(ydoc.getText('source'), model, new Set([editor]), awareness);
+    void (async () => {
+      const { MonacoBinding } = await import('y-monaco');
+      if (editorRef.current !== editor) {
+        return;
+      }
+      bindingRef.current?.destroy();
+      bindingRef.current = new MonacoBinding(ydoc.getText('source'), model, new Set([editor]), awareness);
+    })();
 
     monaco.editor.setTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs');
   };

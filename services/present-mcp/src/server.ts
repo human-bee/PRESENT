@@ -24,6 +24,7 @@ const registerResource = (name: string, uri: string) => {
 };
 
 registerResource('runtime.manifest', 'present://runtime/manifest');
+registerResource('runtime.interop', 'present://runtime/interop');
 registerResource('workspace.state', 'present://workspaces/state');
 registerResource('executor.state', 'present://executors/state');
 registerResource('task.state', 'present://tasks/state');

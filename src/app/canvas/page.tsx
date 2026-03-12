@@ -10,8 +10,7 @@ export default async function Canvas({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const embedded = params.embed === '1';
-  const legacyEnabled = params.legacy === '1' || embedded;
+  const legacyEnabled = params.legacy === '1';
 
   if (!legacyEnabled) {
     return (
@@ -31,17 +30,13 @@ export default async function Canvas({
   try {
     return (
       <ErrorBoundary>
-        {!embedded ? (
-          <div className="legacy-canvas-shell">
-            <div className="legacy-canvas-shell__banner">
-              <span>Legacy Runtime</span>
-              <strong>This canvas is archived. The reset workspace at `/` is now the primary surface.</strong>
-            </div>
-            <CanvasPageClient />
+        <div className="legacy-canvas-shell">
+          <div className="legacy-canvas-shell__banner">
+            <span>Legacy Runtime</span>
+            <strong>This canvas is archived. The reset workspace at `/` is now the primary surface.</strong>
           </div>
-        ) : (
           <CanvasPageClient />
-        )}
+        </div>
       </ErrorBoundary>
     );
   } catch (error) {

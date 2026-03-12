@@ -1,6 +1,6 @@
 # PRESENT Reset Workspace
 
-PRESENT now defaults to a Codex-native mission-control shell at `/` with reset-era workspace, task, artifact, approval, presence, and MCP contracts. The archived LiveKit + TLDraw canvas runtime still exists for bridge/debug work, but it is no longer the primary product surface.
+PRESENT now defaults to a Codex-native mission-control shell at `/` with reset-era workspace, task, artifact, approval, presence, and MCP contracts. The shell now includes a reset-native TLDraw board, a collaborative Monaco + Yjs editor, and a verified stdio MCP surface for external agents. The archived LiveKit + TLDraw canvas runtime still exists for archive/debug work, but it is no longer the primary product surface.
 
 ## Reset Quick Start
 
@@ -33,9 +33,11 @@ npm run codex:manifest
 ```bash
 npm run typecheck
 npm run test:reset
+npm run test:reset:e2e
+npm run build
 ```
 
-The legacy room/canvas stack is still available through the archived `/canvas?legacy=1` bridge and the `legacy:*` scripts in `package.json`, but it should be treated as an appendix while the reset shell absorbs those capabilities directly.
+The legacy room/canvas stack is still available through `/canvas?legacy=1` and the `legacy:*` scripts in `package.json`, but it should be treated as an appendix while the reset shell owns the default code, canvas, and agent workflows directly.
 
 ## Legacy Runtime Appendix
 

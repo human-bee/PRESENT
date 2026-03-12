@@ -340,11 +340,20 @@ const defaultResetKernelState = (): ResetKernelState => ({
 let cachedSupabase: SupabaseClient | null | undefined;
 let hydrationPromise: Promise<ResetKernelState> | null = null;
 let hasHydratedFromSupabase = false;
+let lastSupabaseHydratedAt = 0;
 const pendingMirrorWrites = new Set<Promise<void>>();
 let warningKeys = new Set<string>();
 
 const getStatePath = () =>
   process.env.PRESENT_RESET_STATE_PATH ?? path.join(process.cwd(), '.tmp', 'present-reset-state.json');
+
+const getSupabaseCacheTtlMs = () => {
+  const rawValue = Number(process.env.PRESENT_RESET_SUPABASE_CACHE_TTL_MS ?? '2000');
+  if (!Number.isFinite(rawValue) || rawValue < 0) {
+    return 2000;
+  }
+  return rawValue;
+};
 
 const ensureParentDirectory = (statePath: string) => {
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
@@ -467,7 +476,12 @@ const scheduleMirror = <K extends ResetCollectionKey>(key: K, value: ResetCollec
 export const readResetKernelState = () => readPersistedState();
 
 export async function ensureResetKernelHydrated(input: { force?: boolean } = {}) {
-  if (hasHydratedFromSupabase && !input.force) {
+  const cacheExpired =
+    hasHydratedFromSupabase &&
+    getSupabase() &&
+    Date.now() - lastSupabaseHydratedAt >= getSupabaseCacheTtlMs();
+
+  if (hasHydratedFromSupabase && !input.force && !cacheExpired) {
     return readPersistedState();
   }
   if (!getSupabase()) {
@@ -491,6 +505,7 @@ export async function ensureResetKernelHydrated(input: { force?: boolean } = {})
     const parsed = resetKernelStateSchema.parse(nextState);
     writePersistedState(parsed);
     hasHydratedFromSupabase = true;
+    lastSupabaseHydratedAt = Date.now();
     return parsed;
   })().finally(() => {
     hydrationPromise = null;
@@ -532,6 +547,7 @@ export function resetKernelStateForTests() {
   cachedSupabase = undefined;
   hydrationPromise = null;
   hasHydratedFromSupabase = false;
+  lastSupabaseHydratedAt = 0;
   warningKeys = new Set<string>();
   pendingMirrorWrites.clear();
 }
