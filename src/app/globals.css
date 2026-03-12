@@ -647,6 +647,64 @@
   margin-top: 16px;
 }
 
+.reset-collaboration-surface {
+  display: grid;
+  gap: 18px;
+}
+
+.reset-collaboration-surface__controls {
+  display: grid;
+  gap: 14px;
+}
+
+.reset-collaboration-surface__note {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px dashed rgba(24, 20, 17, 0.12);
+  color: rgba(24, 20, 17, 0.64);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dark .reset-collaboration-surface__note {
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(246, 237, 228, 0.64);
+}
+
+.reset-collaboration-surface__board {
+  display: grid;
+  gap: 8px;
+}
+
+.reset-collaboration-surface__board p {
+  margin: 0;
+  color: rgba(24, 20, 17, 0.68);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dark .reset-collaboration-surface__board p {
+  color: rgba(246, 237, 228, 0.68);
+}
+
+.reset-board-stage {
+  position: relative;
+  min-height: 420px;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid rgba(24, 20, 17, 0.1);
+  background:
+    radial-gradient(circle at top left, rgba(246, 165, 102, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(255, 252, 247, 0.88), rgba(247, 240, 231, 0.92));
+}
+
+.dark .reset-board-stage {
+  border-color: rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top left, rgba(246, 165, 102, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(20, 23, 31, 0.96), rgba(10, 12, 16, 0.98));
+}
+
 .reset-frame {
   width: 100%;
   min-height: 320px;
@@ -670,6 +728,13 @@
 .dark .reset-legacy-frame {
   border-color: rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
+}
+
+@media (min-width: 1180px) {
+  .reset-collaboration-surface {
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+    align-items: start;
+  }
 }
 
 .reset-pill--approved {

@@ -11,6 +11,7 @@
     "tests/**/*"
   ],
   "files": [
+    "src/types/present-globals.d.ts",
     "packages/contracts/src/index.ts",
     "services/kernel/src/index.ts",
     "services/codex-adapter/src/index.ts",
