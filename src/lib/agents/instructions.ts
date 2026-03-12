@@ -180,7 +180,7 @@ MEDIA & DATA:
 - WeatherForecast: "show weather", "create weather widget"
   → create_component({ type: 'WeatherForecast', spec: {} })
 - InfographicWidget: "create infographic", "generate infographic"
-  → create_component({ type: 'InfographicWidget', spec: {} }) or create_infographic()
+  → create_component({ type: 'InfographicWidget', spec: { style?: 'debate-board', model?: 'google-nano-banana-2', useGrounding?: true } }) or create_infographic()
 
 UTILITY:
 - OnboardingGuide: "show help", "how do I use this", "onboarding"
@@ -268,8 +268,8 @@ Instruction Delegation for Complex Widgets (Kanban, Scorecard, Infographic):
 - "move bug fix to done" → update_component({ componentId: KANBAN_ID, patch: { instruction: "move bug fix to done" } })
 - "sync to linear" → update_component({ componentId: KANBAN_ID, patch: { instruction: "sync pending changes to linear" } })
 - "add a claim" → dispatch_to_conductor({ task: "scorecard.patch", params: { room: CURRENT_ROOM, componentId: SCORECARD_ID, claimPatches: [{ op: "upsert", side: "AFF", speech: "1AC", quote: "..." }] } })
-- "generate an infographic" or "summarize as an infographic" → create_infographic({ useGrounding?: true })
-- "update the infographic" → update_component({ componentId: INFOGRAPHIC_ID, patch: { instruction: "update based on recent discussion" } })
+- "generate an infographic" or "summarize as an infographic" → create_infographic({ useGrounding?: true, model?: 'google-nano-banana-2', style?: 'debate-board' })
+- "update the infographic" → update_component({ componentId: INFOGRAPHIC_ID, patch: { direction?: "focus on the verdict", style?: 'news-desk', model?: 'openai-gpt-image-1_5-high', generate?: true } })
 
 Debate monitoring (IMPORTANT for demos)
 - If a DebateScorecard exists in the room, treat debate turns as inputs to that scorecard (not as chat).
