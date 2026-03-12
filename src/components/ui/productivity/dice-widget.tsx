@@ -9,7 +9,6 @@ import {
   type DiceLayoutMode,
   type DiceRuntimeState,
   DICE_ANIMATION_MS,
-  MAX_DICE_COUNT,
   diceWidgetSchema,
   parseDiceRuntimeState,
   reduceDiceRuntimeState,
@@ -84,38 +83,35 @@ function DiceFace({
     <div className="relative [perspective:1200px]">
       <div
         className={cn(
-          'absolute left-[12%] right-[12%] top-[78%] h-5 rounded-full bg-black/25 blur-xl',
+          'absolute left-[16%] right-[16%] top-[82%] h-4 rounded-full bg-black/20 blur-lg',
           isRolling && 'animate-[present-dice-shadow_1250ms_cubic-bezier(.24,.8,.25,1)]',
         )}
       />
       <div
         className={cn(
-          'relative rounded-[28px] border [transform-style:preserve-3d] transition-transform duration-150',
-          compact ? 'h-28' : 'h-36',
+          'relative overflow-hidden rounded-[24px] border transition-transform duration-150',
+          compact ? 'h-24' : 'h-32',
           isRolling && 'animate-[present-dice-bounce_1250ms_cubic-bezier(.24,.8,.25,1)]',
         )}
         style={{
           background:
-            'radial-gradient(circle at 24% 18%, rgba(255,255,255,0.96), rgba(244,246,247,0.95) 38%, rgba(212,219,228,0.96) 100%)',
-          borderColor: 'rgba(148, 163, 184, 0.42)',
+            'linear-gradient(165deg, rgba(255,255,255,0.98), rgba(244,246,249,0.96) 46%, rgba(223,229,238,0.98) 100%)',
+          borderColor: 'rgba(148, 163, 184, 0.28)',
           boxShadow:
-            '0 20px 38px rgba(2,6,23,0.28), inset 0 1px 0 rgba(255,255,255,0.65), inset 0 -18px 24px rgba(15,23,42,0.08)',
+            '0 14px 26px rgba(2,6,23,0.2), inset 0 1px 0 rgba(255,255,255,0.75), inset 0 -10px 18px rgba(15,23,42,0.06)',
         }}
       >
         <div
-          className="pointer-events-none absolute inset-[8px] rounded-[22px]"
+          className="pointer-events-none absolute inset-0"
           style={{
             background:
-              'linear-gradient(145deg, rgba(255,255,255,0.5), transparent 28%, rgba(15,23,42,0.08) 82%)',
-            transform: 'translateZ(28px)',
+              'linear-gradient(145deg, rgba(255,255,255,0.5), rgba(255,255,255,0.08) 28%, transparent 55%)',
           }}
         />
         <div
-          className="pointer-events-none absolute inset-x-[6px] top-[-4px] h-7 rounded-[18px] opacity-60"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-8"
           style={{
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0))',
-            transform: 'rotateX(90deg) translateZ(10px)',
-            transformOrigin: 'center top',
+            background: 'linear-gradient(180deg, rgba(15,23,42,0), rgba(15,23,42,0.08))',
           }}
         />
         <div
@@ -154,8 +150,8 @@ function DiceFace({
           <div className="flex h-full items-center justify-center">
             <div
               className={cn(
-                'rounded-2xl bg-white/70 font-mono font-semibold tracking-[0.12em] text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]',
-                compact ? 'px-4 py-2 text-3xl' : 'px-6 py-3 text-5xl',
+                'font-mono font-bold tracking-[0.16em] text-slate-950 [text-shadow:0_1px_0_rgba(255,255,255,0.65)]',
+                compact ? 'text-3xl' : 'text-5xl',
               )}
             >
               {String(value).padStart(2, '0')}
@@ -419,7 +415,7 @@ export function DiceWidget(props: DiceWidgetProps) {
             <div className="mt-4">
               <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/60">Count</div>
               <div className="mt-2 grid grid-cols-3 gap-2">
-                {[1, 2, 4, 6].map((count) => {
+                {[1, 2, 3, 4, 5, 6].map((count) => {
                   const active = runtime.diceCount === count;
                   return (
                     <button
@@ -437,16 +433,6 @@ export function DiceWidget(props: DiceWidgetProps) {
                     </button>
                   );
                 })}
-                <div className="col-span-3">
-                  <input
-                    type="range"
-                    min={1}
-                    max={MAX_DICE_COUNT}
-                    value={runtime.diceCount}
-                    onChange={(event) => updateDieCount(Number(event.target.value))}
-                    className="w-full"
-                  />
-                </div>
               </div>
             </div>
 
