@@ -322,11 +322,11 @@ export default defineAgent({
     }
     console.log('[VoiceAgent] Connected to room:', job.room.name);
     const liveKitBus = createLiveKitBus(job.room as any);
+    const participantIdentity =
+      typeof job.room?.localParticipant?.identity === 'string'
+        ? job.room.localParticipant.identity.trim()
+        : '';
     const workerId = (() => {
-      const participantIdentity =
-        typeof job.room?.localParticipant?.identity === 'string'
-          ? job.room.localParticipant.identity.trim()
-          : '';
       if (participantIdentity.length > 0) return participantIdentity;
       const roomName = typeof job.room?.name === 'string' ? job.room.name.trim() : '';
       if (roomName.length > 0) return roomName;
@@ -359,6 +359,15 @@ export default defineAgent({
       transcriptionReadyTimeoutMs: voiceKnobs?.transcriptionReadyTimeoutMs,
     });
     const voiceSessionId = `voice-${randomUUID()}`;
+    const voiceSessionProofMetadata = {
+      workerId,
+      participantIdentity: participantIdentity || null,
+      modelControl: {
+        configVersion: voiceControl?.configVersion ?? null,
+        applyMode: voiceControl?.applyModes['models.voiceRealtime'] ?? null,
+        fieldSource: voiceControl?.fieldSources['models.voiceRealtime'] ?? null,
+      },
+    } satisfies JsonObject;
     let replaySequence = 0;
     const nextReplaySequence = () => {
       replaySequence += 1;
@@ -4990,6 +4999,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           process.env.REALTIME_MODEL?.trim() ||
           'gpt-realtime',
         output: payload,
+        metadata: voiceSessionProofMetadata,
         ...(event.error
           ? { error: event.error instanceof Error ? event.error.message : String(event.error) }
           : {}),
@@ -5090,6 +5100,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         transcriptionEnabled: !multiParticipantTranscriptionEnabled && transcriptionEnabled,
         multiParticipantTranscriptionEnabled,
       },
+      metadata: voiceSessionProofMetadata,
     });
   },
 });

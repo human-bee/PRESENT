@@ -92,6 +92,45 @@ describe('/admin/agents page', () => {
           }),
         );
       }
+      if (url.startsWith('/api/admin/agents/voice-sessions')) {
+        return Promise.resolve(
+          response({
+            available: true,
+            toolIoAvailable: true,
+            sessions: [
+              {
+                session_id: 'voice-1',
+                room: 'canvas-room-1',
+                status: 'running',
+                started_at: '2026-02-17T12:00:00.000Z',
+                closed_at: null,
+                last_activity_at: '2026-02-17T12:00:01.000Z',
+                provider: 'openai',
+                model: 'gpt-realtime-1.5',
+                provider_source: 'runtime_selected',
+                provider_path: 'primary',
+                provider_request_id: 'provider-voice-1',
+                trace_id: 'trace-1',
+                request_id: 'req-voice-1',
+                intent_id: 'intent-voice-1',
+                event_count: 2,
+                tool_event_count: 1,
+                tool_call_count: 1,
+                last_tool_name: 'dispatch_to_conductor',
+                config_version: 'cfg-1',
+                control_scope: 'global',
+                control_scope_id: 'global',
+                control_profile_id: 'profile-1',
+                worker_id: 'worker-voice-1',
+                participant_identity: 'voice-agent-1',
+                close_reason: null,
+                close_code: null,
+                close_error: null,
+              },
+            ],
+          }),
+        );
+      }
       if (url === '/api/admin/agents/workers') {
         return Promise.resolve(response({ workers: [] }));
       }
@@ -180,6 +219,9 @@ describe('/admin/agents page', () => {
 
     render(<AgentAdminPage />);
 
+    await screen.findByText('Voice Sessions');
+    expect(await screen.findByText('gpt-realtime-1.5')).toBeTruthy();
+
     const queueTask = await screen.findByText('fairy.intent');
     fireEvent.click(queueTask);
 
@@ -191,6 +233,13 @@ describe('/admin/agents page', () => {
       ).toBe(true);
       expect(
         calledUrls.some((url) => url.startsWith('/api/admin/agents/traces?') && url.includes('traceId=trace-1')),
+      ).toBe(true);
+      expect(
+        calledUrls.some(
+          (url) =>
+            url.startsWith('/api/admin/agents/voice-sessions?') &&
+            url.includes('traceId=trace-1'),
+        ),
       ).toBe(true);
     });
 

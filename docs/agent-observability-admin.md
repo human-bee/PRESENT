@@ -7,6 +7,7 @@
   - `GET /api/admin/agents/overview`
   - `GET /api/admin/agents/queue`
   - `GET /api/admin/agents/session` (one-call room/canvas correlation)
+  - `GET /api/admin/agents/voice-sessions` (session-first voice runtime proof)
   - `GET /api/admin/agents/traces`
   - `GET /api/admin/agents/workers`
   - `GET /api/admin/agents/audit`
@@ -65,3 +66,15 @@ Every action writes an audit row to `agent_ops_audit_log`.
   - `tasks[]` from `agent_tasks`
   - `traces[]` from `agent_trace_events`
   - `summary` with status/stage counts and missing-trace diagnostics
+
+## Voice Session Proof
+
+- Endpoint: `GET /api/admin/agents/voice-sessions`
+- Query:
+  - optional `room=<livekit-room-name>`
+  - optional `limit=<1..100>` (default `25`)
+- Response includes one row per voice session from `agent_model_io`, keyed by `session_id`, with:
+  - `model`, `provider`, `provider_request_id`
+  - `config_version` and control-plane source scope
+  - `started_at`, `closed_at`, `last_activity_at`
+  - latest correlated `trace_id` plus tool-call counts from `agent_tool_io`

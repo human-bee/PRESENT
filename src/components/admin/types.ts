@@ -184,3 +184,33 @@ export type AgentAuditEntry = {
   before_status?: string | null;
   after_status?: string | null;
 };
+
+export type AgentVoiceSessionRow = {
+  session_id: string;
+  room: string | null;
+  status: 'running' | 'closed' | 'error' | 'unknown';
+  started_at: string | null;
+  closed_at: string | null;
+  last_activity_at: string | null;
+  provider: AgentProvider;
+  model: string | null;
+  provider_source: AgentProviderSource;
+  provider_path: AgentProviderPath;
+  provider_request_id: string | null;
+  trace_id: string | null;
+  request_id: string | null;
+  intent_id: string | null;
+  event_count: number;
+  tool_event_count: number;
+  tool_call_count: number;
+  last_tool_name: string | null;
+  config_version: string | null;
+  control_scope: string | null;
+  control_scope_id: string | null;
+  control_profile_id: string | null;
+  worker_id: string | null;
+  participant_identity: string | null;
+  close_reason: string | null;
+  close_code: number | null;
+  close_error: string | null;
+};

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AgentOpsOverview } from '@/components/admin/agent-ops-overview';
 import { AgentQueueTable } from '@/components/admin/agent-queue-table';
 import { AgentTraceTimeline } from '@/components/admin/agent-trace-timeline';
+import { AgentVoiceSessionTable } from '@/components/admin/agent-voice-session-table';
 import { AgentWorkerHealth } from '@/components/admin/agent-worker-health';
 import { AgentSafeActions } from '@/components/admin/agent-safe-actions';
 import { AgentAuditLog } from '@/components/admin/agent-audit-log';
@@ -20,6 +21,7 @@ import type {
   AgentTraceFailure,
   AgentTraceTaskSnapshot,
   AgentTraceContextTranscriptEntry,
+  AgentVoiceSessionRow,
   AgentWorkerHeartbeat,
 } from '@/components/admin/types';
 
@@ -101,6 +103,9 @@ export default function AgentAdminPage() {
   const [overview, setOverview] = useState<AgentOverviewResponse | null>(null);
   const [tasks, setTasks] = useState<AgentQueueTask[]>([]);
   const [traces, setTraces] = useState<AgentTraceEventRow[]>([]);
+  const [voiceSessions, setVoiceSessions] = useState<AgentVoiceSessionRow[]>([]);
+  const [voiceSessionsAvailable, setVoiceSessionsAvailable] = useState(true);
+  const [voiceSessionsToolIoAvailable, setVoiceSessionsToolIoAvailable] = useState(true);
   const [workers, setWorkers] = useState<AgentWorkerHeartbeat[]>([]);
   const [auditEntries, setAuditEntries] = useState<AgentAuditEntry[]>([]);
   const [selectedTask, setSelectedTask] = useState<AgentQueueTask | null>(null);
@@ -341,6 +346,9 @@ export default function AgentAdminPage() {
       if (!canReadDetails) {
         setTasks([]);
         setTraces([]);
+        setVoiceSessions([]);
+        setVoiceSessionsAvailable(true);
+        setVoiceSessionsToolIoAvailable(true);
         setWorkers([]);
         setAuditEntries([]);
         setSelectedTask(null);
@@ -351,7 +359,7 @@ export default function AgentAdminPage() {
       }
 
       try {
-        const [queueRes, tracesRes, workersRes, auditRes] = await Promise.all([
+        const [queueRes, tracesRes, voiceSessionsRes, workersRes, auditRes] = await Promise.all([
           readJson<{ tasks: AgentQueueTask[] }>(
             withQuery('/api/admin/agents/queue', {
               limit: 100,
@@ -370,11 +378,27 @@ export default function AgentAdminPage() {
               traceId: normalizedTraceFilter,
             }),
           ),
+          readJson<{
+            sessions: AgentVoiceSessionRow[];
+            available?: boolean;
+            toolIoAvailable?: boolean;
+          }>(
+            withQuery('/api/admin/agents/voice-sessions', {
+              limit: 50,
+              room: normalizedRoomFilter,
+              provider: normalizedProviderFilter,
+              providerPath: normalizedProviderPathFilter,
+              traceId: normalizedTraceFilter,
+            }),
+          ),
           readJson<{ workers: AgentWorkerHeartbeat[] }>('/api/admin/agents/workers'),
           readJson<{ entries: AgentAuditEntry[] }>('/api/admin/agents/audit?limit=120'),
         ]);
         setTasks(Array.isArray(queueRes.tasks) ? queueRes.tasks : []);
         setTraces(Array.isArray(tracesRes.traces) ? tracesRes.traces : []);
+        setVoiceSessions(Array.isArray(voiceSessionsRes.sessions) ? voiceSessionsRes.sessions : []);
+        setVoiceSessionsAvailable(voiceSessionsRes.available !== false);
+        setVoiceSessionsToolIoAvailable(voiceSessionsRes.toolIoAvailable !== false);
         setWorkers(Array.isArray(workersRes.workers) ? workersRes.workers : []);
         setAuditEntries(Array.isArray(auditRes.entries) ? auditRes.entries : []);
       } catch (detailLoadError) {
@@ -390,6 +414,9 @@ export default function AgentAdminPage() {
         }
         setTasks([]);
         setTraces([]);
+        setVoiceSessions([]);
+        setVoiceSessionsAvailable(true);
+        setVoiceSessionsToolIoAvailable(true);
         setWorkers([]);
         setAuditEntries([]);
       }
@@ -693,6 +720,13 @@ export default function AgentAdminPage() {
         )}
 
         <AgentOpsOverview overview={overview} />
+
+        <AgentVoiceSessionTable
+          sessions={voiceSessions}
+          available={voiceSessionsAvailable}
+          toolIoAvailable={voiceSessionsToolIoAvailable}
+          onSelectTraceId={openTrace}
+        />
 
         <div className="grid gap-4 xl:grid-cols-2">
           <AgentQueueTable
