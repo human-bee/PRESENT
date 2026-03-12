@@ -1,16 +1,37 @@
-import { YoutubeEmbed, youtubeEmbedSchema } from "@/components/ui/youtube/youtube-embed";
-import { YoutubeSearchEnhanced, youtubeSearchEnhancedSchema } from '@/components/ui/youtube/youtube-search-enhanced';
-import { z } from "zod";
-import { WeatherForecast, weatherForecastSchema } from '@/components/ui/integrations/weather-forecast';
-import { RetroTimerRegistry, retroTimerSchema } from '@/components/ui/productivity/retro-timer-registry';
-import { RetroTimerEnhanced, retroTimerEnhancedSchema } from '@/components/ui/productivity/retro-timer-enhanced';
+import { YoutubeEmbed, youtubeEmbedSchema } from '@/components/ui/youtube/youtube-embed';
+import {
+  YoutubeSearchEnhanced,
+  youtubeSearchEnhancedSchema,
+} from '@/components/ui/youtube/youtube-search-enhanced';
+import { z } from 'zod';
+import {
+  WeatherForecast,
+  weatherForecastSchema,
+} from '@/components/ui/integrations/weather-forecast';
+import {
+  RetroTimerRegistry,
+  retroTimerSchema,
+} from '@/components/ui/productivity/retro-timer-registry';
+import {
+  RetroTimerEnhanced,
+  retroTimerEnhancedSchema,
+} from '@/components/ui/productivity/retro-timer-enhanced';
 import { DocumentEditor, documentEditorSchema } from '@/components/ui/documents/document-editor';
 import { ResearchPanel, researchPanelSchema } from '@/components/ui/research/research-panel';
-import { ActionItemTracker, actionItemTrackerSchema } from '@/components/ui/productivity/action-item-tracker';
-import MeetingSummaryWidget, { meetingSummaryWidgetSchema } from '@/components/ui/productivity/meeting-summary-widget';
-import MemoryRecallWidget, { memoryRecallWidgetSchema } from '@/components/ui/productivity/memory-recall-widget';
+import {
+  ActionItemTracker,
+  actionItemTrackerSchema,
+} from '@/components/ui/productivity/action-item-tracker';
+import MeetingSummaryWidget, {
+  meetingSummaryWidgetSchema,
+} from '@/components/ui/productivity/meeting-summary-widget';
+import MemoryRecallWidget, {
+  memoryRecallWidgetSchema,
+} from '@/components/ui/productivity/memory-recall-widget';
 import CrowdPulseWidget from '@/components/ui/productivity/crowd-pulse-widget';
 import { crowdPulseWidgetSchema } from '@/components/ui/productivity/crowd-pulse-schema';
+import DiceWidget, { diceWidgetSchema } from '@/components/ui/productivity/dice-widget';
+import CardWidget, { cardWidgetSchema } from '@/components/ui/productivity/card-widget';
 import McpAppWidget, { mcpAppWidgetSchema } from '@/components/ui/mcp/mcp-app-widget';
 import {
   LivekitParticipantTile,
@@ -29,23 +50,29 @@ import AIImageGenerator, {
 } from '@/components/ui/ai/ai-image-generator';
 
 import LiveCaptions, { liveCaptionsSchema } from '@/components/LiveCaptions';
-import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/productivity/linear-kanban-board';
+import LinearKanbanBoard, {
+  linearKanbanSchema,
+} from '@/components/ui/productivity/linear-kanban-board';
 
 // ...
 
-
-import { OnboardingGuide, onboardingGuideSchema } from '@/components/ui/onboarding/onboarding-guide';
+import {
+  OnboardingGuide,
+  onboardingGuideSchema,
+} from '@/components/ui/onboarding/onboarding-guide';
 import { ComponentToolbox } from '@/components/ui/shared/component-toolbox';
 
 // Add debate scorecard @debate-scorecard.tsx
-import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/productivity/debate-scorecard';
+import DebateScorecard, {
+  debateScoreCardSchema,
+} from '@/components/ui/productivity/debate-scorecard';
 import { InfographicWidget } from '@/components/InfographicWidget';
 
 // Context feeder widget for document/text context injection
 import { ContextFeeder, contextFeederSchema } from '@/components/ui/documents/context-feeder';
 import { getWidgetLifecycleMetadata } from '@/lib/agents/widget-lifecycle-manifest';
 
-import { componentToolboxSchema } from "@/lib/custom";
+import { componentToolboxSchema } from '@/lib/custom';
 import type { CapabilityGroup, LifecycleOp, WidgetTier } from '@/lib/agents/capabilities';
 
 const extendedSchema = <T extends z.ZodObject<any>>(schema: T) => {
@@ -53,7 +80,7 @@ const extendedSchema = <T extends z.ZodObject<any>>(schema: T) => {
     x: z.number().optional().describe('X position'),
     y: z.number().optional().describe('Y position'),
   });
-}
+};
 
 const infographicWidgetSchema = z.object({
   useGrounding: z.boolean().optional().describe('Whether to enable Google Search grounding'),
@@ -86,10 +113,7 @@ function LivekitParticipantTileWrapper(props: any) {
   // In CustomShapeComponent, props.state contains the component state.
   // We fallback to top-level props if state is missing (for backward compat or direct usage).
   const slotId =
-    props.state?.slotId ??
-    props.slotId ??
-    props.__custom_message_id ??
-    props.componentId;
+    props.state?.slotId ?? props.slotId ?? props.__custom_message_id ?? props.componentId;
   const participantIdentity = props.state?.participantIdentity ?? props.participantIdentity;
   const assignmentStatus =
     props.state?.assignmentStatus ??
@@ -219,6 +243,24 @@ const baseComponents: RegistryComponentEntry[] = [
     group: 'widget-lifecycle',
     lifecycleOps: TIER1_LIFECYCLE_OPS,
     critical: true,
+  },
+  {
+    name: 'DiceWidget',
+    description:
+      'Interactive tabletop dice roller with synchronized rolls, up to six dice, and optional versus splits across the live canvas.',
+    component: DiceWidget,
+    propsSchema: extendedSchema(diceWidgetSchema),
+    tier: 'tier2',
+    group: 'widget-lifecycle',
+  },
+  {
+    name: 'CardWidget',
+    description:
+      'Interactive card flip widget with synchronized reveals, up to six cards, versus hands, and optional no-suit numeric mode across the live canvas.',
+    component: CardWidget,
+    propsSchema: extendedSchema(cardWidgetSchema),
+    tier: 'tier2',
+    group: 'widget-lifecycle',
   },
   {
     name: 'McpAppWidget',

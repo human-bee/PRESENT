@@ -21,6 +21,8 @@ import {
   Database,
   AppWindow,
   Hand,
+  Dice5,
+  RectangleHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -89,6 +91,16 @@ export const componentIcons: Record<string, ComponentIconMapping> = {
     icon: Hand,
     category: 'Collaboration',
     description: 'Crowd pulse + hand count control',
+  },
+  DiceWidget: {
+    icon: Dice5,
+    category: 'Productivity',
+    description: 'Shared tabletop dice roller',
+  },
+  CardWidget: {
+    icon: RectangleHorizontal,
+    category: 'Productivity',
+    description: 'Shared playing-card reveal widget',
   },
   McpAppWidget: {
     icon: AppWindow,

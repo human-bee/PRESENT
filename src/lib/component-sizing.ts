@@ -148,6 +148,22 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     resizeMode: 'free',
     sizingPolicy: 'always_fit',
   },
+  DiceWidget: {
+    naturalWidth: 780,
+    naturalHeight: 620,
+    minWidth: 520,
+    minHeight: 420,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit',
+  },
+  CardWidget: {
+    naturalWidth: 840,
+    naturalHeight: 680,
+    minWidth: 620,
+    minHeight: 480,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit',
+  },
   McpAppWidget: {
     naturalWidth: 520,
     naturalHeight: 520,

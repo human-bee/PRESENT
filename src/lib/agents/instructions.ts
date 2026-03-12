@@ -14,7 +14,8 @@ export function buildVoiceAgentInstructions(
 ): string {
   const profile = options.profile || systemCapabilities?.capabilityProfile || 'full';
   const isLeanProfile = profile === 'lean_adaptive';
-  const instructionPack = options.instructionPack === 'capability_explicit' ? 'capability_explicit' : 'baseline';
+  const instructionPack =
+    options.instructionPack === 'capability_explicit' ? 'capability_explicit' : 'baseline';
 
   const base = `
 You are the custom Voice Agent (Agent #1) in a real‑time meeting/canvas system. You listen, interpret, and act by dispatching tool calls that shape the UI. You never speak audio—your output is always tool calls (not narration).
@@ -37,12 +38,16 @@ Global principles
         .filter(
           (tool) =>
             tool.critical ||
-            ['visual', 'widget-lifecycle', 'research', 'mcp', 'utility'].includes(String(tool.group || '')),
+            ['visual', 'widget-lifecycle', 'research', 'mcp', 'utility'].includes(
+              String(tool.group || ''),
+            ),
         )
         .slice(0, 14)
     : tools;
   let toolSection = `\nCapability profile: ${profile}. You have access to ${tools.length} tools.`;
-  toolSection += isLeanProfile ? '\nUse the smallest matching critical tool first:' : '\nTool reference:';
+  toolSection += isLeanProfile
+    ? '\nUse the smallest matching critical tool first:'
+    : '\nTool reference:';
   for (const t of tools) {
     if (!listedTools.some((tool) => tool.name === t.name)) continue;
     toolSection += `\n- ${t.name}: ${t.description}`;
@@ -57,9 +62,12 @@ Global principles
     toolSection += `\n- Additional tools are available on-demand via capability refresh.`;
   }
 
-  const components: ComponentCapability[] = systemCapabilities?.components || componentsFallback || [];
+  const components: ComponentCapability[] =
+    systemCapabilities?.components || componentsFallback || [];
   const listedComponents = isLeanProfile
-    ? components.filter((component) => component.tier === 'tier1' || component.critical).slice(0, 16)
+    ? components
+        .filter((component) => component.tier === 'tier1' || component.critical)
+        .slice(0, 16)
     : components;
   let componentSection = `\n\ncustom UI components available (${components.length}):`;
   for (const c of listedComponents) {
@@ -69,7 +77,8 @@ Global principles
     }
   }
   if (isLeanProfile && components.length > listedComponents.length) {
-    componentSection += '\n- Additional components are available on-demand via capability refresh/fallback.';
+    componentSection +=
+      '\n- Additional components are available on-demand via capability refresh/fallback.';
   }
 
   const capabilityExplicitSection = `
@@ -129,6 +138,11 @@ PRODUCTIVITY:
   → create_component({ type: 'ActionItemTracker', spec: {} })
 - LinearKanbanBoard: "create kanban board", "show kanban", "task board"
   → create_component({ type: 'LinearKanbanBoard', spec: {} })
+- DiceWidget: "create dice widget", "add dice roller", "roll dice"
+  → create_component({ type: 'DiceWidget', spec: {} })
+- CardWidget: "create card widget", "add playing cards", "flip cards"
+  → create_component({ type: 'CardWidget', spec: {} })
+  → Supports up to 6 dice/cards, versus layouts, numeric ranks, and no-suit mode via update_component patch fields.
 - DocumentEditor: "create document", "add doc", "new document editor"
   → create_component({ type: 'DocumentEditor', spec: {} })
 
@@ -182,6 +196,11 @@ Few‑shot Do / Don't
 - DO: "Align the selected rectangles to the left" → dispatch_to_conductor('fairy.intent', { message: 'Align the selected rectangles to the left', selectionIds: CURRENT_SELECTION_IDS })
 - DO: "Start a 5 minute timer" → create_component({ type: 'RetroTimerEnhanced', spec: { initialMinutes: 5, initialSeconds: 0, autoStart: true } })
 - DO: "Create a timer" → create_component({ type: 'RetroTimerEnhanced', spec: {} })
+- DO: "Create dice widget" → create_component({ type: 'DiceWidget', spec: {} })
+- DO: "Roll the dice" → update_component({ componentId: DICE_ID, patch: { roll: true } })
+- DO: "Make the first die 20-sided" → update_component({ componentId: DICE_ID, patch: { dieOneSides: 20 } })
+- DO: "Create card widget" → create_component({ type: 'CardWidget', spec: {} })
+- DO: "Flip 3 hearts-only cards from ace through 10" → update_component({ componentId: CARD_ID, patch: { drawCount: 3, allowedSuits: ['hearts'], rankMin: 1, rankMax: 10, flip: true } })
 - DO: "Create participant tile" → create_component({ type: 'LivekitParticipantTile', spec: {} })
 - DO: "Add video tile" → create_component({ type: 'LivekitParticipantTile', spec: {} })
 - DO: "Create kanban board" → create_component({ type: 'LinearKanbanBoard', spec: {} })
@@ -236,6 +255,12 @@ Direct Patches for Simple Widgets (Timer, ResearchPanel):
 - "reset the timer" → update_component({ componentId: TIMER_ID, patch: { reset: true } })
 - "set timer to 7 minutes" → update_component({ componentId: TIMER_ID, patch: { configuredDuration: 420, timeLeft: 420 } })
 - "add 2 minutes" → update_component({ componentId: TIMER_ID, patch: { addSeconds: 120 } })
+- "roll the dice" → update_component({ componentId: DICE_ID, patch: { roll: true } })
+- "use one die" → update_component({ componentId: DICE_ID, patch: { diceCount: 1 } })
+- "make the second die 12-sided" → update_component({ componentId: DICE_ID, patch: { dieTwoSides: 12 } })
+- "flip 2 cards" → update_component({ componentId: CARD_ID, patch: { drawCount: 2, flip: true } })
+- "hearts and spades only" → update_component({ componentId: CARD_ID, patch: { allowedSuits: ['hearts', 'spades'] } })
+- "limit cards to ace through ten" → update_component({ componentId: CARD_ID, patch: { rankMin: 1, rankMax: 10 } })
 - "go live on research" → update_component({ componentId: RESEARCH_ID, patch: { isLive: true } })
 - "search for climate change" → update_component({ componentId: RESEARCH_ID, patch: { currentTopic: "climate change" } })
 
