@@ -63,6 +63,16 @@ type ImageResponse = {
 
 type GenerateRequest = z.infer<typeof requestSchema>;
 
+const readRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+
+const readString = (value: unknown): string | null => (typeof value === 'string' ? value : null);
+
+const readProviderErrorMessage = (payload: Record<string, unknown> | null, fallback: string): string => {
+  const errorRecord = readRecord(payload?.error);
+  return readString(errorRecord?.message) ?? readString(payload?.detail) ?? readString(payload?.error) ?? fallback;
+};
+
 const providerEnvKey = (provider: 'google' | 'openai' | 'xai' | 'fal'): string | undefined => {
   switch (provider) {
     case 'google':
@@ -151,7 +161,7 @@ async function generateWithGoogle(apiKey: string, request: GenerateRequest, fina
       await new Promise((resolve) => setTimeout(resolve, 2 ** attempt * 1000));
       continue;
     }
-    throw new Error(payload?.error?.message || payload?.error || `google_image_error:${response.status}`);
+    throw new Error(readProviderErrorMessage(payload, `google_image_error:${response.status}`));
   }
 
   if (!payload || lastStatus !== 200) {
@@ -224,7 +234,7 @@ async function generateWithXai(apiKey: string, request: GenerateRequest, finalPr
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(payload?.error?.message || payload?.error || `xai_image_error:${response.status}`);
+    throw new Error(readProviderErrorMessage(payload, `xai_image_error:${response.status}`));
   }
   const b64 =
     typeof payload?.data?.[0]?.b64_json === 'string' && payload.data[0].b64_json.length
@@ -264,7 +274,7 @@ async function generateWithFal(apiKey: string, request: GenerateRequest, finalPr
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(payload?.detail || payload?.error || `fal_image_error:${response.status}`);
+    throw new Error(readProviderErrorMessage(payload, `fal_image_error:${response.status}`));
   }
   const url = payload?.images?.[0]?.url;
   if (typeof url !== 'string' || !url.length) {
