@@ -85,6 +85,14 @@ function FacetedDieToken({
 }) {
   const polygon = createPolygonPoints(polygonEdgesForSides(sides), compact ? 42 : 45);
   const innerPolygon = createPolygonPoints(polygonEdgesForSides(sides), compact ? 33 : 36);
+  const valueSizeClass =
+    value >= 100
+      ? compact
+        ? 'text-[1.15rem]'
+        : 'text-[1.45rem]'
+      : compact
+        ? 'text-[1.65rem]'
+        : 'text-[2.05rem]';
 
   return (
     <div className="relative flex h-full items-center justify-center">
@@ -98,13 +106,13 @@ function FacetedDieToken({
       >
         <defs>
           <linearGradient id={`present-die-${sides}-fill`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#fffdf7" />
-            <stop offset="52%" stopColor="#f6ead1" />
-            <stop offset="100%" stopColor="#d8bc7e" />
+            <stop offset="0%" stopColor="#fff9ea" />
+            <stop offset="56%" stopColor="#f4e5bf" />
+            <stop offset="100%" stopColor="#d9b66a" />
           </linearGradient>
           <linearGradient id={`present-die-${sides}-stroke`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#f7d46a" />
-            <stop offset="100%" stopColor="#6b3d14" />
+            <stop offset="0%" stopColor="#f0c85d" />
+            <stop offset="100%" stopColor="#7c4a12" />
           </linearGradient>
         </defs>
         <polygon
@@ -117,29 +125,36 @@ function FacetedDieToken({
         <polygon
           points={innerPolygon}
           fill="none"
-          stroke="rgba(120,53,15,0.22)"
-          strokeWidth="1.5"
+          stroke="rgba(120,53,15,0.08)"
+          strokeWidth="1"
           strokeLinejoin="round"
         />
-        <path d="M50 10 L66 34 L50 90 L34 34 Z" fill="rgba(255,255,255,0.14)" />
+        <path d="M50 10 L66 34 L50 90 L34 34 Z" fill="rgba(255,255,255,0.06)" />
         <path
           d="M10 50 L34 34 L66 34 L90 50"
           fill="none"
-          stroke="rgba(69,26,3,0.18)"
-          strokeWidth="1.5"
+          stroke="rgba(69,26,3,0.08)"
+          strokeWidth="1"
         />
-        <path d="M10 50 L50 90 L90 50" fill="none" stroke="rgba(69,26,3,0.18)" strokeWidth="1.5" />
+        <path d="M10 50 L50 90 L90 50" fill="none" stroke="rgba(69,26,3,0.08)" strokeWidth="1" />
       </svg>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
         <div
+          className="absolute inset-x-[26%] top-[24%] h-[36%] rounded-full"
+          style={{
+            background:
+              'radial-gradient(circle, rgba(255,250,235,0.84) 0%, rgba(255,250,235,0.56) 52%, rgba(255,250,235,0) 100%)',
+          }}
+        />
+        <div
           className={cn(
-            'font-mono font-black leading-none text-slate-950 [text-shadow:0_1px_0_rgba(255,255,255,0.82)]',
-            compact ? 'text-[1.55rem]' : 'text-[2rem]',
+            'font-mono font-black leading-none text-black [text-shadow:0_1px_0_rgba(255,255,255,0.82)]',
+            valueSizeClass,
           )}
         >
           {value}
         </div>
-        <div className="mt-1 rounded-full border border-slate-900/12 bg-slate-950 px-2 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.18em] text-amber-50 shadow-sm">
+        <div className="mt-1 rounded-full bg-slate-950/88 px-2 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.18em] text-amber-50 shadow-sm">
           d{sides}
         </div>
       </div>
