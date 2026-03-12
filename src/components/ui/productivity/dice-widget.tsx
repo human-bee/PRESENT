@@ -53,6 +53,100 @@ const valueToPips: Record<number, number[][]> = {
   6: [[0, 2, 3, 5, 6, 8]],
 };
 
+function createPolygonPoints(edges: number, radius = 46, rotationDeg = -90) {
+  const points: string[] = [];
+  const center = 50;
+  const rotation = (rotationDeg * Math.PI) / 180;
+  for (let index = 0; index < edges; index += 1) {
+    const angle = rotation + (Math.PI * 2 * index) / edges;
+    const x = center + Math.cos(angle) * radius;
+    const y = center + Math.sin(angle) * radius;
+    points.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+  }
+  return points.join(' ');
+}
+
+function polygonEdgesForSides(sides: number) {
+  if (sides <= 8) return 8;
+  if (sides <= 10) return 10;
+  if (sides <= 12) return 12;
+  if (sides <= 20) return 14;
+  return 16;
+}
+
+function FacetedDieToken({
+  value,
+  sides,
+  compact,
+}: {
+  value: number;
+  sides: number;
+  compact: boolean;
+}) {
+  const polygon = createPolygonPoints(polygonEdgesForSides(sides), compact ? 42 : 45);
+  const innerPolygon = createPolygonPoints(polygonEdgesForSides(sides), compact ? 33 : 36);
+
+  return (
+    <div className="relative flex h-full items-center justify-center">
+      <svg
+        viewBox="0 0 100 100"
+        className={cn(
+          'drop-shadow-[0_16px_22px_rgba(2,6,23,0.2)]',
+          compact ? 'h-20 w-20' : 'h-24 w-24',
+        )}
+        aria-hidden="true"
+      >
+        <defs>
+          <linearGradient id={`present-die-${sides}-fill`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#fffdf7" />
+            <stop offset="52%" stopColor="#f6ead1" />
+            <stop offset="100%" stopColor="#d8bc7e" />
+          </linearGradient>
+          <linearGradient id={`present-die-${sides}-stroke`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#f7d46a" />
+            <stop offset="100%" stopColor="#6b3d14" />
+          </linearGradient>
+        </defs>
+        <polygon
+          points={polygon}
+          fill={`url(#present-die-${sides}-fill)`}
+          stroke={`url(#present-die-${sides}-stroke)`}
+          strokeWidth="3"
+          strokeLinejoin="round"
+        />
+        <polygon
+          points={innerPolygon}
+          fill="none"
+          stroke="rgba(120,53,15,0.22)"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+        <path d="M50 10 L66 34 L50 90 L34 34 Z" fill="rgba(255,255,255,0.14)" />
+        <path
+          d="M10 50 L34 34 L66 34 L90 50"
+          fill="none"
+          stroke="rgba(69,26,3,0.18)"
+          strokeWidth="1.5"
+        />
+        <path d="M10 50 L50 90 L90 50" fill="none" stroke="rgba(69,26,3,0.18)" strokeWidth="1.5" />
+      </svg>
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <div
+          className={cn(
+            'font-mono font-black leading-none text-slate-950 [text-shadow:0_1px_0_rgba(255,255,255,0.82)]',
+            compact ? 'text-[1.55rem]' : 'text-[2rem]',
+          )}
+        >
+          {value}
+        </div>
+        <div className="mt-1 rounded-full border border-slate-900/12 bg-slate-950 px-2 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.18em] text-amber-50 shadow-sm">
+          d{sides}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function createInitialRuntime(props: DiceWidgetProps): DiceRuntimeState {
   return parseDiceRuntimeState({
     diceCount: props.diceCount,
@@ -67,96 +161,78 @@ function DiceFace({
   value,
   sides,
   isRolling,
-  accent,
   compact = false,
 }: {
   value: number;
   sides: number;
   isRolling: boolean;
-  accent: string;
   compact?: boolean;
 }) {
   const pipLayout = sides <= 6 ? (valueToPips[Math.min(6, Math.max(1, value))] ?? [[4]]) : null;
   const usePips = sides <= 6 && pipLayout;
 
   return (
-    <div className="relative [perspective:1200px]">
+    <div className="relative mx-auto w-full max-w-[104px] [perspective:1200px]">
       <div
         className={cn(
-          'absolute left-[16%] right-[16%] top-[82%] h-4 rounded-full bg-black/20 blur-lg',
+          'absolute left-[18%] right-[18%] top-[84%] h-4 rounded-full bg-black/18 blur-lg',
           isRolling && 'animate-[present-dice-shadow_1250ms_cubic-bezier(.24,.8,.25,1)]',
         )}
       />
       <div
         className={cn(
-          'relative overflow-hidden rounded-[24px] border transition-transform duration-150',
-          compact ? 'h-24' : 'h-32',
+          'relative aspect-square overflow-hidden transition-transform duration-150',
           isRolling && 'animate-[present-dice-bounce_1250ms_cubic-bezier(.24,.8,.25,1)]',
         )}
-        style={{
-          background:
-            'linear-gradient(165deg, rgba(255,255,255,0.98), rgba(244,246,249,0.96) 46%, rgba(223,229,238,0.98) 100%)',
-          borderColor: 'rgba(148, 163, 184, 0.28)',
-          boxShadow:
-            '0 14px 26px rgba(2,6,23,0.2), inset 0 1px 0 rgba(255,255,255,0.75), inset 0 -10px 18px rgba(15,23,42,0.06)',
-        }}
       >
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              'linear-gradient(145deg, rgba(255,255,255,0.5), rgba(255,255,255,0.08) 28%, transparent 55%)',
-          }}
-        />
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-8"
-          style={{
-            background: 'linear-gradient(180deg, rgba(15,23,42,0), rgba(15,23,42,0.08))',
-          }}
-        />
-        <div
-          className="pointer-events-none absolute inset-0 rounded-[28px] ring-1 ring-inset"
-          style={{ boxShadow: `inset 0 0 0 1px ${accent}` }}
-        />
-        <div className="absolute left-4 top-4 text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
-          d{sides}
-        </div>
         {usePips ? (
           <div
-            className={cn(
-              'grid h-full grid-cols-3 grid-rows-3',
-              compact ? 'gap-2 p-4' : 'gap-3 p-5',
-            )}
+            className="relative aspect-square overflow-hidden rounded-[22px] border"
+            style={{
+              background:
+                'linear-gradient(165deg, rgba(255,255,255,0.99), rgba(244,246,249,0.97) 48%, rgba(223,229,238,0.98) 100%)',
+              borderColor: 'rgba(148, 163, 184, 0.28)',
+              boxShadow:
+                '0 14px 26px rgba(2,6,23,0.2), inset 0 1px 0 rgba(255,255,255,0.82), inset 0 -10px 18px rgba(15,23,42,0.06)',
+            }}
           >
-            {Array.from({ length: 9 }).map((_, index) => {
-              const active = pipLayout.some((row) => row.includes(index));
-              return (
-                <div
-                  key={index}
-                  className={cn(
-                    'rounded-full transition-all duration-150',
-                    active ? 'scale-100 opacity-100' : 'scale-50 opacity-0',
-                  )}
-                  style={{
-                    background: active
-                      ? 'radial-gradient(circle at 30% 30%, #020617, #0f172a 72%)'
-                      : 'transparent',
-                  }}
-                />
-              );
-            })}
-          </div>
-        ) : (
-          <div className="flex h-full items-center justify-center">
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  'linear-gradient(145deg, rgba(255,255,255,0.55), rgba(255,255,255,0.08) 28%, transparent 55%)',
+              }}
+            />
+            <div className="absolute left-3 top-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
+              d6
+            </div>
             <div
               className={cn(
-                'font-mono font-bold tracking-[0.16em] text-slate-950 [text-shadow:0_1px_0_rgba(255,255,255,0.65)]',
-                compact ? 'text-3xl' : 'text-5xl',
+                'grid h-full grid-cols-3 grid-rows-3',
+                compact ? 'gap-2 p-4' : 'gap-3 p-5',
               )}
             >
-              {String(value).padStart(2, '0')}
+              {Array.from({ length: 9 }).map((_, index) => {
+                const active = pipLayout.some((row) => row.includes(index));
+                return (
+                  <div
+                    key={index}
+                    className={cn(
+                      'rounded-full transition-all duration-150',
+                      active ? 'scale-100 opacity-100' : 'scale-50 opacity-0',
+                    )}
+                    style={{
+                      background: active
+                        ? 'radial-gradient(circle at 30% 30%, #020617, #0f172a 72%)'
+                        : 'transparent',
+                    }}
+                  />
+                );
+              })}
             </div>
           </div>
+        ) : (
+          <FacetedDieToken value={value} sides={sides} compact={compact} />
         )}
       </div>
     </div>
@@ -181,17 +257,17 @@ function DiceTray({
   compact: boolean;
 }) {
   return (
-    <div className="rounded-[24px] border border-white/10 bg-black/15 p-3 text-white">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="rounded-[22px] border border-white/10 bg-black/15 p-2.5 text-white">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <div>
           <div className="text-[10px] uppercase tracking-[0.3em] text-emerald-100/70">{title}</div>
-          <div className="mt-1 text-sm text-emerald-50/90">{subtitle}</div>
+          <div className="mt-1 text-xs text-emerald-50/90">{subtitle}</div>
         </div>
-        <div className="rounded-full border border-white/10 bg-emerald-300/10 px-3 py-1 text-xs font-medium">
+        <div className="rounded-full border border-white/10 bg-emerald-300/10 px-2.5 py-1 text-[11px] font-medium">
           Total {total}
         </div>
       </div>
-      <div className={cn('grid gap-3', values.length <= 2 ? 'grid-cols-2' : 'grid-cols-3')}>
+      <div className={cn('grid gap-2.5', values.length <= 2 ? 'grid-cols-2' : 'grid-cols-3')}>
         {values.map((value, index) => (
           <DiceFace
             key={`${title}-${index}-${diceSides[index]}`}
@@ -199,7 +275,6 @@ function DiceTray({
             sides={diceSides[index] ?? 6}
             isRolling={isRolling}
             compact={compact}
-            accent="rgba(245, 158, 11, 0.16)"
           />
         ))}
       </div>
@@ -369,6 +444,10 @@ export function DiceWidget(props: DiceWidgetProps) {
           ? 'Side A leads'
           : 'Side B leads'
       : `${runtime.total} total`;
+  const summaryText =
+    runtime.layoutMode === 'versus'
+      ? `${groups[0]?.total ?? 0} against ${groups[1]?.total ?? 0}`
+      : runtime.values.map((value, index) => `D${index + 1}: ${value}`).join(' · ');
 
   return (
     <WidgetFrame
@@ -390,10 +469,10 @@ export function DiceWidget(props: DiceWidgetProps) {
         </Button>
       }
       className={cn('overflow-hidden border-0 shadow-[0_30px_70px_rgba(2,6,23,0.35)]', className)}
-      bodyClassName="space-y-4"
+      bodyClassName="space-y-3"
     >
       <div
-        className="rounded-[28px] border px-4 py-4"
+        className="rounded-[28px] border px-3 py-3"
         style={{
           background:
             'radial-gradient(circle at 22% 18%, rgba(250,204,21,0.18), transparent 34%), linear-gradient(155deg, #0e4f3b, #063b31 52%, #021915 100%)',
@@ -401,109 +480,123 @@ export function DiceWidget(props: DiceWidgetProps) {
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -22px 40px rgba(0,0,0,0.24)',
         }}
       >
-        <div className="grid gap-3 xl:grid-cols-[260px_1fr]">
-          <div className="rounded-2xl border border-white/10 bg-black/15 p-3 text-white">
-            <div className="text-[11px] uppercase tracking-[0.28em] text-emerald-100/70">
-              Table Rules
-            </div>
-            <div className="mt-2 text-sm text-emerald-50/85">
-              {runtime.layoutMode === 'versus'
-                ? `${groups[0]?.values.length ?? 0} vs ${groups[1]?.values.length ?? 0}`
-                : `${runtime.diceCount} dice in play`}
-            </div>
-
-            <div className="mt-4">
-              <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/60">Count</div>
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {[1, 2, 3, 4, 5, 6].map((count) => {
-                  const active = runtime.diceCount === count;
-                  return (
-                    <button
-                      key={count}
-                      type="button"
-                      onClick={() => updateDieCount(count)}
-                      className={cn(
-                        'rounded-2xl border px-3 py-3 text-sm font-medium transition',
-                        active
-                          ? 'border-amber-300/70 bg-amber-200/15 text-amber-50'
-                          : 'border-white/10 bg-white/5 text-emerald-50/85 hover:border-white/30',
-                      )}
-                    >
-                      {count}
-                    </button>
-                  );
-                })}
+        <div className="grid gap-3 xl:grid-cols-[232px_minmax(0,1fr)]">
+          <div className="rounded-2xl border border-white/10 bg-black/15 p-2.5 text-white">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.28em] text-emerald-100/70">
+                  Table Rules
+                </div>
+                <div className="mt-1 text-sm text-emerald-50/85">
+                  {runtime.layoutMode === 'versus'
+                    ? `${groups[0]?.values.length ?? 0} vs ${groups[1]?.values.length ?? 0}`
+                    : `${runtime.diceCount} dice in play`}
+                </div>
+              </div>
+              <div className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-emerald-50/85">
+                {runtime.total} total
               </div>
             </div>
 
-            <div className="mt-4">
-              <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/60">Layout</div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.24em] text-emerald-100/60">
+                  Count
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                  {[1, 2, 3, 4, 5, 6].map((count) => {
+                    const active = runtime.diceCount === count;
+                    return (
+                      <button
+                        key={count}
+                        type="button"
+                        onClick={() => updateDieCount(count)}
+                        className={cn(
+                          'rounded-xl border px-2 py-2 text-sm font-medium transition',
+                          active
+                            ? 'border-amber-300/70 bg-amber-200/15 text-amber-50'
+                            : 'border-white/10 bg-white/5 text-emerald-50/85 hover:border-white/30',
+                        )}
+                      >
+                        {count}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.24em] text-emerald-100/60">
+                  Layout
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-1.5">
+                  {(
+                    [
+                      ['spread', 'Spread'],
+                      ['versus', 'Versus'],
+                    ] as const
+                  ).map(([mode, label]) => {
+                    const active = runtime.layoutMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => toggleLayout(mode)}
+                        className={cn(
+                          'rounded-xl border px-3 py-2 text-sm transition',
+                          active
+                            ? 'border-sky-300/70 bg-sky-200/15 text-sky-50'
+                            : 'border-white/10 bg-white/5 text-emerald-50/85 hover:border-white/30',
+                        )}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <div className="text-[11px] uppercase tracking-[0.24em] text-emerald-100/60">
+                Dice Mix
+              </div>
               <div className="mt-2 grid grid-cols-2 gap-2">
-                {(
-                  [
-                    ['spread', 'Spread'],
-                    ['versus', 'Versus'],
-                  ] as const
-                ).map(([mode, label]) => {
-                  const active = runtime.layoutMode === mode;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => toggleLayout(mode)}
-                      className={cn(
-                        'rounded-2xl border px-3 py-2 text-sm transition',
-                        active
-                          ? 'border-sky-300/70 bg-sky-200/15 text-sky-50'
-                          : 'border-white/10 bg-white/5 text-emerald-50/85 hover:border-white/30',
-                      )}
+                {runtime.diceSides.map((sides, index) => (
+                  <label key={index} className="block text-[11px] text-emerald-100/70">
+                    Die {index + 1}
+                    <select
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-2.5 py-2 text-sm text-white outline-none"
+                      value={sides}
+                      onChange={(event) => updateSides(index, Number(event.target.value))}
                     >
-                      {label}
-                    </button>
-                  );
-                })}
+                      {SIDE_PRESETS.map((preset) => (
+                        <option key={preset} value={preset}>
+                          d{preset}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
               </div>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {runtime.diceSides.map((sides, index) => (
-                <label key={index} className="block text-xs text-emerald-100/70">
-                  Die {index + 1}
-                  <select
-                    className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
-                    value={sides}
-                    onChange={(event) => updateSides(index, Number(event.target.value))}
-                  >
-                    {SIDE_PRESETS.map((preset) => (
-                      <option key={preset} value={preset}>
-                        d{preset}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ))}
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-white">
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between gap-3 text-white">
               <div>
                 <div className="text-[11px] uppercase tracking-[0.28em] text-emerald-100/70">
                   Roll Window
                 </div>
-                <div className="mt-1 text-sm text-emerald-50">
-                  {runtime.layoutMode === 'versus'
-                    ? `${groups[0]?.total ?? 0} against ${groups[1]?.total ?? 0}`
-                    : runtime.values.map((value, index) => `D${index + 1}: ${value}`).join(' · ')}
-                </div>
+                <div className="mt-1 text-sm text-emerald-50">{summaryText}</div>
               </div>
-              <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1 text-xs">
-                Grand total {runtime.total}
+              <div className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-[11px]">
+                {versusLead}
               </div>
             </div>
 
             <div
-              className={cn('grid gap-3', groups.length === 1 ? 'grid-cols-1' : 'xl:grid-cols-2')}
+              className={cn('grid gap-2.5', groups.length === 1 ? 'grid-cols-1' : 'xl:grid-cols-2')}
             >
               {groups.map((group) => (
                 <DiceTray

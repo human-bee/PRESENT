@@ -356,21 +356,21 @@ export function CardWidget(props: CardWidgetProps) {
     }
 
     const splitIndex = Math.ceil(runtime.drawCount / 2);
+    const sideBCount = runtime.drawCount - splitIndex;
     return [
       {
         title: 'Side A',
         subtitle: `${splitIndex} card${splitIndex === 1 ? '' : 's'}`,
+        expectedCount: splitIndex,
         cards: runtime.cards.slice(0, splitIndex),
       },
       {
         title: 'Side B',
-        subtitle: `${runtime.drawCount - splitIndex} card${runtime.drawCount - splitIndex === 1 ? '' : 's'}`,
+        subtitle: `${sideBCount} card${sideBCount === 1 ? '' : 's'}`,
+        expectedCount: sideBCount,
         cards: runtime.cards.slice(splitIndex),
       },
-    ].filter(
-      (group) =>
-        group.cards.length > 0 || group.subtitle.startsWith('3') || group.subtitle.startsWith('2'),
-    );
+    ].filter((group) => group.expectedCount > 0 || group.cards.length > 0);
   }, [runtime]);
 
   const compactCards = runtime.drawCount >= 5;
@@ -397,10 +397,10 @@ export function CardWidget(props: CardWidgetProps) {
         </Button>
       }
       className={cn('overflow-hidden border-0 shadow-[0_30px_70px_rgba(15,23,42,0.28)]', className)}
-      bodyClassName="space-y-4"
+      bodyClassName="space-y-3"
     >
       <div
-        className="rounded-[28px] border px-4 py-4"
+        className="rounded-[28px] border px-3 py-3"
         style={{
           background:
             'radial-gradient(circle at 18% 20%, rgba(250,204,21,0.16), transparent 36%), linear-gradient(155deg, #1b4332, #10261f 55%, #07120d 100%)',
@@ -408,59 +408,71 @@ export function CardWidget(props: CardWidgetProps) {
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -18px 36px rgba(0,0,0,0.22)',
         }}
       >
-        <div className="grid gap-3 xl:grid-cols-[260px_1fr]">
-          <div className="rounded-2xl border border-white/10 bg-black/15 p-3 text-white">
-            <div className="text-[11px] uppercase tracking-[0.28em] text-emerald-100/70">
-              Deal Setup
-            </div>
-
-            <label className="mt-3 block text-xs text-emerald-100/70">
-              Cards to flip
-              <input
-                type="range"
-                min={1}
-                max={MAX_CARD_DRAW_COUNT}
-                value={runtime.drawCount}
-                onChange={(event) => pushRuntimePatch({ drawCount: Number(event.target.value) })}
-                className="mt-2 w-full"
-              />
-              <span className="mt-1 block text-sm text-white">{runtime.drawCount}</span>
-            </label>
-
-            <div className="mt-4">
-              <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/60">Layout</div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {(
-                  [
-                    ['fan', 'Fan'],
-                    ['versus', 'Versus'],
-                  ] as const
-                ).map(([mode, label]) => {
-                  const active = runtime.layoutMode === mode;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => pushRuntimePatch({ layoutMode: mode })}
-                      className={cn(
-                        'rounded-2xl border px-3 py-2 text-sm transition',
-                        active
-                          ? 'border-sky-300/70 bg-sky-200/15 text-sky-50'
-                          : 'border-white/10 bg-white/5 text-emerald-50/85 hover:border-white/30',
-                      )}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
+        <div className="grid gap-3 xl:grid-cols-[240px_minmax(0,1fr)]">
+          <div className="rounded-2xl border border-white/10 bg-black/15 p-2.5 text-white">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.28em] text-emerald-100/70">
+                  Deal Setup
+                </div>
+                <div className="mt-1 text-sm text-emerald-50/85">{versusSummary}</div>
+              </div>
+              <div className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-emerald-50/85">
+                {runtime.cards.length} shown
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <label className="text-xs text-emerald-100/70">
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+              <label className="block text-[11px] text-emerald-100/70">
+                Cards to flip
+                <input
+                  type="range"
+                  min={1}
+                  max={MAX_CARD_DRAW_COUNT}
+                  value={runtime.drawCount}
+                  onChange={(event) => pushRuntimePatch({ drawCount: Number(event.target.value) })}
+                  className="mt-2 w-full"
+                />
+                <span className="mt-1 block text-sm text-white">{runtime.drawCount}</span>
+              </label>
+
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.24em] text-emerald-100/60">
+                  Layout
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-1.5">
+                  {(
+                    [
+                      ['fan', 'Fan'],
+                      ['versus', 'Versus'],
+                    ] as const
+                  ).map(([mode, label]) => {
+                    const active = runtime.layoutMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => pushRuntimePatch({ layoutMode: mode })}
+                        className={cn(
+                          'rounded-xl border px-3 py-2 text-sm transition',
+                          active
+                            ? 'border-sky-300/70 bg-sky-200/15 text-sky-50'
+                            : 'border-white/10 bg-white/5 text-emerald-50/85 hover:border-white/30',
+                        )}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <label className="text-[11px] text-emerald-100/70">
                 Min rank
                 <select
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-2.5 py-2 text-sm text-white outline-none"
                   value={runtime.rankMin}
                   onChange={(event) => pushRuntimePatch({ rankMin: Number(event.target.value) })}
                 >
@@ -474,10 +486,10 @@ export function CardWidget(props: CardWidgetProps) {
                   })}
                 </select>
               </label>
-              <label className="text-xs text-emerald-100/70">
+              <label className="text-[11px] text-emerald-100/70">
                 Max rank
                 <select
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-2.5 py-2 text-sm text-white outline-none"
                   value={runtime.rankMax}
                   onChange={(event) => pushRuntimePatch({ rankMax: Number(event.target.value) })}
                 >
@@ -493,117 +505,121 @@ export function CardWidget(props: CardWidgetProps) {
               </label>
             </div>
 
-            <div className="mt-4">
-              <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/60">
-                Rank labels
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {(
-                  [
-                    ['classic', 'Classic'],
-                    ['numeric', 'Numeric'],
-                  ] as const
-                ).map(([mode, label]) => {
-                  const active = runtime.rankStyle === mode;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() =>
-                        pushRuntimePatch({
-                          rankStyle: mode,
-                          ...(mode === 'numeric' ? { rankMax: Math.min(runtime.rankMax, 10) } : {}),
-                        })
-                      }
-                      className={cn(
-                        'rounded-2xl border px-3 py-2 text-sm transition',
-                        active
-                          ? 'border-amber-300/70 bg-amber-200/15 text-amber-50'
-                          : 'border-white/10 bg-white/5 text-emerald-50/85 hover:border-white/30',
-                      )}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/60">
-                Suit mode
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {(
-                  [
-                    ['all', 'All'],
-                    ['custom', 'Custom'],
-                    ['none', 'None'],
-                  ] as const
-                ).map(([mode, label]) => {
-                  const active = runtime.suitMode === mode;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setSuitMode(mode)}
-                      className={cn(
-                        'rounded-2xl border px-3 py-2 text-sm transition',
-                        active
-                          ? 'border-emerald-300/70 bg-emerald-200/15 text-emerald-50'
-                          : 'border-white/10 bg-white/5 text-emerald-50/85 hover:border-white/30',
-                      )}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {runtime.suitMode !== 'none' ? (
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {CARD_SUITS.map((suit) => {
-                    const active =
-                      runtime.suitMode === 'all' ? true : runtime.allowedSuits.includes(suit);
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.24em] text-emerald-100/60">
+                  Rank labels
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-1.5">
+                  {(
+                    [
+                      ['classic', 'Classic'],
+                      ['numeric', 'Numeric'],
+                    ] as const
+                  ).map(([mode, label]) => {
+                    const active = runtime.rankStyle === mode;
                     return (
                       <button
-                        key={suit}
+                        key={mode}
                         type="button"
-                        onClick={() => updateSuit(suit)}
+                        onClick={() =>
+                          pushRuntimePatch({
+                            rankStyle: mode,
+                            ...(mode === 'numeric'
+                              ? { rankMax: Math.min(runtime.rankMax, 10) }
+                              : {}),
+                          })
+                        }
                         className={cn(
-                          'rounded-2xl border px-3 py-2 text-left text-sm transition',
+                          'rounded-xl border px-3 py-2 text-sm transition',
                           active
                             ? 'border-amber-300/70 bg-amber-200/15 text-amber-50'
                             : 'border-white/10 bg-white/5 text-emerald-50/85 hover:border-white/30',
                         )}
                       >
-                        <div className="text-lg">{suitSymbol(suit)}</div>
-                        <div className="mt-1 text-xs uppercase tracking-[0.2em]">
-                          {SUIT_LABELS[suit]}
-                        </div>
+                        {label}
                       </button>
                     );
                   })}
                 </div>
-              ) : null}
+              </div>
+
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.24em] text-emerald-100/60">
+                  Suit mode
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                  {(
+                    [
+                      ['all', 'All'],
+                      ['custom', 'Custom'],
+                      ['none', 'None'],
+                    ] as const
+                  ).map(([mode, label]) => {
+                    const active = runtime.suitMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setSuitMode(mode)}
+                        className={cn(
+                          'rounded-xl border px-3 py-2 text-sm transition',
+                          active
+                            ? 'border-emerald-300/70 bg-emerald-200/15 text-emerald-50'
+                            : 'border-white/10 bg-white/5 text-emerald-50/85 hover:border-white/30',
+                        )}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
+
+            {runtime.suitMode !== 'none' ? (
+              <div className="mt-3 grid grid-cols-2 gap-1.5">
+                {CARD_SUITS.map((suit) => {
+                  const active =
+                    runtime.suitMode === 'all' ? true : runtime.allowedSuits.includes(suit);
+                  return (
+                    <button
+                      key={suit}
+                      type="button"
+                      onClick={() => updateSuit(suit)}
+                      className={cn(
+                        'rounded-xl border px-2.5 py-2 text-left text-sm transition',
+                        active
+                          ? 'border-amber-300/70 bg-amber-200/15 text-amber-50'
+                          : 'border-white/10 bg-white/5 text-emerald-50/85 hover:border-white/30',
+                      )}
+                    >
+                      <div className="text-lg">{suitSymbol(suit)}</div>
+                      <div className="mt-1 text-[11px] uppercase tracking-[0.16em]">
+                        {SUIT_LABELS[suit]}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
 
-          <div className="space-y-3">
-            <div className="mb-1 flex items-center justify-between text-white">
+          <div className="space-y-2.5">
+            <div className="mb-1 flex items-center justify-between gap-3 text-white">
               <div>
                 <div className="text-[11px] uppercase tracking-[0.28em] text-emerald-100/70">
                   Reveal
                 </div>
                 <div className="mt-1 text-sm text-emerald-50">{versusSummary}</div>
               </div>
-              <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1 text-xs">
+              <div className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-[11px]">
                 {runtime.cards.length} shown
               </div>
             </div>
 
             <div
-              className={cn('grid gap-3', groups.length === 1 ? 'grid-cols-1' : 'xl:grid-cols-2')}
+              className={cn('grid gap-2.5', groups.length === 1 ? 'grid-cols-1' : 'xl:grid-cols-2')}
             >
               {groups.map((group) => (
                 <CardGroup
