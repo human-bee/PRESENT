@@ -423,12 +423,12 @@ export function ResetWorkspaceShell({
       window.removeEventListener('pagehide', cleanup);
       cleanup();
     };
-  }, [deferredTraceQuery, localIdentity, refreshWorkspaceState, roomTelemetry, syncPresence, workspace.id]);
+  }, [deferredTraceQuery, localIdentity, refreshWorkspaceState, syncPresence, workspace.id]);
 
   useEffect(() => {
     if (!localIdentity) return;
     void syncPresence(document.hidden ? 'idle' : 'connected');
-  }, [activeDocument?.path, localIdentity, syncPresence]);
+  }, [activeDocument?.path, localIdentity, roomTelemetry, syncPresence]);
 
   useEffect(() => {
     const currentTaskId = activeTaskId ?? tasks[0]?.id ?? null;
@@ -879,6 +879,7 @@ export function ResetWorkspaceShell({
                     key={activeEditorKey}
                     workspaceSessionId={workspace.id}
                     filePath={activeDocument.path}
+                    sourceUpdatedAt={activeDocument.updatedAt}
                     initialValue={codeDraft}
                     language={activeDocument.language}
                     identity={localIdentity || 'mission-control'}

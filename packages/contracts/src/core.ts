@@ -151,6 +151,8 @@ export const modelProfileSchema = z.object({
   latencyClass: z.enum(['instant', 'interactive', 'deep']),
   supports: z.array(z.string().min(1)).default([]),
   metadata: jsonObjectSchema.default({}),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
 });
 
 export const runtimeManifestSchema = z.object({
