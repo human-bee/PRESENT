@@ -1698,6 +1698,20 @@ Your only output is function calls. Never use plain text unless absolutely neces
       });
     };
 
+    const listRemoteParticipantIds = (): string[] => {
+      const ids: string[] = [];
+      try {
+        job.room.remoteParticipants.forEach((participant: any) => {
+          const candidate = String(participant?.identity || '').trim();
+          if (!candidate) return;
+          ids.push(candidate);
+        });
+      } catch {
+        /* noop */
+      }
+      return Array.from(new Set(ids));
+    };
+
     const sendScorecardSeedTask = async (payload: {
       componentId: string;
       intentId?: string;
@@ -4962,6 +4976,38 @@ Your only output is function calls. Never use plain text unless absolutely neces
               serverGenerated: true,
             });
             if (!dedupe.drop) {
+              const remoteParticipantIds = listRemoteParticipantIds();
+              const resolvedTurnMode = (() => {
+                const directResolution = resolveVoiceTurnModeForParticipant(voiceTurnModesByParticipant, {
+                  participantId:
+                    remoteParticipantIds.length === 1
+                      ? remoteParticipantIds[0]
+                      : lastRequesterParticipantId,
+                  fallbackParticipantIds: remoteParticipantIds,
+                });
+                if (
+                  directResolution !== 'auto' ||
+                  remoteParticipantIds.length < 2 ||
+                  (lastRequesterParticipantId && lastRequesterParticipantId.trim().length > 0)
+                ) {
+                  return directResolution;
+                }
+                const remoteModes = Array.from(
+                  new Set(remoteParticipantIds.map((id) => voiceTurnModesByParticipant.get(id) ?? 'auto')),
+                );
+                return remoteModes.length === 1 ? remoteModes[0] : 'auto';
+              })();
+              if (shouldSuppressAutomaticTurn(resolvedTurnMode, false)) {
+                console.log('[VoiceAgent] suppressed server transcript automatic turn for manual-mode participant', {
+                  participantId:
+                    allowSensitiveLogging &&
+                    (remoteParticipantIds.length === 1 ? remoteParticipantIds[0] : lastRequesterParticipantId)
+                      ? (remoteParticipantIds.length === 1 ? remoteParticipantIds[0] : lastRequesterParticipantId)
+                      : '[redacted]',
+                  resolvedTurnMode,
+                });
+                return;
+              }
               lastUserPrompt = trimmed;
               try {
                 await generateReplySafely();

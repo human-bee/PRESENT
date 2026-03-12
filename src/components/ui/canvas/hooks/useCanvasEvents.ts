@@ -97,7 +97,14 @@ export function useCanvasEvents({
             lastPayloadSignatureRef.current.set(messageId, signature);
           }
         }
-        let inferredName: string | undefined = 'Rendered Component';
+        const payloadType =
+          !React.isValidElement(node) &&
+          event.detail.component &&
+          typeof event.detail.component === 'object' &&
+          typeof (event.detail.component as { type?: unknown }).type === 'string'
+            ? (event.detail.component as { type: string }).type
+            : undefined;
+        let inferredName: string | undefined = payloadType || 'Rendered Component';
         if (!editor) {
           if (!React.isValidElement(node)) {
             const maybe = event.detail.component as {
