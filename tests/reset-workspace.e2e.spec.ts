@@ -10,6 +10,7 @@ test.describe('reset workspace shell', () => {
     await expect(page.locator('body')).toContainText('Executors + Presence');
     await expect(page.locator('body')).toContainText('Recent Sessions');
     await expect(page.locator('body')).toContainText('OpenClaw + MCP Pack');
+    await expect(page.locator('body')).toContainText('Collaborative Monaco + Yjs session');
     await expect(page.locator('body')).toContainText('Reset Board');
     await expect(page.locator('body')).toContainText('Server-owned TLDraw collaboration');
   });

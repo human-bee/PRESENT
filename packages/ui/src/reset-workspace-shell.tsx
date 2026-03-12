@@ -17,6 +17,7 @@ import type {
 } from '@present/contracts';
 import { ArtifactPreviewFrame } from './artifact-preview-frame';
 import { ResetCollaborationSurface } from './reset-collaboration-surface';
+import { ResetMonacoEditor } from './reset-monaco-editor';
 
 const initialDraft = `// Codex-native workspace draft
 // This shell is backed by reset-era kernel contracts.
@@ -200,6 +201,10 @@ export function ResetWorkspaceShell({
   );
   const activeFileBreadcrumbs = useMemo(
     () => activeDocument?.path.split('/').filter(Boolean) ?? [],
+    [activeDocument],
+  );
+  const activeEditorKey = useMemo(
+    () => (activeDocument ? `${activeDocument.path}:${activeDocument.updatedAt}` : 'no-file'),
     [activeDocument],
   );
   const formatCommand = (command: AgentInteropPack['commands'][keyof AgentInteropPack['commands']]) =>
@@ -826,7 +831,7 @@ export function ResetWorkspaceShell({
                     <p>Browse the workspace tree and load a real file into the editor.</p>
                   )}
                   <p>
-                    Editing the real workspace file directly from mission control as {localPresenceLabel}.
+                    Collaborative Monaco + Yjs session for {localPresenceLabel}. Save writes the real file; patch artifacts keep reviewable diffs in the kernel.
                   </p>
                 </div>
                 <div className="reset-inline-actions">
@@ -846,12 +851,20 @@ export function ResetWorkspaceShell({
                   </button>
                 </div>
               </div>
-              <textarea
-                className="reset-code-editor"
-                value={codeDraft}
-                onChange={(event) => setCodeDraft(event.target.value)}
-                spellCheck={false}
-              />
+              {activeDocument ? (
+                <ResetMonacoEditor
+                  key={activeEditorKey}
+                  workspaceSessionId={workspace.id}
+                  filePath={activeDocument.path}
+                  initialValue={codeDraft}
+                  language={activeDocument.language}
+                  identity={localIdentity || 'mission-control'}
+                  displayName={localPresenceLabel}
+                  onValueChange={setCodeDraft}
+                />
+              ) : (
+                <div className="reset-empty">Select a file to start the collaborative editor.</div>
+              )}
             </div>
           </div>
         </article>
