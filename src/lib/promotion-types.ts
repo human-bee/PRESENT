@@ -9,6 +9,7 @@ export interface PromotableItem {
     width?: number; // Optional dimensions
     height?: number;
     title?: string; // For bookmarks/embeds
+    mimeType?: string; // Optional media type for image assets
     x?: number; // Optional canvas placement
     y?: number;
     sourceComponentId?: string; // Widget/component that originated this promotable item

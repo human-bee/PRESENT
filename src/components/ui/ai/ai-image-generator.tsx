@@ -227,6 +227,7 @@ export type AIImageGeneratorProps = z.infer<typeof aiImageGeneratorSchema> & {
 
 type ImageResponse = {
   b64_json: string;
+  mimeType?: string;
   timings?: { inference?: number };
   providerUsed?: string | null;
   fallbackReason?: string | null;
@@ -247,6 +248,7 @@ type GeneratedImage = {
   quality: ImageQualityPreset;
   b64: string;
   url: string;
+  mimeType: string;
   width: number;
   height: number;
   generatedAt: number;
@@ -261,6 +263,7 @@ type GeneratedImageSummary = {
   style?: (typeof imageStyles)[number]['value'];
   modelId: ImageModelId;
   modelLabel: string;
+  mimeType: string;
   width: number;
   height: number;
   generatedAt: number;
@@ -286,8 +289,21 @@ async function measureImage(dataUrl: string): Promise<{ width: number; height: n
   });
 }
 
-function buildDataUrl(b64: string) {
-  return `data:image/png;base64,${b64}`;
+function buildDataUrl(b64: string, mimeType = 'image/png') {
+  return `data:${mimeType};base64,${b64}`;
+}
+
+function mimeTypeToExtension(mimeType: string) {
+  switch (mimeType) {
+    case 'image/jpeg':
+      return 'jpg';
+    case 'image/webp':
+      return 'webp';
+    case 'image/gif':
+      return 'gif';
+    default:
+      return 'png';
+  }
 }
 
 function normalizePromptAppend(current: string, append: string) {
@@ -496,35 +512,9 @@ export function AIImageGenerator({
     }
   }, [selectedModel, selectedModelDefinition.supportsGrounding, selectedModelDefinition.supportsSeed]);
 
-  const getDropPlacement = useCallback(() => {
-    if (typeof window === 'undefined') return null;
-    const editor = (window as typeof window & { __present?: { tldrawEditor?: unknown } }).__present
-      ?.tldrawEditor as
-      | {
-          getCurrentPageShapes?: () => Array<{ id: string; type?: string; props?: Record<string, unknown> }>;
-          getShapePageBounds?: (shapeId: string) => { x: number; y: number; w: number; h: number } | null;
-        }
-      | undefined;
-    const widgetShape = editor
-      ?.getCurrentPageShapes?.()
-      ?.find(
-        (shape) =>
-          shape?.type === 'custom' &&
-          String(shape?.props?.customComponent || '') === messageId,
-      );
-    const bounds = widgetShape ? editor?.getShapePageBounds?.(widgetShape.id) : null;
-    if (!bounds) return null;
-
-    return {
-      x: bounds.x + bounds.w + 48,
-      y: bounds.y,
-    };
-  }, [messageId]);
-
   const promoteImage = useCallback((image: GeneratedImage | null, { force = false } = {}) => {
     if (!image || typeof window === 'undefined') return false;
     if (!force && promotedIdsRef.current.has(image.id)) return false;
-    const placement = getDropPlacement();
 
     window.dispatchEvent(
       new CustomEvent('tldraw:promote_content', {
@@ -538,8 +528,7 @@ export function AIImageGenerator({
             height: image.height,
             title: image.prompt || 'Generated image',
             sourceComponentId: messageId,
-            x: placement?.x,
-            y: placement?.y,
+            mimeType: image.mimeType,
           },
         },
       }),
@@ -547,7 +536,7 @@ export function AIImageGenerator({
 
     promotedIdsRef.current.add(image.id);
     return true;
-  }, [getDropPlacement, messageId]);
+  }, [messageId]);
 
   const syncSpeechCapture = useCallback(
     async (nextValue: boolean) => {
@@ -633,7 +622,8 @@ export function AIImageGenerator({
         }
 
         const data = payload as ImageResponse;
-        const url = buildDataUrl(data.b64_json);
+        const mimeType = typeof data.mimeType === 'string' ? data.mimeType : 'image/png';
+        const url = buildDataUrl(data.b64_json, mimeType);
         const dimensions = await measureImage(url);
 
         if (requestId !== requestSequenceRef.current) {
@@ -651,6 +641,7 @@ export function AIImageGenerator({
           quality: nextQuality,
           b64: data.b64_json,
           url,
+          mimeType,
           width: data.width ?? dimensions.width,
           height: data.height ?? dimensions.height,
           generatedAt: Date.now(),
@@ -972,6 +963,7 @@ export function AIImageGenerator({
               label: currentImage.prompt || 'Generated image',
               data: {
                 url: currentImage.url,
+                mimeType: currentImage.mimeType,
                 width: currentImage.width,
                 height: currentImage.height,
                 title: currentImage.prompt || 'Generated image',
@@ -1009,6 +1001,7 @@ export function AIImageGenerator({
           prompt: currentImage.prompt,
           modelId: currentImage.modelId,
           modelLabel: currentImage.modelLabel,
+          mimeType: currentImage.mimeType,
         },
       history: history.map<GeneratedImageSummary>((image) => ({
         id: image.id,
@@ -1016,6 +1009,7 @@ export function AIImageGenerator({
         style: image.style,
         modelId: image.modelId,
         modelLabel: image.modelLabel,
+        mimeType: image.mimeType,
         width: image.width,
         height: image.height,
         generatedAt: image.generatedAt,
@@ -1066,7 +1060,7 @@ export function AIImageGenerator({
     if (!currentImage) return;
     const link = document.createElement('a');
     link.href = currentImage.url;
-    link.download = `present-image-${currentImage.generatedAt}.png`;
+    link.download = `present-image-${currentImage.generatedAt}.${mimeTypeToExtension(currentImage.mimeType)}`;
     link.click();
   }, [currentImage]);
 

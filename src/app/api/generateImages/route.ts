@@ -52,6 +52,7 @@ const requestSchema = z.object({
 
 type ImageResponse = {
   b64_json: string;
+  mimeType?: string;
   timings?: { inference?: number };
   providerUsed?: string | null;
   fallbackReason?: string | null;
@@ -72,6 +73,11 @@ const readProviderErrorMessage = (payload: Record<string, unknown> | null, fallb
   const errorRecord = readRecord(payload?.error);
   return readString(errorRecord?.message) ?? readString(payload?.detail) ?? readString(payload?.error) ?? fallback;
 };
+
+const DEFAULT_IMAGE_MIME_TYPE = 'image/png';
+
+const normalizeImageMimeType = (value: unknown): string =>
+  typeof value === 'string' && value.startsWith('image/') ? value : DEFAULT_IMAGE_MIME_TYPE;
 
 const providerEnvKey = (provider: 'google' | 'openai' | 'xai' | 'fal'): string | undefined => {
   switch (provider) {
@@ -104,13 +110,16 @@ async function resolveProviderKey(
   return providerEnvKey(provider)?.trim() || null;
 }
 
-async function fetchAsBase64(url: string): Promise<string> {
+async function fetchAsBase64(url: string): Promise<{ b64: string; mimeType: string }> {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`failed_to_fetch_generated_image:${response.status}`);
   }
   const bytes = await response.arrayBuffer();
-  return Buffer.from(bytes).toString('base64');
+  return {
+    b64: Buffer.from(bytes).toString('base64'),
+    mimeType: normalizeImageMimeType(response.headers.get('content-type')),
+  };
 }
 
 async function generateWithGoogle(apiKey: string, request: GenerateRequest, finalPrompt: string): Promise<ImageResponse> {
@@ -178,6 +187,7 @@ async function generateWithGoogle(apiKey: string, request: GenerateRequest, fina
   const { width, height } = getAspectRatioDimensions(aspectRatio, resolution);
   return {
     b64_json: b64,
+    mimeType: DEFAULT_IMAGE_MIME_TYPE,
     timings: { inference: 0 },
     providerUsed: 'google:gemini-3.1-flash-image-preview',
     modelId: request.model,
@@ -205,6 +215,7 @@ async function generateWithOpenAI(apiKey: string, request: GenerateRequest, fina
   const { width, height } = getAspectRatioDimensions(aspectRatio, resolution);
   return {
     b64_json: b64,
+    mimeType: DEFAULT_IMAGE_MIME_TYPE,
     timings: { inference: 0 },
     providerUsed: 'openai:gpt-image-1.5',
     modelId: request.model,
@@ -236,16 +247,20 @@ async function generateWithXai(apiKey: string, request: GenerateRequest, finalPr
   if (!response.ok) {
     throw new Error(readProviderErrorMessage(payload, `xai_image_error:${response.status}`));
   }
-  const b64 =
-    typeof payload?.data?.[0]?.b64_json === 'string' && payload.data[0].b64_json.length
-      ? payload.data[0].b64_json
-      : typeof payload?.data?.[0]?.url === 'string' && payload.data[0].url.length
-        ? await fetchAsBase64(payload.data[0].url)
-        : null;
+  let b64: string | null = null;
+  let mimeType = DEFAULT_IMAGE_MIME_TYPE;
+  if (typeof payload?.data?.[0]?.b64_json === 'string' && payload.data[0].b64_json.length) {
+    b64 = payload.data[0].b64_json;
+  } else if (typeof payload?.data?.[0]?.url === 'string' && payload.data[0].url.length) {
+    const fetched = await fetchAsBase64(payload.data[0].url);
+    b64 = fetched.b64;
+    mimeType = fetched.mimeType;
+  }
   if (!b64) throw new Error('xai_image_missing_payload');
   const { width, height } = getAspectRatioDimensions(aspectRatio, resolution);
   return {
     b64_json: b64,
+    mimeType,
     timings: { inference: 0 },
     providerUsed: 'xai:grok-imagine-image',
     modelId: request.model,
@@ -280,9 +295,10 @@ async function generateWithFal(apiKey: string, request: GenerateRequest, finalPr
   if (typeof url !== 'string' || !url.length) {
     throw new Error('fal_image_missing_url');
   }
-  const b64 = await fetchAsBase64(url);
+  const fetched = await fetchAsBase64(url);
   return {
-    b64_json: b64,
+    b64_json: fetched.b64,
+    mimeType: fetched.mimeType,
     timings: { inference: 0 },
     providerUsed: 'fal:flux-2-flash',
     modelId: request.model,
@@ -310,7 +326,17 @@ export async function POST(req: NextRequest) {
               : (json as { model?: unknown }).model,
         }
       : json;
-  const parsed = requestSchema.parse(normalizedInput);
+  const parsedResult = requestSchema.safeParse(normalizedInput);
+  if (!parsedResult.success) {
+    return NextResponse.json(
+      {
+        error: 'invalid_image_generation_request',
+        details: parsedResult.error.flatten(),
+      },
+      { status: 400 },
+    );
+  }
+  const parsed = parsedResult.data;
   const finalPrompt = parsed.style ? `${parsed.prompt}. ${parsed.style}` : parsed.prompt;
 
   let userId: string | null = null;

@@ -26,6 +26,22 @@ const isValidUrl = (value: unknown): value is string => {
   }
 };
 
+const normalizeImageMimeType = (value: unknown): string =>
+  typeof value === 'string' && value.startsWith('image/') ? value : 'image/png';
+
+const mimeTypeToExtension = (mimeType: string): string => {
+  switch (mimeType) {
+    case 'image/jpeg':
+      return 'jpg';
+    case 'image/webp':
+      return 'webp';
+    case 'image/gif':
+      return 'gif';
+    default:
+      return 'png';
+  }
+};
+
 const getViewportOrigin = (editor: Editor, w: number, h: number) => {
   const viewport = editor.getViewportPageBounds();
   const x = viewport ? viewport.midX - w / 2 : 0;
@@ -85,6 +101,7 @@ const createImageShape = (editor: Editor, item: PromotableItem) => {
   const width = clampDimension(item.data?.width, 640, 16);
   const height = clampDimension(item.data?.height, Math.round(width * 0.66), 16);
   const { x, y } = getInsertOrigin(editor, item, width, height);
+  const mimeType = normalizeImageMimeType(item.data?.mimeType);
 
   const assetId = AssetRecordType.createId();
   const asset = {
@@ -94,10 +111,10 @@ const createImageShape = (editor: Editor, item: PromotableItem) => {
     props: {
       w: width,
       h: height,
-      name: `${item.label || 'image'}.png`,
+      name: `${item.label || 'image'}.${mimeTypeToExtension(mimeType)}`,
       src: url,
       isAnimated: false,
-      mimeType: 'image/png',
+      mimeType,
     },
     meta: {},
   };
