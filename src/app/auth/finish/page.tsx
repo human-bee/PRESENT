@@ -14,7 +14,7 @@ function AuthFinishContent() {
 
     const finish = async () => {
       try {
-        const next = searchParams.get('next') || '/canvas';
+        const next = searchParams.get('next') || '/';
 
         // 1) Try Authorization Code flow (?code=)
         const code = searchParams.get('code');

@@ -22,6 +22,19 @@ import {
 } from '@/lib/canvas-agent/contract/fairy-parity-matrix';
 import { getTraceSession, pollTaskStatus, runAdminAction, sendRunAndMaybeWait } from './client';
 import {
+  applyResetPatchArtifact,
+  createResetPatchArtifact,
+  getResetManifest,
+  getResetTask,
+  getResetWorkspaceState,
+  listResetWorkspaceFiles,
+  openResetWorkspace,
+  readResetWorkspaceFile,
+  searchResetTrace,
+  startResetTurn,
+  writeResetWorkspaceFile,
+} from './reset-client';
+import {
   createSession,
   getCurrentSession,
   getSessionById,
@@ -81,6 +94,11 @@ const readString = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const readRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
 };
 
 const readFlagString = (flags: ParsedArgs['flags'], ...keys: string[]): string | null => {
@@ -168,6 +186,14 @@ const resolveSession = (state: FairyCliState, parsed: ParsedArgs): FairyCliSessi
     throw new Error('No active CLI session. Run: fairy sessions create --room canvas-... or fairy sessions use <id>');
   }
   return current;
+};
+
+const resolveResetWorkspaceSessionId = (session: FairyCliSession, parsed: ParsedArgs) => {
+  const requested = readFlagString(parsed.flags, 'workspaceSessionId');
+  if (requested) return requested;
+  if (session.workspaceSessionId) return session.workspaceSessionId;
+  if (session.mode === 'reset_workspace' && session.room) return session.room;
+  throw new Error('No reset workspace session selected. Run: fairy reset open --workspacePath <path>');
 };
 
 const updateSessionWithMutation = (session: FairyCliSession, result: FairyCliMutationResult): FairyCliSession => {
@@ -461,6 +487,203 @@ async function handleTools(state: FairyCliState, parsed: ParsedArgs, asJson: boo
   throw new Error(`Unknown tools action: ${action}`);
 }
 
+async function handleReset(state: FairyCliState, parsed: ParsedArgs, cwd: string, asJson: boolean): Promise<number> {
+  const action = parsed.positionals[1] ?? 'status';
+  const token = readFlagString(parsed.flags, 'token') ?? process.env.FAIRY_CLI_BEARER_TOKEN ?? undefined;
+  const currentSession = getCurrentSession(state);
+  const baseUrl = readFlagString(parsed.flags, 'baseUrl') ?? currentSession?.baseUrl ?? FAIRY_CLI_DEFAULT_BASE_URL;
+
+  if (action === 'open') {
+    const workspacePath = readFlagString(parsed.flags, 'workspacePath') ?? resolveMessage(parsed, 2);
+    if (!workspacePath) throw new Error('reset open requires --workspacePath <path>');
+
+    const response = await openResetWorkspace(
+      { baseUrl, token },
+      {
+        workspacePath,
+        branch: readFlagString(parsed.flags, 'branch') ?? undefined,
+        title: readFlagString(parsed.flags, 'title') ?? undefined,
+      },
+    );
+    const body = readRecord(response.body);
+    const workspace = readRecord(body?.workspace);
+    if (!response.response.ok || !workspace) {
+      throw new Error(readString(body?.error) ?? `reset open failed with HTTP ${response.response.status}`);
+    }
+
+    const session = createSession({
+      room: readString(workspace.id) ?? `reset-${randomUUID().slice(0, 8)}`,
+      name: readFlagString(parsed.flags, 'name') ?? readString(workspace.title) ?? undefined,
+      baseUrl,
+      mode: 'reset_workspace',
+      workspaceSessionId: readString(workspace.id),
+      workspacePath: readString(workspace.workspacePath),
+    });
+    const nextState = {
+      ...upsertSession(state, session),
+      currentSessionId: session.id,
+    };
+    await saveState(cwd, nextState);
+    printResult({ ok: true, session, workspace }, asJson);
+    return FAIRY_CLI_EXIT_CODES.APPLIED;
+  }
+
+  const session = resolveSession(state, parsed);
+  const workspaceSessionId = resolveResetWorkspaceSessionId(session, parsed);
+
+  if (action === 'status') {
+    const response = await getResetWorkspaceState({ baseUrl, token }, { workspaceSessionId });
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  if (action === 'files') {
+    const response = await listResetWorkspaceFiles(
+      { baseUrl, token },
+      {
+        workspaceSessionId,
+        directoryPath: readFlagString(parsed.flags, 'directoryPath') ?? undefined,
+        limit: readFlagNumber(parsed.flags, 'limit', 200),
+      },
+    );
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  if (action === 'read') {
+    const filePath = readFlagString(parsed.flags, 'filePath') ?? parsed.positionals[2];
+    if (!filePath) throw new Error('reset read requires --filePath <path>');
+    const response = await readResetWorkspaceFile({ baseUrl, token }, { workspaceSessionId, filePath });
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  if (action === 'write') {
+    const filePath = readFlagString(parsed.flags, 'filePath') ?? parsed.positionals[2];
+    const content = readFlagString(parsed.flags, 'content') ?? resolveMessage(parsed, 3);
+    if (!filePath || content === null) throw new Error('reset write requires --filePath and --content');
+    const response = await writeResetWorkspaceFile({ baseUrl, token }, { workspaceSessionId, filePath, content });
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  if (action === 'patch') {
+    const filePath = readFlagString(parsed.flags, 'filePath') ?? parsed.positionals[2];
+    const nextContent = readFlagString(parsed.flags, 'content') ?? resolveMessage(parsed, 3);
+    if (!filePath || nextContent === null) throw new Error('reset patch requires --filePath and --content');
+    const response = await createResetPatchArtifact(
+      { baseUrl, token },
+      {
+        workspaceSessionId,
+        filePath,
+        nextContent,
+        traceId: readFlagString(parsed.flags, 'traceId') ?? session.lastTraceId ?? undefined,
+        title: readFlagString(parsed.flags, 'title') ?? undefined,
+      },
+    );
+    const body = readRecord(response.body);
+    const artifact = readRecord(body?.artifact);
+    const nextSession = artifact
+      ? {
+          ...session,
+          updatedAt: new Date().toISOString(),
+          lastArtifactId: readString(artifact.id),
+        }
+      : session;
+    if (artifact) {
+      await saveState(
+        cwd,
+        {
+          ...upsertSession(state, nextSession),
+          currentSessionId: nextSession.id,
+        },
+      );
+    }
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body, session: nextSession }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  if (action === 'apply') {
+    const artifactId = readFlagString(parsed.flags, 'artifactId') ?? session.lastArtifactId ?? parsed.positionals[2];
+    if (!artifactId) throw new Error('reset apply requires --artifactId <id>');
+    const response = await applyResetPatchArtifact({ baseUrl, token }, { artifactId });
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  if (action === 'turn') {
+    const prompt = readFlagString(parsed.flags, 'prompt') ?? resolveMessage(parsed, 2);
+    if (!prompt) throw new Error('reset turn requires a prompt');
+    const summary = readFlagString(parsed.flags, 'summary') ?? 'Fairy reset turn';
+    const response = await startResetTurn(
+      { baseUrl, token },
+      {
+        workspaceSessionId,
+        prompt,
+        summary,
+        executorSessionId: readFlagString(parsed.flags, 'executorSessionId') ?? undefined,
+        threadId: readFlagString(parsed.flags, 'threadId') ?? undefined,
+        model: readFlagString(parsed.flags, 'model') ?? undefined,
+      },
+    );
+    const body = readRecord(response.body);
+    const taskRun = readRecord(body?.taskRun);
+    const nextSession = taskRun
+      ? {
+          ...session,
+          updatedAt: new Date().toISOString(),
+          lastTaskId: readString(taskRun.id),
+          lastTraceId: readString(taskRun.traceId),
+        }
+      : session;
+    if (taskRun) {
+      await saveState(
+        cwd,
+        {
+          ...upsertSession(state, nextSession),
+          currentSessionId: nextSession.id,
+        },
+      );
+    }
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body, session: nextSession }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  if (action === 'task') {
+    const taskId = readFlagString(parsed.flags, 'taskId') ?? session.lastTaskId ?? parsed.positionals[2];
+    if (!taskId) throw new Error('reset task requires --taskId <id>');
+    const response = await getResetTask({ baseUrl, token }, { taskId });
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  if (action === 'trace') {
+    const response = await searchResetTrace(
+      { baseUrl, token },
+      {
+        query: readFlagString(parsed.flags, 'query') ?? undefined,
+        traceId: readFlagString(parsed.flags, 'traceId') ?? session.lastTraceId ?? undefined,
+      },
+    );
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  if (action === 'manifest') {
+    const response = await getResetManifest({ baseUrl, token }, { workspaceSessionId });
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  if (action === 'interop') {
+    const response = await getResetManifest({ baseUrl, token }, { workspaceSessionId });
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  throw new Error(`Unknown reset action: ${action}`);
+}
+
 async function handleSubagents(state: FairyCliState, parsed: ParsedArgs, cwd: string, asJson: boolean): Promise<number> {
   const action = parsed.positionals[1] ?? 'list';
   const session = resolveSession(state, parsed);
@@ -752,6 +975,7 @@ fairy <group> <action> [options]
 
 Groups:
   sessions create|use|list|inspect|send
+  reset open|status|files|read|write|patch|apply|turn|task|trace|manifest|interop
   tools list|call
   subagents spawn|list|wait|cancel
   trace open|timeline|correlate
@@ -781,6 +1005,9 @@ export async function runCli(argv: string[], cwd = process.cwd()): Promise<numbe
     }
     if (group === 'tools') {
       return await handleTools(state, parsed, asJson);
+    }
+    if (group === 'reset') {
+      return await handleReset(state, parsed, cwd, asJson);
     }
     if (group === 'subagents') {
       return await handleSubagents(state, parsed, cwd, asJson);

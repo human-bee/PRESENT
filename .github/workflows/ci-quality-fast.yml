@@ -19,6 +19,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Detect legacy-runtime paths
+        id: paths
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            legacy:
+              - 'src/lib/agents/**'
+              - 'src/app/canvas/**'
+              - 'src/app/canvases/**'
+              - 'src/components/ui/canvas/**'
+              - 'src/components/ui/tldraw/**'
+              - 'src/components/tool-dispatcher/**'
+              - 'src/components/ui/livekit/**'
+              - 'scripts/start-dev-stack.sh'
+              - 'scripts/stop-dev-stack.sh'
+              - 'scripts/restart-dev-stack.sh'
+              - 'docs/canvas-agent.md'
+              - 'docs/journey-harness.md'
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -34,11 +53,22 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Reset Typecheck
+        run: npm run typecheck:reset
+
       - name: Build
         run: npm run build
 
       - name: Unit and Integration Tests
+        if: steps.paths.outputs.legacy == 'true'
         run: npm test -- --runInBand
+
+      - name: Skip Legacy Full Test Suite
+        if: steps.paths.outputs.legacy != 'true'
+        run: echo "Skipping archived legacy suite because no legacy runtime paths changed."
+
+      - name: Reset Test Suite
+        run: npm run test:reset
 
       - name: Factorial Analysis (Soft Gate)
         run: node scripts/observability/analyze-factorial.mjs

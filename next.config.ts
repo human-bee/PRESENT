@@ -61,11 +61,17 @@ const transpiledPackages = [
   '@radix-ui/react-password-toggle-field',
 ] as const;
 
+const allowedDevOrigins = [
+  '127.0.0.1',
+  'localhost',
+] as const;
+
 const nextConfig: NextConfig = {
   // Keep TypeScript checks enabled during build so deploys fail fast on type regressions.
   typescript: {
     ignoreBuildErrors: false,
   },
+  allowedDevOrigins: [...allowedDevOrigins],
   compiler: {
     removeConsole:
       process.env.NODE_ENV === 'production' ? { exclude: ['warn', 'error'] } : false,

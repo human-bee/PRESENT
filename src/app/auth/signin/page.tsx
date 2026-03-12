@@ -32,7 +32,7 @@ function SignInForm() {
 
     try {
       await signInWithEmail(email, password);
-      router.push('/canvas');
+      router.push('/');
     } catch (error: any) {
       setError(error.message || 'Invalid email or password');
     } finally {
