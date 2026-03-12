@@ -1,0 +1,59 @@
+{
+  "runId": "remote-board-game-night-cerebras-gpt-oss-120b-mmmlay38",
+  "scenarioId": "remote-board-game-night",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Remote Board Game Night",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "play",
+  "startedAt": "2026-03-11T22:07:40.328Z",
+  "completedAt": "2026-03-11T22:09:38.789Z",
+  "status": "failed",
+  "roomId": "canvas-8162afeb-f29c-4c91-a3e0-3f919ba79596",
+  "canvasId": "8162afeb-f29c-4c91-a3e0-3f919ba79596",
+  "canvasName": "remote-board-game-night-cerebras-gpt-oss-120b-remote-board-game-night-cerebras-gpt-oss-120b-mmmlay38",
+  "viewerPath": "/canvas?room=canvas-8162afeb-f29c-4c91-a3e0-3f919ba79596&id=8162afeb-f29c-4c91-a3e0-3f919ba79596&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "page.waitForFunction: Timeout 30000ms exceeded."
+    ]
+  },
+  "error": "page.waitForFunction: Timeout 30000ms exceeded."
+}

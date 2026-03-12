@@ -25,6 +25,7 @@ describe('provider-parity', () => {
 
   it('infers provider from model names', () => {
     expect(inferProviderFromModel('gpt-5-mini')).toBe('openai');
+    expect(inferProviderFromModel('gpt-oss-120b')).toBe('cerebras');
     expect(inferProviderFromModel('claude-3-5-sonnet')).toBe('anthropic');
     expect(inferProviderFromModel('gemini-2.5-pro')).toBe('google');
     expect(inferProviderFromModel('llama-3.3-70b')).toBe('cerebras');

@@ -1,0 +1,59 @@
+{
+  "runId": "scratchpad-systems-haiku-4-5-mmmmnle7",
+  "scenarioId": "scratchpad-systems",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Scratchpad Systems Sketch",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "scratchpad",
+  "startedAt": "2026-03-11T22:45:30.000Z",
+  "completedAt": "2026-03-11T22:45:30.004Z",
+  "status": "failed",
+  "roomId": "canvas-e4f0ce00-a31d-4bca-94f7-c9c32fcd3748",
+  "canvasId": "e4f0ce00-a31d-4bca-94f7-c9c32fcd3748",
+  "canvasName": "scratchpad-systems-haiku-4-5-scratchpad-systems-haiku-4-5-mmmmnle7",
+  "viewerPath": "/canvas?room=canvas-e4f0ce00-a31d-4bca-94f7-c9c32fcd3748&id=e4f0ce00-a31d-4bca-94f7-c9c32fcd3748&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/scratchpad-systems__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/scratchpad-systems__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/scratchpad-systems__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "browser.newPage: Target page, context or browser has been closed"
+    ]
+  },
+  "error": "browser.newPage: Target page, context or browser has been closed"
+}

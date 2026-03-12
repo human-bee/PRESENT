@@ -1,0 +1,184 @@
+{
+  "roomId": "canvas-b9795b52-999b-4bd9-b813-471868840ac7",
+  "canvasId": "b9795b52-999b-4bd9-b813-471868840ac7",
+  "canvasName": "freehand-sketchnote-recap-haiku-4-5-freehand-sketchnote-recap-haiku-4-5-mmmnpdme",
+  "source": "viewer",
+  "shapeCount": 17,
+  "shapes": [
+    {
+      "id": "shape:preset-mmmnq5pm-503",
+      "type": "note",
+      "x": 400,
+      "y": 260,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:title-underline",
+      "type": "draw",
+      "x": 400,
+      "y": 340,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:block-market",
+      "type": "geo",
+      "x": 420,
+      "y": 420,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-market",
+      "type": "text",
+      "x": 440,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-market-1",
+      "type": "note",
+      "x": 440,
+      "y": 500,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:block-roadmap",
+      "type": "geo",
+      "x": 680,
+      "y": 420,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-roadmap",
+      "type": "text",
+      "x": 700,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-roadmap-1",
+      "type": "note",
+      "x": 700,
+      "y": 500,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:block-metrics",
+      "type": "geo",
+      "x": 940,
+      "y": 420,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-metrics",
+      "type": "text",
+      "x": 960,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-metrics-1",
+      "type": "note",
+      "x": 960,
+      "y": 500,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:arrow-market-to-roadmap",
+      "type": "draw",
+      "x": 620,
+      "y": 500,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-roadmap-to-metrics",
+      "type": "draw",
+      "x": 880,
+      "y": 500,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:callout-priority",
+      "type": "geo",
+      "x": 400,
+      "y": 620,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-priority",
+      "type": "text",
+      "x": 420,
+      "y": 640,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:sketch-accent-1",
+      "type": "draw",
+      "x": 760,
+      "y": 620,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:sketch-accent-2",
+      "type": "draw",
+      "x": 1000,
+      "y": 640,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773270974157
+  }
+}

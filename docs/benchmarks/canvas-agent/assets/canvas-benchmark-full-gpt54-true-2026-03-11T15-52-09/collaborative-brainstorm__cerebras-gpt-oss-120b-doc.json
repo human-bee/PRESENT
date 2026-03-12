@@ -1,0 +1,64 @@
+{
+  "roomId": "canvas-62deb163-33c0-47f4-bad1-34cc410062ea",
+  "canvasId": "62deb163-33c0-47f4-bad1-34cc410062ea",
+  "canvasName": "collaborative-brainstorm-cerebras-gpt-oss-120b-collaborative-brainstorm-cerebras-gpt-oss-120b-mmmn9nv1",
+  "source": "viewer",
+  "shapeCount": 5,
+  "shapes": [
+    {
+      "id": "shape:cluster-1",
+      "type": "geo",
+      "x": 320,
+      "y": 280,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:cluster-2",
+      "type": "geo",
+      "x": 720,
+      "y": 280,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:cluster-3",
+      "type": "geo",
+      "x": 1120,
+      "y": 280,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmn9x6o-692",
+      "type": "note",
+      "x": 340,
+      "y": 240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmn9x6o-305",
+      "type": "note",
+      "x": 580,
+      "y": 240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773270176514
+  }
+}

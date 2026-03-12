@@ -1,0 +1,59 @@
+{
+  "runId": "multi-fairy-zones-haiku-4-5-mmmmnp3q",
+  "scenarioId": "multi-fairy-zones",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Multi-Fairy Zones",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "multi-fairy",
+  "startedAt": "2026-03-11T22:45:34.778Z",
+  "completedAt": "2026-03-11T22:45:34.782Z",
+  "status": "failed",
+  "roomId": "canvas-b1e2ef36-da56-4846-866c-bddc0d7e78fa",
+  "canvasId": "b1e2ef36-da56-4846-866c-bddc0d7e78fa",
+  "canvasName": "multi-fairy-zones-haiku-4-5-multi-fairy-zones-haiku-4-5-mmmmnp3q",
+  "viewerPath": "/canvas?room=canvas-b1e2ef36-da56-4846-866c-bddc0d7e78fa&id=b1e2ef36-da56-4846-866c-bddc0d7e78fa&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/multi-fairy-zones__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/multi-fairy-zones__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/multi-fairy-zones__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "browser.newPage: Target page, context or browser has been closed"
+    ]
+  },
+  "error": "browser.newPage: Target page, context or browser has been closed"
+}

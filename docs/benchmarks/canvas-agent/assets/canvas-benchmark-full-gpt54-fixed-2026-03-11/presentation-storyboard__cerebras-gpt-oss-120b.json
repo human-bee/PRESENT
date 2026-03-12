@@ -1,0 +1,66 @@
+{
+  "runId": "presentation-storyboard-cerebras-gpt-oss-120b-mmmll9tk",
+  "scenarioId": "presentation-storyboard",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Presentation Storyboard",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "presentation",
+  "startedAt": "2026-03-11T22:15:41.996Z",
+  "completedAt": "2026-03-11T22:15:41.997Z",
+  "status": "failed",
+  "roomId": "canvas-6f4f99e1-9cef-46c7-9bbb-7c37dfcbf38b",
+  "canvasId": "6f4f99e1-9cef-46c7-9bbb-7c37dfcbf38b",
+  "canvasName": "presentation-storyboard-cerebras-gpt-oss-120b-presentation-storyboard-cerebras-gpt-oss-120b-mmmll9tk",
+  "viewerPath": "/canvas?room=canvas-6f4f99e1-9cef-46c7-9bbb-7c37dfcbf38b&id=6f4f99e1-9cef-46c7-9bbb-7c37dfcbf38b&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": {
+    "summary": "Visual analysis failed.",
+    "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b.png'",
+    "strengths": [],
+    "issues": [
+      "Analysis pass failed for this artifact."
+    ]
+  },
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

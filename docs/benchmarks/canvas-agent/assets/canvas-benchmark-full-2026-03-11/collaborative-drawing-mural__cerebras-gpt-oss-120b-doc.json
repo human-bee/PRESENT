@@ -1,0 +1,104 @@
+{
+  "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+  "canvasId": "69fa590e-6f9b-41a8-818d-a42e17550324",
+  "canvasName": "collaborative-drawing-mural-cerebras-gpt-oss-120b-collaborative-drawing-mural-cerebras-gpt-oss-120b-mmm02g2j",
+  "source": "viewer",
+  "shapeCount": 10,
+  "shapes": [
+    {
+      "id": "shape:mural-center-rect",
+      "type": "geo",
+      "x": 420,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mural-center-note",
+      "type": "note",
+      "x": 440,
+      "y": 300,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:energy-draw-1",
+      "type": "draw",
+      "x": 0,
+      "y": 440,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:energy-draw-2",
+      "type": "draw",
+      "x": 680,
+      "y": -240,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:support-note-1",
+      "type": "note",
+      "x": 160,
+      "y": 180,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-2",
+      "type": "note",
+      "x": 980,
+      "y": 180,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-3",
+      "type": "note",
+      "x": 620,
+      "y": 680,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm02qmd-851",
+      "type": "note",
+      "x": 160,
+      "y": 180,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm02qmd-885",
+      "type": "note",
+      "x": 980,
+      "y": 180,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm02qmd-753",
+      "type": "note",
+      "x": 620,
+      "y": 680,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773231210238
+  }
+}

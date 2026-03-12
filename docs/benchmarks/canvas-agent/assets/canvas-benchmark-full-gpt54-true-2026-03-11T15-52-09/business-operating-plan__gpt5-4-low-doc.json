@@ -1,0 +1,254 @@
+{
+  "roomId": "canvas-e46166f1-ea9b-4d01-a774-47289f8b9d18",
+  "canvasId": "e46166f1-ea9b-4d01-a774-47289f8b9d18",
+  "canvasName": "business-operating-plan-gpt5-4-low-business-operating-plan-gpt5-4-low-mmmmxucu",
+  "source": "viewer",
+  "shapeCount": 24,
+  "shapes": [
+    {
+      "id": "shape:qop-title",
+      "type": "text",
+      "x": 112,
+      "y": 80,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:qop-subtitle",
+      "type": "text",
+      "x": 112,
+      "y": 128,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:qop-board",
+      "type": "geo",
+      "x": 112,
+      "y": 192,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-objectives-header",
+      "type": "geo",
+      "x": 112,
+      "y": 224,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-owners-header",
+      "type": "geo",
+      "x": 496,
+      "y": 224,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-risks-header",
+      "type": "geo",
+      "x": 880,
+      "y": 224,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-objectives-title",
+      "type": "text",
+      "x": 144,
+      "y": 240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-owners-title",
+      "type": "text",
+      "x": 528,
+      "y": 240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-risks-title",
+      "type": "text",
+      "x": 912,
+      "y": 240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-divider-1",
+      "type": "geo",
+      "x": 464,
+      "y": 224,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-divider-2",
+      "type": "geo",
+      "x": 848,
+      "y": 224,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:objective-note-1",
+      "type": "note",
+      "x": 144,
+      "y": 320,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:objective-note-2",
+      "type": "note",
+      "x": 144,
+      "y": 352,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:objective-note-3",
+      "type": "note",
+      "x": 144,
+      "y": 384,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:objective-note-4",
+      "type": "note",
+      "x": 144,
+      "y": 416,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-1",
+      "type": "note",
+      "x": 528,
+      "y": 320,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-2",
+      "type": "note",
+      "x": 528,
+      "y": 352,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-3",
+      "type": "note",
+      "x": 528,
+      "y": 384,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-4",
+      "type": "note",
+      "x": 528,
+      "y": 416,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-1",
+      "type": "note",
+      "x": 912,
+      "y": 320,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-2",
+      "type": "note",
+      "x": 912,
+      "y": 352,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-3",
+      "type": "note",
+      "x": 912,
+      "y": 384,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-4",
+      "type": "note",
+      "x": 912,
+      "y": 416,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:qop-footer",
+      "type": "text",
+      "x": 112,
+      "y": 864,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773269710287
+  }
+}

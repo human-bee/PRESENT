@@ -7,6 +7,9 @@ This guide documents the runtime tuning path used by `src/lib/agents/realtime/vo
 - Config source: `src/lib/agents/realtime/voice-agent/config.ts`
 - Runtime guards: `src/lib/agents/realtime/voice-agent/runtime-guards.ts`
 - Realtime model wiring:
+  - `modelTransport` (`realtime` | `responses_ws`)
+  - `resolvedRealtimeModel` (adaptive profile aware)
+  - `resolvedResponsesModel`
   - `inputAudioTranscription`
   - `inputAudioNoiseReduction`
   - `turnDetection`
@@ -17,6 +20,12 @@ This guide documents the runtime tuning path used by `src/lib/agents/realtime/vo
 ## Primary Knobs
 
 - `VOICE_AGENT_TRANSCRIPTION_ENABLED`
+- `VOICE_AGENT_MODEL_TRANSPORT` (`realtime` | `responses_ws`)
+- `VOICE_AGENT_RESPONSES_MODEL` (defaults to `gpt-audio-1.5`)
+- `VOICE_AGENT_REALTIME_MODEL_STRATEGY` (`fixed` | `adaptive_profile`)
+- `VOICE_AGENT_REALTIME_MODEL_PRIMARY`
+- `VOICE_AGENT_REALTIME_MODEL_SECONDARY`
+- `VOICE_AGENT_REALTIME_MODEL` (explicit override)
 - `VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL`
 - `VOICE_AGENT_TRANSCRIPTION_LANGUAGE`
 - `VOICE_AGENT_TURN_DETECTION`

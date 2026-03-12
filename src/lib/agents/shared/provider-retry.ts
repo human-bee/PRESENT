@@ -1,4 +1,4 @@
-type RetryProvider = 'anthropic' | 'openai' | 'google' | 'generic';
+type RetryProvider = 'anthropic' | 'openai' | 'google' | 'cerebras' | 'generic';
 
 const RETRYABLE_STATUS_CODES = new Set([408, 409, 425, 429, 500, 502, 503, 504, 529]);
 

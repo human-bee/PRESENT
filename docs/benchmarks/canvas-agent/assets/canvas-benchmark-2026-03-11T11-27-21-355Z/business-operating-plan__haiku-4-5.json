@@ -1,0 +1,144 @@
+{
+  "runId": "business-operating-plan-haiku-4-5-mmlyfi56",
+  "scenarioId": "business-operating-plan",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Business Operating Plan",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "business",
+  "startedAt": "2026-03-11T11:27:21.920Z",
+  "completedAt": "2026-03-11T11:28:50.320Z",
+  "status": "completed",
+  "roomId": "canvas-1ad60953-4bdd-494a-9843-83bc2d626373",
+  "canvasId": "1ad60953-4bdd-494a-9843-83bc2d626373",
+  "canvasName": "business-operating-plan-haiku-4-5-business-operating-plan-haiku-4-5-mmlyfi56",
+  "viewerPath": "/canvas?room=canvas-1ad60953-4bdd-494a-9843-83bc2d626373&id=1ad60953-4bdd-494a-9843-83bc2d626373&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-2026-03-11T11-27-21-355Z/business-operating-plan__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-2026-03-11T11-27-21-355Z/business-operating-plan__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-2026-03-11T11-27-21-355Z/business-operating-plan__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 27,
+    "byName": {
+      "create_shape": 20,
+      "align": 3,
+      "stack": 3,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 76487,
+    "initialTtfbMs": 13661,
+    "totalActionCount": 27,
+    "totalMutatingActionCount": 27,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 27,
+    "avgFirstAckMs": 22786,
+    "avgScreenshotRttMs": 734
+  },
+  "steps": [
+    {
+      "stepId": "plan-board",
+      "label": "Plan board",
+      "sessionId": "1773228452250-vmzpjx",
+      "status": "completed",
+      "actionSummary": {
+        "total": 27,
+        "byName": {
+          "create_shape": 20,
+          "align": 3,
+          "stack": 3,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 76487,
+        "ttfbMs": 13661,
+        "actionCount": 27,
+        "mutatingActionCount": 27,
+        "followupCount": 0,
+        "retryCount": 27,
+        "firstAckMs": 22786,
+        "screenshotRttMs": 734,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773228452250-vmzpjx",
+          "roomId": "canvas-1ad60953-4bdd-494a-9843-83bc2d626373",
+          "ts": 1773228452266,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773228452250-vmzpjx",
+          "roomId": "canvas-1ad60953-4bdd-494a-9843-83bc2d626373",
+          "ts": 1773228453009,
+          "preset": "creative",
+          "request_id": "83783e28-c617-44f8-bd82-dbcc0d3e6c75",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 734,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773228452250-vmzpjx",
+          "roomId": "canvas-1ad60953-4bdd-494a-9843-83bc2d626373",
+          "ts": 1773228453139,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773228452250-vmzpjx",
+          "roomId": "canvas-1ad60953-4bdd-494a-9843-83bc2d626373",
+          "ts": 1773228465927,
+          "preset": "creative",
+          "ttfb": 13661,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773228452250-vmzpjx",
+          "roomId": "canvas-1ad60953-4bdd-494a-9843-83bc2d626373",
+          "ts": 1773228528733,
+          "preset": "creative",
+          "duration": 76467,
+          "chunkCount": 28,
+          "actionCount": 27,
+          "mutatingActionCount": 27,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 27,
+          "first_ack_ms": 22786,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 57,
+    "grade": "partial",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 35,
+      "preferredVerbs": 7,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Shape count below target (0/8).",
+      "Retries recorded 27 time(s)."
+    ]
+  }
+}

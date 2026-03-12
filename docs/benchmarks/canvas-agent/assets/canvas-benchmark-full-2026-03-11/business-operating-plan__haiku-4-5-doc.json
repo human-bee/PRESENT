@@ -1,0 +1,194 @@
+{
+  "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+  "canvasId": "35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+  "canvasName": "business-operating-plan-haiku-4-5-business-operating-plan-haiku-4-5-mmlywhy3",
+  "source": "viewer",
+  "shapeCount": 20,
+  "shapes": [
+    {
+      "id": "shape:swimlane_bg",
+      "type": "geo",
+      "x": 120,
+      "y": 220,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane_divider_1",
+      "type": "geo",
+      "x": 120,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane_divider_2",
+      "type": "geo",
+      "x": 120,
+      "y": 680,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:title_hero",
+      "type": "geo",
+      "x": 120,
+      "y": 100,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlyx37x-650",
+      "type": "note",
+      "x": 160,
+      "y": 130,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlyxa29-338",
+      "type": "note",
+      "x": 140,
+      "y": 250,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlyxbtt-749",
+      "type": "note",
+      "x": 140,
+      "y": 390,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlyxdj1-549",
+      "type": "note",
+      "x": 140,
+      "y": 720,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj_card_1",
+      "type": "note",
+      "x": 240,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj_card_2",
+      "type": "note",
+      "x": 272,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj_card_3",
+      "type": "note",
+      "x": 304,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj_card_4",
+      "type": "note",
+      "x": 336,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner_card_1",
+      "type": "note",
+      "x": 240,
+      "y": 420,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner_card_2",
+      "type": "note",
+      "x": 272,
+      "y": 420,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner_card_3",
+      "type": "note",
+      "x": 304,
+      "y": 420,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner_card_4",
+      "type": "note",
+      "x": 336,
+      "y": 420,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk_card_1",
+      "type": "note",
+      "x": 240,
+      "y": 740,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk_card_2",
+      "type": "note",
+      "x": 272,
+      "y": 740,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk_card_3",
+      "type": "note",
+      "x": 304,
+      "y": 740,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk_card_4",
+      "type": "note",
+      "x": 336,
+      "y": 740,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773229317763
+  }
+}

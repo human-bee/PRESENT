@@ -1,5 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import Cerebras from '@cerebras/cerebras_cloud_sdk';
 import { generateObject, streamObject } from 'ai';
 import { z } from 'zod';
 import type { StructuredStream } from './streaming';
@@ -11,6 +12,7 @@ import {
   withProviderRetry,
   isRetryableProviderError,
 } from '@/lib/agents/shared/provider-retry';
+import { extractFirstMessageContent } from '@/lib/agents/subagents/fast-steward-response';
 
 const agentActionListSchema = z
   .object({
@@ -147,7 +149,10 @@ class AiSdkProvider implements StreamingProvider {
       partialObjectStream: streamed.partialObjectStream,
       fullStream: streamed.object.then((object) => ({ object })),
       usage: Promise.resolve((streamed as any).usage),
-      totalUsage: Promise.resolve((streamed as any).totalUsage),
+      totalUsage:
+        typeof (streamed as any).totalUsage === 'undefined'
+          ? undefined
+          : Promise.resolve((streamed as any).totalUsage),
       providerMetadata: Promise.resolve((streamed as any).providerMetadata),
       request: Promise.resolve((streamed as any).request),
       response: Promise.resolve((streamed as any).response),
@@ -291,11 +296,132 @@ class FakeProvider implements StreamingProvider {
   }
 }
 
+const parseStructuredJsonCandidate = (raw: string): Record<string, unknown> | null => {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const tryParse = (candidate: string) => {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
+
+  const direct = tryParse(trimmed);
+  if (direct) return direct;
+
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return tryParse(trimmed.slice(firstBrace, lastBrace + 1));
+  }
+
+  return null;
+};
+
+class CerebrasProvider implements StreamingProvider {
+  name: string;
+  private modelId: string;
+
+  constructor(modelId: string) {
+    this.modelId = modelId;
+    this.name = `cerebras:${modelId}`;
+  }
+
+  async *stream(prompt: string, options?: { system?: string; tuning?: ModelTuning }): AsyncIterable<StreamChunk> {
+    const structured = await this.streamStructured(prompt, options);
+    for await (const partial of structured.partialObjectStream) {
+      yield { type: 'json', data: partial };
+    }
+    const final = await structured.fullStream;
+    if (final?.object) {
+      yield { type: 'json', data: final.object };
+    }
+  }
+
+  async streamStructured(
+    prompt: string,
+    options?: { system?: string; tuning?: ModelTuning },
+  ): Promise<StructuredStream> {
+    const client = this.resolveClient();
+    const request = {
+      model: this.modelId,
+      messages: [
+        { role: 'system' as const, content: options?.system || 'You are a helpful assistant.' },
+        { role: 'user' as const, content: prompt },
+      ],
+      temperature: options?.tuning?.temperature ?? 0,
+      ...(options?.tuning?.topP !== undefined ? { top_p: options.tuning.topP } : {}),
+    };
+
+    const response = await withProviderRetry(
+      () => client.chat.completions.create(request as any),
+      {
+        provider: 'cerebras',
+        attempts: MODEL_RETRY_ATTEMPTS,
+        initialDelayMs: MODEL_RETRY_BASE_DELAY_MS,
+        maxDelayMs: MODEL_RETRY_MAX_DELAY_MS,
+        onRetry: ({ attempt, maxAttempts, delayMs, error }) => {
+          console.warn('[CanvasAgent] model call transient retry', {
+            provider: 'cerebras',
+            model: this.modelId,
+            attempt,
+            maxAttempts,
+            delayMs,
+            error: describeRetryError(error),
+          });
+        },
+      },
+    );
+
+    const rawContent = extractFirstMessageContent(response);
+    const parsed = parseStructuredJsonCandidate(rawContent);
+    if (!parsed) {
+      throw new Error(`Cerebras canvas response was not valid JSON for ${this.modelId}`);
+    }
+
+    const object = agentActionListSchema.parse(parsed);
+    async function* partialObjectStream() {
+      yield object;
+    }
+
+    return {
+      partialObjectStream: partialObjectStream(),
+      fullStream: Promise.resolve({ object }),
+      usage: Promise.resolve((response as any)?.usage ?? null),
+      totalUsage: Promise.resolve((response as any)?.usage ?? null),
+      providerMetadata: Promise.resolve({
+        provider: 'cerebras',
+        model: (response as any)?.model ?? this.modelId,
+      }),
+      request: Promise.resolve(request),
+      response: Promise.resolve(response),
+    } satisfies StructuredStream;
+  }
+
+  private resolveClient() {
+    const apiKey = getRuntimeModelKey('CEREBRAS_API_KEY') ?? process.env.CEREBRAS_API_KEY;
+    if (!apiKey) {
+      throw new Error('Provider not configured: cerebras');
+    }
+    return new Cerebras({ apiKey });
+  }
+}
+
 const registry = new Map<string, StreamingProvider>();
 
 const registerProvider = (key: string, provider: 'anthropic' | 'openai', modelId: string) => {
   if (!registry.has(key)) {
     registry.set(key, new AiSdkProvider(provider, modelId));
+  }
+};
+
+const registerCerebrasProvider = (key: string, modelId: string) => {
+  if (!registry.has(key)) {
+    registry.set(key, new CerebrasProvider(modelId));
   }
 };
 
@@ -307,9 +433,14 @@ const bootstrapProviders = () => {
     registry.set('anthropic', registry.get('anthropic:claude-sonnet-4-5')!);
   }
   if (process.env.OPENAI_API_KEY) {
+    registerProvider('openai:gpt-5.4', 'openai', 'gpt-5.4');
     registerProvider('openai:gpt-5', 'openai', 'gpt-5');
     registerProvider('openai:gpt-5-mini', 'openai', 'gpt-5-mini');
-    registry.set('openai', registry.get('openai:gpt-5')!);
+    registry.set('openai', registry.get('openai:gpt-5.4')!);
+  }
+  if (process.env.CEREBRAS_API_KEY) {
+    registerCerebrasProvider('cerebras:gpt-oss-120b', 'gpt-oss-120b');
+    registry.set('cerebras', registry.get('cerebras:gpt-oss-120b')!);
   }
   registry.set('debug/fake', new FakeProvider());
 };
@@ -319,14 +450,20 @@ const ensureDynamicProvider = (name: string): StreamingProvider | null => {
   if (!trimmed) return null;
   if (registry.has(trimmed)) return registry.get(trimmed)!;
 
-  const create = (provider: 'anthropic' | 'openai', modelId: string, key?: string) => {
+  const create = (provider: 'anthropic' | 'openai' | 'cerebras', modelId: string, key?: string) => {
     const hasAuth =
       provider === 'anthropic'
         ? !!(getRuntimeModelKey('ANTHROPIC_API_KEY') ?? process.env.ANTHROPIC_API_KEY)
-        : !!(getRuntimeModelKey('OPENAI_API_KEY') ?? process.env.OPENAI_API_KEY);
+        : provider === 'openai'
+          ? !!(getRuntimeModelKey('OPENAI_API_KEY') ?? process.env.OPENAI_API_KEY)
+          : !!(getRuntimeModelKey('CEREBRAS_API_KEY') ?? process.env.CEREBRAS_API_KEY);
     if (!hasAuth) return null;
     const registryKey = key ?? `${provider}:${modelId}`;
-    registerProvider(registryKey, provider, modelId);
+    if (provider === 'cerebras') {
+      registerCerebrasProvider(registryKey, modelId);
+    } else {
+      registerProvider(registryKey, provider, modelId);
+    }
     return registry.get(registryKey) ?? null;
   };
 
@@ -336,9 +473,13 @@ const ensureDynamicProvider = (name: string): StreamingProvider | null => {
     if (!modelId) return null;
     if (providerAlias === 'anthropic') return create('anthropic', modelId, trimmed);
     if (providerAlias === 'openai') return create('openai', modelId, trimmed);
+    if (providerAlias === 'cerebras') return create('cerebras', modelId, trimmed);
     return null;
   }
 
+  if (trimmed.startsWith('gpt-oss') || trimmed.startsWith('llama') || trimmed.startsWith('qwen')) {
+    return create('cerebras', trimmed, `cerebras:${trimmed}`);
+  }
   if (trimmed.startsWith('claude')) return create('anthropic', trimmed, `anthropic:${trimmed}`);
   if (trimmed.startsWith('gpt')) return create('openai', trimmed, `openai:${trimmed}`);
 
@@ -348,17 +489,27 @@ const ensureDynamicProvider = (name: string): StreamingProvider | null => {
 bootstrapProviders();
 
 export function selectModel(preferred?: string): StreamingProvider {
-  const envPreferred = preferred?.trim() || process.env.CANVAS_STEWARD_MODEL || 'debug/fake';
-  const resolved = ensureDynamicProvider(envPreferred);
-  if (resolved) return resolved;
+  const requestedPreferred = preferred?.trim();
+  if (requestedPreferred) {
+    const resolved = ensureDynamicProvider(requestedPreferred);
+    if (!resolved) {
+      throw new Error(`Unsupported or unavailable canvas model: ${requestedPreferred}`);
+    }
+    return resolved;
+  }
 
   if (process.env.CANVAS_STEWARD_MODEL) {
-    const secondary = ensureDynamicProvider(process.env.CANVAS_STEWARD_MODEL);
-    if (secondary) return secondary;
+    const configured = process.env.CANVAS_STEWARD_MODEL.trim();
+    const secondary = ensureDynamicProvider(configured);
+    if (!secondary) {
+      throw new Error(`Unsupported or unavailable canvas model: ${configured}`);
+    }
+    return secondary;
   }
 
   if (registry.get('anthropic')) return registry.get('anthropic')!;
   if (registry.get('openai')) return registry.get('openai')!;
+  if (registry.get('cerebras')) return registry.get('cerebras')!;
 
   return registry.get('debug/fake')!;
 }

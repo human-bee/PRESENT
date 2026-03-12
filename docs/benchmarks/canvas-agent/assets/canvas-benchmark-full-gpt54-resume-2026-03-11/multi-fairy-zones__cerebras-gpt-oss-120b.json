@@ -1,0 +1,59 @@
+{
+  "runId": "multi-fairy-zones-cerebras-gpt-oss-120b-mmmlio57",
+  "scenarioId": "multi-fairy-zones",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Multi-Fairy Zones",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "multi-fairy",
+  "startedAt": "2026-03-11T22:13:40.618Z",
+  "completedAt": "2026-03-11T22:13:40.620Z",
+  "status": "failed",
+  "roomId": "canvas-c63683ea-620d-4fc1-bccb-2858c17ea66d",
+  "canvasId": "c63683ea-620d-4fc1-bccb-2858c17ea66d",
+  "canvasName": "multi-fairy-zones-cerebras-gpt-oss-120b-multi-fairy-zones-cerebras-gpt-oss-120b-mmmlio57",
+  "viewerPath": "/canvas?room=canvas-c63683ea-620d-4fc1-bccb-2858c17ea66d&id=c63683ea-620d-4fc1-bccb-2858c17ea66d&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/multi-fairy-zones__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/multi-fairy-zones__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/multi-fairy-zones__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

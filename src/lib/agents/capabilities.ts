@@ -1,17 +1,11 @@
-import {
-  getWidgetLifecycleMetadata,
-  type WidgetGroup,
-} from './widget-lifecycle-manifest';
+import { getWidgetLifecycleMetadata, type WidgetGroup } from './widget-lifecycle-manifest';
 
 // Accept either browser or node LiveKit Room by using a minimal interface
 export interface RoomLike {
   on: (event: string, cb: (...args: any[]) => void) => unknown;
   off: (event: string, cb: (...args: any[]) => void) => unknown;
   localParticipant?: {
-    publishData: (
-      data: Uint8Array,
-      options?: { reliable?: boolean; topic?: string },
-    ) => unknown;
+    publishData: (data: Uint8Array, options?: { reliable?: boolean; topic?: string }) => unknown;
   } | null;
 }
 
@@ -114,24 +108,25 @@ const withComponentMetadata = (
 
   const tier: WidgetTier = TIER1_WIDGET_NAMES.has(component.name) ? 'tier1' : 'tier2';
   const lower = component.name.toLowerCase();
-  const group: CapabilityGroup = lower.includes('livekit') || lower.includes('caption')
-    ? 'livekit'
-    : lower.includes('research') ||
-        lower.includes('memory') ||
-        lower.includes('summary') ||
-        lower.includes('document') ||
-        lower.includes('context')
-      ? 'research'
-      : lower.includes('mcp')
-        ? 'mcp'
-        : lower.includes('timer') ||
-            lower.includes('kanban') ||
-            lower.includes('action') ||
-            lower.includes('scorecard') ||
-            lower.includes('crowd') ||
-            lower.includes('infographic')
-          ? 'widget-lifecycle'
-          : 'utility';
+  const group: CapabilityGroup =
+    lower.includes('livekit') || lower.includes('caption')
+      ? 'livekit'
+      : lower.includes('research') ||
+          lower.includes('memory') ||
+          lower.includes('summary') ||
+          lower.includes('document') ||
+          lower.includes('context')
+        ? 'research'
+        : lower.includes('mcp')
+          ? 'mcp'
+          : lower.includes('timer') ||
+              lower.includes('kanban') ||
+              lower.includes('action') ||
+              lower.includes('scorecard') ||
+              lower.includes('crowd') ||
+              lower.includes('infographic')
+            ? 'widget-lifecycle'
+            : 'utility';
   return {
     ...component,
     tier,
@@ -181,6 +176,27 @@ const ALL_COMPONENT_CAPABILITIES: ComponentCapability[] = [
     examples: ['create crowd pulse widget', 'track hand count', 'show crowd q&a'],
   },
   {
+    name: 'DiceWidget',
+    description: 'Interactive dice roller with six-die support, versus splits, and shared replay',
+    examples: [
+      'create dice widget',
+      'roll the dice',
+      'make it 3 vs 3 dice',
+      'make the first die 20 sided',
+    ],
+  },
+  {
+    name: 'CardWidget',
+    description:
+      'Interactive card flip widget with six-card support, versus hands, and optional no-suit numeric mode',
+    examples: [
+      'create card widget',
+      'flip three cards',
+      'flip hearts only from ace through ten',
+      'deal 3 vs 3 number cards with no suits',
+    ],
+  },
+  {
     name: 'McpAppWidget',
     description: 'MCP App iframe host',
     examples: ['open MCP app', 'show MCP widget'],
@@ -217,7 +233,12 @@ const ALL_COMPONENT_CAPABILITIES: ComponentCapability[] = [
   {
     name: 'LivekitParticipantTile',
     description: 'Participant video/audio tile',
-    examples: ['create participant tile', 'add participant tile', 'show participant', 'add video tile'],
+    examples: [
+      'create participant tile',
+      'add participant tile',
+      'show participant',
+      'add video tile',
+    ],
   },
   {
     name: 'LivekitScreenShareTile',
@@ -243,7 +264,7 @@ const ALL_COMPONENT_CAPABILITIES: ComponentCapability[] = [
   },
   {
     name: 'InfographicWidget',
-    description: 'AI-powered infographic generator',
+    description: 'Context-driven infographic generator with selectable image model tiers',
     examples: ['create infographic', 'generate infographic', 'visualize conversation'],
   },
   {
@@ -337,7 +358,11 @@ const ALL_TOOL_CAPABILITIES: ToolCapability[] = [
     examples: ['mcp weather', 'mcp searchVideos'],
     group: 'mcp',
   },
-  { name: 'list_components', description: 'List all components and their IDs', group: 'widget-lifecycle' },
+  {
+    name: 'list_components',
+    description: 'List all components and their IDs',
+    group: 'widget-lifecycle',
+  },
   { name: 'web_search', description: 'Search the web', group: 'research' },
   {
     name: 'create_infographic',
@@ -350,7 +375,11 @@ const ALL_TOOL_CAPABILITIES: ToolCapability[] = [
     description: 'Promote a component item onto the canvas',
     group: 'canvas',
   },
-  { name: 'respond_with_voice', description: 'Send a text response (voice disabled)', group: 'utility' },
+  {
+    name: 'respond_with_voice',
+    description: 'Send a text response (voice disabled)',
+    group: 'utility',
+  },
   { name: 'canvas_focus', description: 'Focus/zoom camera', group: 'canvas' },
   { name: 'canvas_zoom_all', description: 'Zoom to fit all shapes', group: 'canvas' },
   { name: 'canvas_create_note', description: 'Create a text note', group: 'canvas' },
@@ -420,10 +449,7 @@ const withManifest = (capabilities: SystemCapabilities): SystemCapabilities => {
   };
 };
 
-const mergeTools = (
-  defaults: ToolCapability[],
-  incoming?: ToolCapability[],
-): ToolCapability[] => {
+const mergeTools = (defaults: ToolCapability[], incoming?: ToolCapability[]): ToolCapability[] => {
   if (!Array.isArray(incoming) || incoming.length === 0) {
     return defaults;
   }
@@ -457,7 +483,8 @@ const mergeComponents = (
     map.set(component.name, {
       ...withComponentMetadata({
         name: component.name,
-        description: component.description || existing?.description || `${component.name} component`,
+        description:
+          component.description || existing?.description || `${component.name} component`,
         examples: component.examples || existing?.examples || [],
       }),
       ...(existing || {}),
@@ -479,17 +506,22 @@ export const buildCapabilitiesForProfile = (
   profile: CapabilityProfile,
   incoming?: Partial<SystemCapabilities>,
 ): SystemCapabilities => {
-  const mergedTools = mergeTools(ALL_TOOL_CAPABILITIES, incoming?.tools as ToolCapability[] | undefined);
+  const mergedTools = mergeTools(
+    ALL_TOOL_CAPABILITIES,
+    incoming?.tools as ToolCapability[] | undefined,
+  );
   const mergedComponents = mergeComponents(
     ALL_COMPONENT_CAPABILITIES,
     incoming?.components as ComponentCapability[] | undefined,
   );
-  const tools = profile === 'lean_adaptive'
-    ? mergedTools.filter((tool) => LEAN_TOOL_NAMES.has(tool.name))
-    : mergedTools;
-  const components = profile === 'lean_adaptive'
-    ? mergedComponents.filter((component) => LEAN_COMPONENT_NAMES.has(component.name))
-    : mergedComponents;
+  const tools =
+    profile === 'lean_adaptive'
+      ? mergedTools.filter((tool) => LEAN_TOOL_NAMES.has(tool.name))
+      : mergedTools;
+  const components =
+    profile === 'lean_adaptive'
+      ? mergedComponents.filter((component) => LEAN_COMPONENT_NAMES.has(component.name))
+      : mergedComponents;
 
   return withManifest({
     tools,
@@ -500,7 +532,8 @@ export const buildCapabilitiesForProfile = (
 };
 
 export const defaultCapabilities: SystemCapabilities = buildCapabilitiesForProfile('full');
-export const defaultLeanCapabilities: SystemCapabilities = buildCapabilitiesForProfile('lean_adaptive');
+export const defaultLeanCapabilities: SystemCapabilities =
+  buildCapabilitiesForProfile('lean_adaptive');
 
 interface QueryCapabilitiesOptions {
   profile?: CapabilityProfile;

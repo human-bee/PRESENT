@@ -1,0 +1,184 @@
+{
+  "runId": "business-operating-plan-gpt5-4-low-mmmmxucu",
+  "scenarioId": "business-operating-plan",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Business Operating Plan",
+  "variantLabel": "GPT-5.4 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "business",
+  "startedAt": "2026-03-11T22:53:28.352Z",
+  "completedAt": "2026-03-11T22:55:10.288Z",
+  "status": "completed",
+  "roomId": "canvas-e46166f1-ea9b-4d01-a774-47289f8b9d18",
+  "canvasId": "e46166f1-ea9b-4d01-a774-47289f8b9d18",
+  "canvasName": "business-operating-plan-gpt5-4-low-business-operating-plan-gpt5-4-low-mmmmxucu",
+  "viewerPath": "/canvas?room=canvas-e46166f1-ea9b-4d01-a774-47289f8b9d18&id=e46166f1-ea9b-4d01-a774-47289f8b9d18&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/business-operating-plan__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/business-operating-plan__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/business-operating-plan__gpt5-4-low-doc.json",
+  "finalShapeCount": 24,
+  "actionSummary": {
+    "total": 30,
+    "byName": {
+      "create_shape": 24,
+      "align": 3,
+      "stack": 3
+    }
+  },
+  "shapeSummary": {
+    "total": 24,
+    "byType": {
+      "text": 6,
+      "rectangle": 6,
+      "note": 12
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 85072,
+    "initialTtfbMs": 15211,
+    "totalActionCount": 30,
+    "totalMutatingActionCount": 30,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 30,
+    "avgFirstAckMs": 22089,
+    "avgScreenshotRttMs": 91
+  },
+  "usage": {
+    "inputTokens": 18865,
+    "outputTokens": 2082,
+    "reasoningTokens": 0,
+    "cachedInputTokens": 0,
+    "totalTokens": 20947
+  },
+  "estimatedCost": {
+    "inputUsd": 0.047162499999999996,
+    "outputUsd": 0.03123,
+    "totalUsd": 0.0783925,
+    "notes": "OpenAI GPT-5.4 text-token pricing.",
+    "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4"
+  },
+  "provider": "openai",
+  "model": "openai:gpt-5.4",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "plan-board",
+      "label": "Plan board",
+      "sessionId": "1773269623480-cvv0bu",
+      "status": "completed",
+      "actionSummary": {
+        "total": 30,
+        "byName": {
+          "create_shape": 24,
+          "align": 3,
+          "stack": 3
+        }
+      },
+      "metrics": {
+        "durationMs": 85072,
+        "ttfbMs": 15211,
+        "actionCount": 30,
+        "mutatingActionCount": 30,
+        "followupCount": 0,
+        "retryCount": 30,
+        "firstAckMs": 22089,
+        "screenshotRttMs": 91,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 18865,
+          "outputTokens": 2082,
+          "reasoningTokens": 0,
+          "cachedInputTokens": 0,
+          "totalTokens": 20947
+        },
+        "estimatedCostUsd": 0.0783925
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773269623480-cvv0bu",
+          "roomId": "canvas-e46166f1-ea9b-4d01-a774-47289f8b9d18",
+          "ts": 1773269623481,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773269623480-cvv0bu",
+          "roomId": "canvas-e46166f1-ea9b-4d01-a774-47289f8b9d18",
+          "ts": 1773269635507,
+          "preset": "creative",
+          "request_id": "1d404bc7-405a-489b-a6da-f2f627ad40d8",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773269623480-cvv0bu",
+          "roomId": "canvas-e46166f1-ea9b-4d01-a774-47289f8b9d18",
+          "ts": 1773269635898,
+          "preset": "creative",
+          "request_id": "bdd08a43-5742-405b-9a5d-c8c05eb2f726",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 91,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773269623480-cvv0bu",
+          "roomId": "canvas-e46166f1-ea9b-4d01-a774-47289f8b9d18",
+          "ts": 1773269636014,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773269623480-cvv0bu",
+          "roomId": "canvas-e46166f1-ea9b-4d01-a774-47289f8b9d18",
+          "ts": 1773269638692,
+          "preset": "creative",
+          "ttfb": 15211,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773269623480-cvv0bu",
+          "roomId": "canvas-e46166f1-ea9b-4d01-a774-47289f8b9d18",
+          "ts": 1773269708551,
+          "preset": "creative",
+          "duration": 85070,
+          "chunkCount": 31,
+          "actionCount": 30,
+          "mutatingActionCount": 30,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 30,
+          "first_ack_ms": 22089,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 92,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 7,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 30 time(s)."
+    ]
+  }
+}

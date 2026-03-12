@@ -1,0 +1,163 @@
+{
+  "runId": "call-ready-hero-board-haiku-4-5-mmm0d55r",
+  "scenarioId": "call-ready-hero-board",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Call-Ready Hero Board",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "realtime",
+  "startedAt": "2026-03-11T12:21:31.197Z",
+  "completedAt": "2026-03-11T12:22:10.722Z",
+  "status": "completed",
+  "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+  "canvasId": "7cd2359a-8112-4697-9889-a65f6969cbb2",
+  "canvasName": "call-ready-hero-board-haiku-4-5-call-ready-hero-board-haiku-4-5-mmm0d55r",
+  "viewerPath": "/canvas?room=canvas-7cd2359a-8112-4697-9889-a65f6969cbb2&id=7cd2359a-8112-4697-9889-a65f6969cbb2&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__haiku-4-5-doc.json",
+  "finalShapeCount": 5,
+  "actionSummary": {
+    "total": 9,
+    "byName": {
+      "create_shape": 5,
+      "align": 2,
+      "stack": 1,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 28572,
+    "initialTtfbMs": 7122,
+    "totalActionCount": 9,
+    "totalMutatingActionCount": 9,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 9,
+    "avgFirstAckMs": 12887,
+    "avgScreenshotRttMs": 25
+  },
+  "steps": [
+    {
+      "stepId": "hero-board",
+      "label": "Hero board",
+      "sessionId": "1773231700580-4b928l",
+      "status": "completed",
+      "actionSummary": {
+        "total": 9,
+        "byName": {
+          "create_shape": 5,
+          "align": 2,
+          "stack": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 28572,
+        "ttfbMs": 7122,
+        "actionCount": 9,
+        "mutatingActionCount": 9,
+        "followupCount": 0,
+        "retryCount": 9,
+        "firstAckMs": 12887,
+        "screenshotRttMs": 25,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773231700580-4b928l",
+          "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+          "ts": 1773231700581,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773231700580-4b928l",
+          "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+          "ts": 1773231700612,
+          "preset": "creative",
+          "request_id": "4e25b635-fd65-4423-b8b6-34d9ab3161f4",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 25,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773231700580-4b928l",
+          "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+          "ts": 1773231700717,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773231700580-4b928l",
+          "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+          "ts": 1773231707703,
+          "preset": "creative",
+          "ttfb": 7122,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773231700580-4b928l",
+          "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+          "ts": 1773231729152,
+          "preset": "creative",
+          "duration": 28571,
+          "chunkCount": 10,
+          "actionCount": 9,
+          "mutatingActionCount": 9,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 9,
+          "first_ack_ms": 12887,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 89,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 29,
+      "requiredVerbs": 35,
+      "preferredVerbs": 10,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Shape count below target (5/6).",
+      "Retries recorded 9 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 5,
+    "byType": {
+      "box": 1,
+      "note": 4
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows two sticky notes, one red labeled 'LIVE REVIEW' with a red outline, and one orange with 'Key insight' and 'Next step'.",
+    "scoreRationale": "The score reflects a mostly complete and stable layout with proper shape creation and basic alignment, but limited complexity and actions.",
+    "strengths": [
+      "Clear labeling with relevant keywords",
+      "Neat alignment of shapes with a visible outline"
+    ],
+    "issues": [
+      "Low shape count compared to rubric target",
+      "Limited variety of actions and interactions"
+    ]
+  }
+}

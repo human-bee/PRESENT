@@ -20,6 +20,7 @@ export type LiveTranscriptionPayload = {
 export type MultiParticipantTranscriptionOptions = {
   room: Room;
   maxParticipants: number;
+  realtimeModel?: string;
   model: string;
   language?: string;
   inputAudioNoiseReduction?: RealtimeNoiseReductionOption | null;
@@ -61,6 +62,7 @@ const getSpeakerLabel = (participant: any): string => {
 export class MultiParticipantTranscriptionManager {
   private room: Room;
   private maxParticipants: number;
+  private realtimeModel?: string;
   private model: string;
   private language?: string;
   private inputAudioNoiseReduction?: RealtimeNoiseReductionOption | null;
@@ -76,6 +78,7 @@ export class MultiParticipantTranscriptionManager {
   constructor(options: MultiParticipantTranscriptionOptions) {
     this.room = options.room;
     this.maxParticipants = Math.max(1, Math.floor(options.maxParticipants));
+    this.realtimeModel = options.realtimeModel;
     this.model = options.model;
     this.language = options.language;
     this.inputAudioNoiseReduction = options.inputAudioNoiseReduction;
@@ -225,6 +228,7 @@ export class MultiParticipantTranscriptionManager {
     });
 
     const llm = new openaiRealtime.RealtimeModel({
+      ...(this.realtimeModel ? { model: this.realtimeModel } : {}),
       inputAudioTranscription: {
         model: this.model,
         ...(this.language ? { language: this.language } : {}),

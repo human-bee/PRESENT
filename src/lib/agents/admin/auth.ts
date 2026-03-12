@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { headers } from 'next/headers';
 import { getBooleanFlag, parseCsvFlag } from '@/lib/feature-flags';
 import { resolveRequestUser } from '@/lib/supabase/server/resolve-request-user';
 
@@ -89,4 +90,16 @@ export async function requireAgentAdminActionUserId(
   req: NextRequest,
 ): Promise<AgentAdminAuthResult> {
   return requireAgentAdminUser(req, { allowOpenAccess: false });
+}
+
+export async function requireAgentAdminCurrentUserId(
+  pathname = '/admin/agents',
+): Promise<AgentAdminAuthResult> {
+  const headerList = await headers();
+  const protocol = headerList.get('x-forwarded-proto') || 'http';
+  const host = headerList.get('x-forwarded-host') || headerList.get('host') || 'localhost';
+  const req = new Request(`${protocol}://${host}${pathname}`, {
+    headers: new Headers(headerList),
+  }) as unknown as NextRequest;
+  return requireAgentAdminUser(req, { allowOpenAccess: true });
 }

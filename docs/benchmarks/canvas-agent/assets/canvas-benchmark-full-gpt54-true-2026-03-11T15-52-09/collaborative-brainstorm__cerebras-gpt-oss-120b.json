@@ -1,0 +1,173 @@
+{
+  "runId": "collaborative-brainstorm-cerebras-gpt-oss-120b-mmmn9nv1",
+  "scenarioId": "collaborative-brainstorm",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Collaborative Brainstorm",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "brainstorm",
+  "startedAt": "2026-03-11T23:02:39.590Z",
+  "completedAt": "2026-03-11T23:02:56.515Z",
+  "status": "completed",
+  "roomId": "canvas-62deb163-33c0-47f4-bad1-34cc410062ea",
+  "canvasId": "62deb163-33c0-47f4-bad1-34cc410062ea",
+  "canvasName": "collaborative-brainstorm-cerebras-gpt-oss-120b-collaborative-brainstorm-cerebras-gpt-oss-120b-mmmn9nv1",
+  "viewerPath": "/canvas?room=canvas-62deb163-33c0-47f4-bad1-34cc410062ea&id=62deb163-33c0-47f4-bad1-34cc410062ea&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/collaborative-brainstorm__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/collaborative-brainstorm__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/collaborative-brainstorm__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 5,
+  "actionSummary": {
+    "total": 7,
+    "byName": {
+      "create_shape": 5,
+      "align": 1,
+      "stack": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 5,
+    "byType": {
+      "rectangle": 3,
+      "note": 2
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 5306,
+    "initialTtfbMs": 1918,
+    "totalActionCount": 7,
+    "totalMutatingActionCount": 7,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 1,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": 27
+  },
+  "usage": {
+    "inputTokens": 18865,
+    "outputTokens": 1641,
+    "reasoningTokens": null,
+    "cachedInputTokens": null,
+    "totalTokens": 20506
+  },
+  "estimatedCost": {
+    "inputUsd": 0.00471625,
+    "outputUsd": 0.00113229,
+    "totalUsd": 0.00584854,
+    "notes": "Cerebras Cloud gpt-oss-120b list pricing.",
+    "sourceUrl": "https://www.cerebras.ai/blog/cerebras-launches-openai-s-gpt-oss-120b-at-a-blistering-3-000-tokens-sec"
+  },
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "theme-clusters",
+      "label": "Theme clusters",
+      "sessionId": "1773270169537-gjpuju",
+      "status": "completed",
+      "actionSummary": {
+        "total": 7,
+        "byName": {
+          "create_shape": 5,
+          "align": 1,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 5306,
+        "ttfbMs": 1918,
+        "actionCount": 7,
+        "mutatingActionCount": 7,
+        "followupCount": 0,
+        "retryCount": 1,
+        "firstAckMs": null,
+        "screenshotRttMs": 27,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 18865,
+          "outputTokens": 1641,
+          "reasoningTokens": null,
+          "cachedInputTokens": null,
+          "totalTokens": 20506
+        },
+        "estimatedCostUsd": 0.00584854
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773270169537-gjpuju",
+          "roomId": "canvas-62deb163-33c0-47f4-bad1-34cc410062ea",
+          "ts": 1773270169538,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773270169537-gjpuju",
+          "roomId": "canvas-62deb163-33c0-47f4-bad1-34cc410062ea",
+          "ts": 1773270169571,
+          "preset": "creative",
+          "request_id": "59be7e68-def6-4929-b63a-397b7cd5590f",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 27,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773270169537-gjpuju",
+          "roomId": "canvas-62deb163-33c0-47f4-bad1-34cc410062ea",
+          "ts": 1773270169687,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773270169537-gjpuju",
+          "roomId": "canvas-62deb163-33c0-47f4-bad1-34cc410062ea",
+          "ts": 1773270171456,
+          "preset": "creative",
+          "ttfb": 1918,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773270169537-gjpuju",
+          "roomId": "canvas-62deb163-33c0-47f4-bad1-34cc410062ea",
+          "ts": 1773270174843,
+          "preset": "creative",
+          "duration": 5305,
+          "chunkCount": 1,
+          "actionCount": 7,
+          "mutatingActionCount": 7,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 1,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 78,
+    "grade": "strong",
+    "rubric": {
+      "shapes": 19,
+      "requiredVerbs": 35,
+      "preferredVerbs": 5,
+      "screenshot": 10,
+      "stability": 9
+    },
+    "notes": [
+      "Shape count below target (5/9).",
+      "Retries recorded 1 time(s)."
+    ]
+  }
+}

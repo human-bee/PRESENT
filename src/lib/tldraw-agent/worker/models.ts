@@ -36,6 +36,11 @@ export const AGENT_MODEL_DEFINITIONS = {
 		id: 'claude-sonnet-4-5-20250929',
 		provider: 'anthropic',
 	},
+	'gpt-5.4': {
+		name: 'gpt-5.4',
+		id: 'gpt-5.4',
+		provider: 'openai',
+	},
 	'gpt-5': {
 		name: 'gpt-5',
 		id: 'gpt-5',

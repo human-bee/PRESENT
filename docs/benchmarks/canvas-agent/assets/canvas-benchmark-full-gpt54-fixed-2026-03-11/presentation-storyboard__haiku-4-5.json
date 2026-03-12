@@ -1,0 +1,66 @@
+{
+  "runId": "presentation-storyboard-haiku-4-5-mmmll9it",
+  "scenarioId": "presentation-storyboard",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Presentation Storyboard",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "presentation",
+  "startedAt": "2026-03-11T22:15:41.623Z",
+  "completedAt": "2026-03-11T22:15:41.624Z",
+  "status": "failed",
+  "roomId": "canvas-27e880c8-6d5a-487f-a0d6-63bc42c36b20",
+  "canvasId": "27e880c8-6d5a-487f-a0d6-63bc42c36b20",
+  "canvasName": "presentation-storyboard-haiku-4-5-presentation-storyboard-haiku-4-5-mmmll9it",
+  "viewerPath": "/canvas?room=canvas-27e880c8-6d5a-487f-a0d6-63bc42c36b20&id=27e880c8-6d5a-487f-a0d6-63bc42c36b20&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": {
+    "summary": "Visual analysis failed.",
+    "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__haiku-4-5.png'",
+    "strengths": [],
+    "issues": [
+      "Analysis pass failed for this artifact."
+    ]
+  },
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

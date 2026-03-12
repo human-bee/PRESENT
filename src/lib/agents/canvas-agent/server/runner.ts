@@ -2,7 +2,14 @@ import { randomUUID } from 'crypto';
 import { selectModel } from './models';
 import { buildPromptParts } from './context';
 import { sanitizeActions } from './sanitize';
-import { requestScreenshot, sendActionsEnvelope, sendChat, sendStatus, sendTrace, awaitAck } from './wire';
+import {
+  requestScreenshot,
+  sendActionsEnvelope,
+  sendChat,
+  sendStatus,
+  sendTrace,
+  awaitAck,
+} from './wire';
 import { broadcastToolCall } from '@/lib/agents/shared/supabase-context';
 import type { CanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
 import { ACTION_VERSION } from '@/lib/canvas-agent/contract/types';
@@ -20,17 +27,27 @@ import { BRAND_PRESETS } from '@/lib/brand/brand-presets';
 import { validateCanonicalAction } from '@/lib/canvas-agent/contract/tooling/catalog';
 import { resolveShapeType, sanitizeShapeProps } from '@/lib/canvas-agent/contract/shape-utils';
 import { CANVAS_AGENT_SYSTEM_PROMPT } from '@/lib/canvas-agent/contract/system-prompt';
-import { loadCanvasAgentConfig, type CanvasAgentConfig, type CanvasConfigOverrides } from './config';
+import {
+  loadCanvasAgentConfig,
+  type CanvasAgentConfig,
+  type CanvasConfigOverrides,
+} from './config';
 import { convertTeacherAction } from '@/lib/canvas-agent/contract/teacher-bridge';
 import type { TeacherPromptContext } from '@/lib/canvas-agent/teacher-runtime/prompt';
 import { buildTeacherContextItems } from '@/lib/canvas-agent/teacher-runtime/context-items';
-import { buildTeacherChatHistory, type TranscriptEntry } from '@/lib/canvas-agent/teacher-runtime/chat-history';
+import {
+  buildTeacherChatHistory,
+  type TranscriptEntry,
+} from '@/lib/canvas-agent/teacher-runtime/chat-history';
 import {
   getTeacherRuntimeLastError,
   getTeacherServiceForEndpoint,
   type TeacherService,
 } from '@/lib/canvas-agent/teacher-runtime/service-client';
-import { normalizeFairyContextProfile, type FairyContextProfile } from '@/lib/fairy-context/profiles';
+import {
+  normalizeFairyContextProfile,
+  type FairyContextProfile,
+} from '@/lib/fairy-context/profiles';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { enqueueCanvasFollowup, type CanvasFollowupInput } from './followup-queue';
 import {
@@ -39,10 +56,7 @@ import {
   resolveMissingTargetIds,
 } from './target-id-contract';
 import type { JsonObject } from '@/lib/utils/json-schema';
-import {
-  recordModelIoEvent,
-  recordToolIoEvent,
-} from '@/lib/agents/shared/replay-telemetry';
+import { recordModelIoEvent, recordToolIoEvent } from '@/lib/agents/shared/replay-telemetry';
 import {
   describeRetryError,
   isRetryableProviderError,
@@ -67,14 +81,16 @@ const getDurableFollowupQueue = (): AgentTaskQueue | null => {
     durableFollowupQueue = null;
     if (!durableFollowupQueueWarningLogged) {
       durableFollowupQueueWarningLogged = true;
-      console.warn('[CanvasAgent:Followups] durable queue unavailable, falling back to in-session scheduler', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      console.warn(
+        '[CanvasAgent:Followups] durable queue unavailable, falling back to in-session scheduler',
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
   }
   return durableFollowupQueue;
 };
-
 
 export type CanvasAgentHooks = {
   onActions?: (payload: {
@@ -84,6 +100,19 @@ export type CanvasAgentHooks = {
     partial: boolean;
     source: 'present' | 'teacher';
     actions: AgentAction[];
+  }) => void;
+  onMetricEvent?: (payload: CanvasMetricEventPayload) => void;
+  onModelTelemetry?: (payload: {
+    roomId: string;
+    sessionId: string;
+    phase: 'initial' | 'followup';
+    depth: number;
+    provider: string;
+    model: string;
+    usage?: unknown;
+    providerMetadata?: unknown;
+    request?: unknown;
+    response?: unknown;
   }) => void;
 };
 
@@ -114,50 +143,72 @@ const INVOKE_RETRY_ATTEMPTS = parseRetryEnvInt(process.env.CANVAS_AGENT_INVOKE_R
   min: 1,
   max: 8,
 });
-const INVOKE_RETRY_BASE_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_INVOKE_RETRY_BASE_DELAY_MS, 300, {
-  min: 0,
-  max: 10_000,
-});
-const INVOKE_RETRY_MAX_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_INVOKE_RETRY_MAX_DELAY_MS, 4_000, {
-  min: 1,
-  max: 30_000,
-});
-const FOLLOWUP_INVOKE_RETRY_ATTEMPTS = parseRetryEnvInt(process.env.CANVAS_AGENT_FOLLOWUP_INVOKE_RETRY_ATTEMPTS, 3, {
-  min: 1,
-  max: 8,
-});
-const FOLLOWUP_INVOKE_RETRY_BASE_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_FOLLOWUP_INVOKE_RETRY_BASE_DELAY_MS, 400, {
-  min: 0,
-  max: 10_000,
-});
-const FOLLOWUP_INVOKE_RETRY_MAX_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_FOLLOWUP_INVOKE_RETRY_MAX_DELAY_MS, 5_000, {
-  min: 1,
-  max: 30_000,
-});
-const FOLLOWUP_LOOP_BASE_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_FOLLOWUP_LOOP_BASE_DELAY_MS, 300, {
-  min: 0,
-  max: 5_000,
-});
-const FOLLOWUP_LOOP_MAX_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_FOLLOWUP_LOOP_MAX_DELAY_MS, 2_500, {
-  min: 1,
-  max: 15_000,
-});
+const INVOKE_RETRY_BASE_DELAY_MS = parseRetryEnvInt(
+  process.env.CANVAS_AGENT_INVOKE_RETRY_BASE_DELAY_MS,
+  300,
+  {
+    min: 0,
+    max: 10_000,
+  },
+);
+const INVOKE_RETRY_MAX_DELAY_MS = parseRetryEnvInt(
+  process.env.CANVAS_AGENT_INVOKE_RETRY_MAX_DELAY_MS,
+  4_000,
+  {
+    min: 1,
+    max: 30_000,
+  },
+);
+const FOLLOWUP_INVOKE_RETRY_ATTEMPTS = parseRetryEnvInt(
+  process.env.CANVAS_AGENT_FOLLOWUP_INVOKE_RETRY_ATTEMPTS,
+  3,
+  {
+    min: 1,
+    max: 8,
+  },
+);
+const FOLLOWUP_INVOKE_RETRY_BASE_DELAY_MS = parseRetryEnvInt(
+  process.env.CANVAS_AGENT_FOLLOWUP_INVOKE_RETRY_BASE_DELAY_MS,
+  400,
+  {
+    min: 0,
+    max: 10_000,
+  },
+);
+const FOLLOWUP_INVOKE_RETRY_MAX_DELAY_MS = parseRetryEnvInt(
+  process.env.CANVAS_AGENT_FOLLOWUP_INVOKE_RETRY_MAX_DELAY_MS,
+  5_000,
+  {
+    min: 1,
+    max: 30_000,
+  },
+);
+const FOLLOWUP_LOOP_BASE_DELAY_MS = parseRetryEnvInt(
+  process.env.CANVAS_AGENT_FOLLOWUP_LOOP_BASE_DELAY_MS,
+  300,
+  {
+    min: 0,
+    max: 5_000,
+  },
+);
+const FOLLOWUP_LOOP_MAX_DELAY_MS = parseRetryEnvInt(
+  process.env.CANVAS_AGENT_FOLLOWUP_LOOP_MAX_DELAY_MS,
+  2_500,
+  {
+    min: 1,
+    max: 15_000,
+  },
+);
 
 const computeInvokeRetryDelayMs = (attempt: number) =>
-  Math.min(
-    INVOKE_RETRY_MAX_DELAY_MS,
-    INVOKE_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1),
-  );
+  Math.min(INVOKE_RETRY_MAX_DELAY_MS, INVOKE_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1));
 const computeFollowupInvokeRetryDelayMs = (attempt: number) =>
   Math.min(
     FOLLOWUP_INVOKE_RETRY_MAX_DELAY_MS,
     FOLLOWUP_INVOKE_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1),
   );
 const computeFollowupLoopDelayMs = (depth: number) =>
-  Math.min(
-    FOLLOWUP_LOOP_MAX_DELAY_MS,
-    FOLLOWUP_LOOP_BASE_DELAY_MS * 2 ** Math.max(0, depth - 1),
-  );
+  Math.min(FOLLOWUP_LOOP_MAX_DELAY_MS, FOLLOWUP_LOOP_BASE_DELAY_MS * 2 ** Math.max(0, depth - 1));
 
 const CLIENT_DISPATCHABLE_ACTIONS = new Set<string>([
   'create_shape',
@@ -219,23 +270,29 @@ const normalizeInitialFollowup = (
   fallbackDepth: number,
 ): CanvasFollowupInput | null => {
   if (!input || typeof input !== 'object') return null;
-  const message = typeof input.message === 'string' && input.message.trim().length > 0
-    ? input.message.trim()
-    : fallbackMessage;
-  const originalMessage = typeof input.originalMessage === 'string' && input.originalMessage.trim().length > 0
-    ? input.originalMessage.trim()
-    : fallbackMessage;
+  const message =
+    typeof input.message === 'string' && input.message.trim().length > 0
+      ? input.message.trim()
+      : fallbackMessage;
+  const originalMessage =
+    typeof input.originalMessage === 'string' && input.originalMessage.trim().length > 0
+      ? input.originalMessage.trim()
+      : fallbackMessage;
   const depth = Number.isFinite(input.depth) ? Math.max(0, Math.floor(input.depth)) : fallbackDepth;
   const normalized: CanvasFollowupInput = {
     message,
     originalMessage,
     depth,
   };
-  if (typeof input.hint === 'string' && input.hint.trim().length > 0) normalized.hint = input.hint.trim();
-  if (typeof input.reason === 'string' && input.reason.trim().length > 0) normalized.reason = input.reason.trim();
+  if (typeof input.hint === 'string' && input.hint.trim().length > 0)
+    normalized.hint = input.hint.trim();
+  if (typeof input.reason === 'string' && input.reason.trim().length > 0)
+    normalized.reason = input.reason.trim();
   if (input.strict === true) normalized.strict = true;
   if (Array.isArray(input.targetIds)) {
-    const targetIds = input.targetIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+    const targetIds = input.targetIds.filter(
+      (id): id is string => typeof id === 'string' && id.trim().length > 0,
+    );
     if (targetIds.length > 0) {
       normalized.targetIds = Array.from(new Set(targetIds));
     }
@@ -255,9 +312,13 @@ function loadScreenshotInbox() {
 
 const isPromptTooLongError = (error: unknown): boolean => {
   if (!error || typeof error !== 'object') return false;
-  const direct = typeof (error as any)?.message === 'string' ? String((error as any).message).toLowerCase() : '';
+  const direct =
+    typeof (error as any)?.message === 'string' ? String((error as any).message).toLowerCase() : '';
   if (direct.includes('prompt is too long')) return true;
-  const nested = typeof (error as any)?.data?.error?.message === 'string' ? String((error as any).data.error.message).toLowerCase() : '';
+  const nested =
+    typeof (error as any)?.data?.error?.message === 'string'
+      ? String((error as any).data.error.message).toLowerCase()
+      : '';
   return nested.includes('prompt is too long');
 };
 
@@ -273,7 +334,9 @@ const isStructuredOutputSchemaRetryableError = (error: unknown): boolean => {
   const message = typeof candidate.message === 'string' ? candidate.message.toLowerCase() : '';
   const text = typeof candidate.text === 'string' ? candidate.text.toLowerCase() : '';
   const causeMessage =
-    candidate.cause && typeof candidate.cause === 'object' && typeof (candidate.cause as any).message === 'string'
+    candidate.cause &&
+    typeof candidate.cause === 'object' &&
+    typeof (candidate.cause as any).message === 'string'
       ? String((candidate.cause as any).message).toLowerCase()
       : '';
   const combined = `${name} ${message} ${causeMessage}`;
@@ -316,10 +379,7 @@ const BRAND_COLOR_ALIASES: Record<string, string> = {
   citrus: 'yellow',
 };
 
-const resolveTranscriptWindowMs = (
-  profile: FairyContextProfile | undefined,
-  defaultMs: number,
-) => {
+const resolveTranscriptWindowMs = (profile: FairyContextProfile | undefined, defaultMs: number) => {
   if (!profile) return defaultMs;
   if (profile === 'glance') return Math.min(defaultMs, 30_000);
   if (profile === 'deep') return Math.max(defaultMs, 180_000);
@@ -343,7 +403,9 @@ const mapTodosToTeacherItems = (todos: StoredTodoItem[]) => {
         status,
       } as { id: number; text: string; status: 'todo' | 'in-progress' | 'done' };
     })
-    .filter((item): item is { id: number; text: string; status: 'todo' | 'in-progress' | 'done' } => Boolean(item));
+    .filter((item): item is { id: number; text: string; status: 'todo' | 'in-progress' | 'done' } =>
+      Boolean(item),
+    );
 };
 
 const asObjectRecord = (value: unknown): Record<string, unknown> | null => {
@@ -428,26 +490,33 @@ const buildPromptTelemetrySnapshot = (input: {
     contextProfile: input.contextProfile ?? null,
     contextSkills,
     contextWindow: {
-      transcriptLines: Array.isArray((parts as any).transcript) ? (parts as any).transcript.length : 0,
+      transcriptLines: Array.isArray((parts as any).transcript)
+        ? (parts as any).transcript.length
+        : 0,
       shapeCount: Array.isArray((parts as any).shapes) ? (parts as any).shapes.length : 0,
-      selectedCount: Array.isArray((parts as any).selectedSimpleShapes) ? (parts as any).selectedSimpleShapes.length : 0,
-      blurryCount: Array.isArray((parts as any).blurryShapes) ? (parts as any).blurryShapes.length : 0,
-      peripheralCount: Array.isArray((parts as any).peripheralClusters) ? (parts as any).peripheralClusters.length : 0,
+      selectedCount: Array.isArray((parts as any).selectedSimpleShapes)
+        ? (parts as any).selectedSimpleShapes.length
+        : 0,
+      blurryCount: Array.isArray((parts as any).blurryShapes)
+        ? (parts as any).blurryShapes.length
+        : 0,
+      peripheralCount: Array.isArray((parts as any).peripheralClusters)
+        ? (parts as any).peripheralClusters.length
+        : 0,
     },
     promptBudget: (parts as any).promptBudget ?? null,
     viewport: (parts as any).viewport ?? null,
-    screenshot:
-      asObjectRecord((parts as any).screenshot)
-        ? {
-            mime: (parts as any).screenshot?.mime ?? null,
-            bytes: (parts as any).screenshot?.bytes ?? null,
-            width: (parts as any).screenshot?.width ?? null,
-            height: (parts as any).screenshot?.height ?? null,
-            bounds: (parts as any).screenshot?.bounds ?? null,
-            requestId: (parts as any).screenshot?.requestId ?? null,
-            receivedAt: (parts as any).screenshot?.receivedAt ?? null,
-          }
-        : null,
+    screenshot: asObjectRecord((parts as any).screenshot)
+      ? {
+          mime: (parts as any).screenshot?.mime ?? null,
+          bytes: (parts as any).screenshot?.bytes ?? null,
+          width: (parts as any).screenshot?.width ?? null,
+          height: (parts as any).screenshot?.height ?? null,
+          bounds: (parts as any).screenshot?.bounds ?? null,
+          requestId: (parts as any).screenshot?.requestId ?? null,
+          receivedAt: (parts as any).screenshot?.receivedAt ?? null,
+        }
+      : null,
     styleInstructions: truncateText((parts as any).styleInstructions, 2400),
     fewShotExamples: summarizeFewShotExamples((parts as any).fewShotExamples),
     toolCatalog: summarizeToolCatalog((parts as any).toolCatalog),
@@ -470,7 +539,8 @@ const readStructuredTelemetry = async (stream: {
       return null;
     }
   };
-  const usage = await safeResolve(stream.totalUsage ?? stream.usage);
+  const totalUsage = await safeResolve(stream.totalUsage);
+  const usage = totalUsage ?? (await safeResolve(stream.usage));
   const providerMetadata = await safeResolve(stream.providerMetadata);
   const request = await safeResolve(stream.request);
   const response = await safeResolve(stream.response);
@@ -521,14 +591,21 @@ const coerceNumeric = (value: unknown): number | undefined => {
 const expandMacroAction = (rawAction: Record<string, any>): Record<string, any>[] | null => {
   if (!rawAction || typeof rawAction !== 'object') return null;
   if (rawAction.name !== 'apply_preset') return null;
-  const params = typeof rawAction.params === 'object' && rawAction.params !== null ? { ...(rawAction.params as Record<string, any>) } : {};
+  const params =
+    typeof rawAction.params === 'object' && rawAction.params !== null
+      ? { ...(rawAction.params as Record<string, any>) }
+      : {};
   const presetName = resolvePresetName(params.preset ?? params.name ?? params.style);
   if (!presetName) return [];
   const preset = BRAND_PRESETS[presetName];
   const targetIds = Array.isArray(params.targetIds)
-    ? params.targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+    ? params.targetIds.filter(
+        (id: unknown): id is string => typeof id === 'string' && id.trim().length > 0,
+      )
     : [];
-  const typeCandidate = resolveShapeType(params.shape ?? params.type ?? (targetIds.length === 0 ? 'note' : undefined));
+  const typeCandidate = resolveShapeType(
+    params.shape ?? params.type ?? (targetIds.length === 0 ? 'note' : undefined),
+  );
   const resolvedType = typeCandidate ?? (targetIds.length > 0 ? 'note' : 'note');
   const overrides = typeof params.props === 'object' && params.props !== null ? params.props : {};
   const baseProps = sanitizeProps({ ...preset, ...overrides }, resolvedType);
@@ -545,7 +622,10 @@ const expandMacroAction = (rawAction: Record<string, any>): Record<string, any>[
   const y = coerceNumeric(params.y) ?? 0;
   const w = coerceNumeric(params.w ?? params.width) ?? 240;
   const h = coerceNumeric(params.h ?? params.height) ?? 160;
-  const text = typeof params.text === 'string' && params.text.trim().length > 0 ? params.text.trim() : presetName;
+  const text =
+    typeof params.text === 'string' && params.text.trim().length > 0
+      ? params.text.trim()
+      : presetName;
   const createId =
     typeof params.id === 'string' && params.id.trim().length > 0
       ? params.id.trim()
@@ -609,14 +689,29 @@ type SessionMetrics = {
   examplesCount?: number;
 };
 
+export type CanvasMetricEventPayload = {
+  event: 'start' | 'context' | 'ttfb' | 'complete' | 'error' | 'screenshot';
+  sessionId: string;
+  roomId: string;
+  ts: number;
+  preset?: string;
+  [key: string]: unknown;
+};
+
 function logMetrics(
   metrics: SessionMetrics,
   cfg: CanvasAgentConfig,
   event: 'start' | 'context' | 'ttfb' | 'complete' | 'error' | 'screenshot',
   detail?: unknown,
+  onMetricEvent?: (payload: CanvasMetricEventPayload) => void,
 ) {
-  if (!cfg.debug) return;
-  const payload: Record<string, unknown> = { event, sessionId: metrics.sessionId, roomId: metrics.roomId, ts: Date.now() };
+  if (!cfg.debug && !onMetricEvent) return;
+  const payload: CanvasMetricEventPayload = {
+    event,
+    sessionId: metrics.sessionId,
+    roomId: metrics.roomId,
+    ts: Date.now(),
+  };
   if (metrics.preset) payload.preset = metrics.preset;
   if (event === 'ttfb' && metrics.ttfb !== undefined) {
     payload.ttfb = metrics.ttfb;
@@ -627,7 +722,8 @@ function logMetrics(
     if (metrics.blurryCount !== undefined) payload.blurry_count = metrics.blurryCount;
     if (metrics.peripheralCount !== undefined) payload.peripheral_count = metrics.peripheralCount;
     if (metrics.tokenBudgetMax !== undefined) payload.token_budget_max = metrics.tokenBudgetMax;
-    if (metrics.transcriptTokenEstimate !== undefined) payload.transcript_tokens = metrics.transcriptTokenEstimate;
+    if (metrics.transcriptTokenEstimate !== undefined)
+      payload.transcript_tokens = metrics.transcriptTokenEstimate;
     if (metrics.selectedCount !== undefined) payload.selected_count = metrics.selectedCount;
     if (metrics.examplesCount !== undefined) payload.examples_count = metrics.examplesCount;
   }
@@ -654,22 +750,34 @@ function logMetrics(
   if (event === 'error') {
     payload.error = detail;
   }
-  try { console.log('[CanvasAgent:Metrics]', JSON.stringify(payload)); } catch {}
+  onMetricEvent?.(payload);
+  if (cfg.debug) {
+    try {
+      console.log('[CanvasAgent:Metrics]', JSON.stringify(payload));
+    } catch {}
+  }
 }
 
 export async function runCanvasAgent(args: RunArgs) {
   const { roomId, userMessage: rawUserMessage, model, hooks: hookOverrides } = args;
   const hooks = hookOverrides ?? {};
-  const userMessage = rawUserMessage.trim().length > 0
-    ? rawUserMessage.trim()
-    : 'Improve the layout. Clarify hierarchy and polish typography.';
+  const userMessage =
+    rawUserMessage.trim().length > 0
+      ? rawUserMessage.trim()
+      : 'Improve the layout. Clarify hierarchy and polish typography.';
   const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const requestId =
-    typeof args.requestId === 'string' && args.requestId.trim().length > 0 ? args.requestId.trim() : undefined;
+    typeof args.requestId === 'string' && args.requestId.trim().length > 0
+      ? args.requestId.trim()
+      : undefined;
   const traceId =
-    typeof args.traceId === 'string' && args.traceId.trim().length > 0 ? args.traceId.trim() : requestId;
+    typeof args.traceId === 'string' && args.traceId.trim().length > 0
+      ? args.traceId.trim()
+      : requestId;
   const intentId =
-    typeof args.intentId === 'string' && args.intentId.trim().length > 0 ? args.intentId.trim() : requestId;
+    typeof args.intentId === 'string' && args.intentId.trim().length > 0
+      ? args.intentId.trim()
+      : requestId;
   const correlation =
     traceId || intentId || requestId
       ? {
@@ -774,8 +882,11 @@ export async function runCanvasAgent(args: RunArgs) {
     currentFollowupDepth,
   );
   const runMetadata =
-    args.metadata && typeof args.metadata === 'object' && !Array.isArray(args.metadata) ? args.metadata : undefined;
-  const hasExplicitTargetContract = Array.isArray(initialFollowup?.targetIds) && initialFollowup.targetIds.length > 0;
+    args.metadata && typeof args.metadata === 'object' && !Array.isArray(args.metadata)
+      ? args.metadata
+      : undefined;
+  const hasExplicitTargetContract =
+    Array.isArray(initialFollowup?.targetIds) && initialFollowup.targetIds.length > 0;
   const cfg = loadCanvasAgentConfig(process.env, args.configOverrides);
   if (cfg.mode === 'tldraw-teacher') {
     console.info('[CanvasAgent] running in tldraw-teacher mode (vendored TLDraw agent active)', {
@@ -820,13 +931,16 @@ export async function runCanvasAgent(args: RunArgs) {
   const durableQueue = cfg.followups.durable ? getDurableFollowupQueue() : null;
   if (cfg.debug) {
     try {
-      console.log('[CanvasAgent:FollowupsMode]', JSON.stringify({
-        roomId,
-        sessionId,
-        depth: currentFollowupDepth,
-        configuredDurable: cfg.followups.durable,
-        activeMode: durableQueue ? 'durable-queue' : 'session-memory',
-      }));
+      console.log(
+        '[CanvasAgent:FollowupsMode]',
+        JSON.stringify({
+          roomId,
+          sessionId,
+          depth: currentFollowupDepth,
+          configuredDurable: cfg.followups.durable,
+          activeMode: durableQueue ? 'durable-queue' : 'session-memory',
+        }),
+      );
     } catch {}
   }
   const shapeTypeById = new Map<string, string>();
@@ -849,6 +963,8 @@ export async function runCanvasAgent(args: RunArgs) {
     retryCount: 0,
     preset: cfg.preset,
   };
+  const emitMetricEvent = (event: CanvasMetricEventPayload['event'], detail?: unknown) =>
+    logMetrics(metrics, cfg, event, detail, hooks.onMetricEvent);
   const traceEventBudget = parseTraceEventBudget();
   let traceEventsSent = 0;
 
@@ -863,7 +979,12 @@ export async function runCanvasAgent(args: RunArgs) {
   ) => {
     if (traceEventBudget <= 0) return;
     if (traceEventsSent >= traceEventBudget) return;
-    if (step === 'chunk_processed' && extras?.partial && typeof extras.seq === 'number' && extras.seq % 5 !== 0) {
+    if (
+      step === 'chunk_processed' &&
+      extras?.partial &&
+      typeof extras.seq === 'number' &&
+      extras.seq % 5 !== 0
+    ) {
       return;
     }
     traceEventsSent += 1;
@@ -880,7 +1001,7 @@ export async function runCanvasAgent(args: RunArgs) {
     }).catch(() => {});
   };
 
-  logMetrics(metrics, cfg, 'start');
+  emitMetricEvent('start');
   emitTrace('run_start', {
     detail: {
       mode: cfg.mode,
@@ -893,13 +1014,16 @@ export async function runCanvasAgent(args: RunArgs) {
   let screenshotEdge = cfg.screenshot.maxEdge;
   let lowActionRetryScheduled = false;
   const requesterParticipantIdHint =
-    (typeof args.metadata?.participant_id === 'string' && args.metadata.participant_id.trim().length > 0
+    (typeof args.metadata?.participant_id === 'string' &&
+    args.metadata.participant_id.trim().length > 0
       ? args.metadata.participant_id.trim()
       : undefined) ||
-    (typeof args.metadata?.participantId === 'string' && args.metadata.participantId.trim().length > 0
+    (typeof args.metadata?.participantId === 'string' &&
+    args.metadata.participantId.trim().length > 0
       ? args.metadata.participantId.trim()
       : undefined) ||
-    (typeof args.metadata?.requesterParticipantId === 'string' && args.metadata.requesterParticipantId.trim().length > 0
+    (typeof args.metadata?.requesterParticipantId === 'string' &&
+    args.metadata.requesterParticipantId.trim().length > 0
       ? args.metadata.requesterParticipantId.trim()
       : undefined);
   let lastDispatchedChunk: {
@@ -949,11 +1073,13 @@ export async function runCanvasAgent(args: RunArgs) {
         requestId,
         bounds,
         maxSize: maxEdge ? { w: maxEdge, h: maxEdge } : undefined,
-        ...(requesterParticipantIdHint ? { requesterParticipantId: requesterParticipantIdHint } : {}),
+        ...(requesterParticipantIdHint
+          ? { requesterParticipantId: requesterParticipantIdHint }
+          : {}),
       });
     } catch (error) {
       metrics.screenshotResult = 'error';
-      logMetrics(metrics, cfg, 'screenshot', `${label}:error`);
+      emitMetricEvent('screenshot', `${label}:error`);
       recordCanvasToolEvent({
         eventType: 'tool_result',
         status: 'error',
@@ -995,7 +1121,7 @@ export async function runCanvasAgent(args: RunArgs) {
           metrics.screenshotRtt = metrics.screenshotReceivedAt - metrics.screenshotRequestedAt;
         }
         metrics.screenshotResult = 'received';
-        logMetrics(metrics, cfg, 'screenshot', `${label}:received`);
+        emitMetricEvent('screenshot', `${label}:received`);
         recordCanvasToolEvent({
           eventType: 'tool_result',
           status: 'received',
@@ -1024,7 +1150,7 @@ export async function runCanvasAgent(args: RunArgs) {
     }
 
     metrics.screenshotResult = 'timeout';
-    logMetrics(metrics, cfg, 'screenshot', `${label}:timeout`);
+    emitMetricEvent('screenshot', `${label}:timeout`);
     recordCanvasToolEvent({
       eventType: 'tool_result',
       status: 'timeout',
@@ -1047,7 +1173,10 @@ export async function runCanvasAgent(args: RunArgs) {
     });
     if (attempt < cfg.screenshot.retries) {
       if (cfg.debug) {
-        console.warn('[CanvasAgent:Screenshot]', `Retrying ${label} capture (attempt ${attempt + 2})`);
+        console.warn(
+          '[CanvasAgent:Screenshot]',
+          `Retrying ${label} capture (attempt ${attempt + 2})`,
+        );
       }
       await delay(cfg.screenshot.retryDelayMs);
       return captureScreenshot(label, bounds, attempt + 1, maxEdge);
@@ -1062,7 +1191,10 @@ export async function runCanvasAgent(args: RunArgs) {
       const nextParams: Record<string, unknown> = { ...params };
       let mutated = false;
       if (typeof (nextParams as any).x === 'number' && typeof (nextParams as any).y === 'number') {
-        const interpreted = offset.interpret({ x: Number((nextParams as any).x), y: Number((nextParams as any).y) });
+        const interpreted = offset.interpret({
+          x: Number((nextParams as any).x),
+          y: Number((nextParams as any).y),
+        });
         nextParams.x = interpreted.x;
         nextParams.y = interpreted.y;
         mutated = true;
@@ -1089,19 +1221,28 @@ export async function runCanvasAgent(args: RunArgs) {
       if (!params || typeof params !== 'object') return action;
       const nextParams: Record<string, unknown> = { ...params };
       const targetId = typeof nextParams.id === 'string' ? nextParams.id.trim() : undefined;
-      const explicitType = typeof nextParams.type === 'string' ? resolveShapeType(nextParams.type) : undefined;
+      const explicitType =
+        typeof nextParams.type === 'string' ? resolveShapeType(nextParams.type) : undefined;
       const inferredType = explicitType || (targetId ? shapeTypeById.get(targetId) : undefined);
 
       if (targetId && explicitType) {
         shapeTypeById.set(targetId, explicitType);
       }
 
-      if (action.name === 'create_shape' && targetId && inferredType && !shapeTypeById.has(targetId)) {
+      if (
+        action.name === 'create_shape' &&
+        targetId &&
+        inferredType &&
+        !shapeTypeById.has(targetId)
+      ) {
         shapeTypeById.set(targetId, inferredType);
       }
 
       if (inferredType && typeof nextParams.props === 'object' && nextParams.props !== null) {
-        const sanitized = sanitizeProps({ ...(nextParams.props as Record<string, unknown>) }, inferredType);
+        const sanitized = sanitizeProps(
+          { ...(nextParams.props as Record<string, unknown>) },
+          inferredType,
+        );
         if (Object.keys(sanitized).length > 0) nextParams.props = sanitized;
         else delete nextParams.props;
       }
@@ -1116,7 +1257,10 @@ export async function runCanvasAgent(args: RunArgs) {
 
     latestScreenshot = await captureScreenshot('primary', args.initialViewport, 0, screenshotEdge);
     if (!latestScreenshot && cfg.debug) {
-      console.warn('[CanvasAgent:Screenshot]', `No screenshot available within ${cfg.screenshot.timeoutMs}ms; continuing without screenshot`);
+      console.warn(
+        '[CanvasAgent:Screenshot]',
+        `No screenshot available within ${cfg.screenshot.timeoutMs}ms; continuing without screenshot`,
+      );
     }
 
     const originViewport = latestScreenshot?.viewport ?? args.initialViewport;
@@ -1156,20 +1300,25 @@ export async function runCanvasAgent(args: RunArgs) {
         const selectedCount = Array.isArray((parts as any)?.selectedSimpleShapes)
           ? (parts as any).selectedSimpleShapes.length
           : 0;
-        const blurryCount = Array.isArray((parts as any)?.blurryShapes) ? (parts as any).blurryShapes.length : 0;
+        const blurryCount = Array.isArray((parts as any)?.blurryShapes)
+          ? (parts as any).blurryShapes.length
+          : 0;
         const peripheralCount = Array.isArray((parts as any)?.peripheralClusters)
           ? (parts as any).peripheralClusters.length
           : 0;
-        console.log('[CanvasAgent:PromptParts]', JSON.stringify({
-          sessionId,
-          roomId,
-          buildMs,
-          label,
-          blurryCount,
-          peripheralCount,
-          selectedCount,
-          screenshotBytes,
-        }));
+        console.log(
+          '[CanvasAgent:PromptParts]',
+          JSON.stringify({
+            sessionId,
+            roomId,
+            buildMs,
+            label,
+            blurryCount,
+            peripheralCount,
+            selectedCount,
+            screenshotBytes,
+          }),
+        );
       }
       const promptPayload: Record<string, unknown> = { user: userMessage, parts };
       if (initialFollowup) {
@@ -1183,7 +1332,11 @@ export async function runCanvasAgent(args: RunArgs) {
     let promptPayload = await buildPromptPayload('initial');
     let promptLength = promptPayload.prompt.length;
 
-    const applyPromptPayload = (payload: { parts: Record<string, unknown>; prompt: string; buildMs: number }) => {
+    const applyPromptPayload = (payload: {
+      parts: Record<string, unknown>;
+      prompt: string;
+      buildMs: number;
+    }) => {
       promptPayload = payload;
       promptLength = payload.prompt.length;
     };
@@ -1276,7 +1429,7 @@ export async function runCanvasAgent(args: RunArgs) {
       metrics.transcriptLines = (parts as any).transcript?.length || 0;
       metrics.docVersion = (parts as any).docVersion;
       metrics.contextBuiltAt = Date.now();
-      logMetrics(metrics, cfg, 'context');
+      emitMetricEvent('context');
     };
 
     applyPromptMetadata(parts);
@@ -1299,19 +1452,24 @@ export async function runCanvasAgent(args: RunArgs) {
       }
       return { provider: providerName || 'unknown', model: requestedModel || providerName };
     })();
-    const primaryPresetName = (initialFollowup?.strict ? 'precise' : cfg.preset) as CanvasAgentPreset;
+    const primaryPresetName = (
+      initialFollowup?.strict ? 'precise' : cfg.preset
+    ) as CanvasAgentPreset;
     const tuning = getModelTuning(primaryPresetName);
     if (cfg.debug) {
       try {
-        console.log('[CanvasAgent:Model]', JSON.stringify({
-          sessionId,
-          roomId,
-          requestedModel,
-          provider: provider.name,
-          streamingCapable: typeof provider.streamStructured === 'function',
-          preset: primaryPresetName,
-          tuning,
-        }));
+        console.log(
+          '[CanvasAgent:Model]',
+          JSON.stringify({
+            sessionId,
+            roomId,
+            requestedModel,
+            provider: provider.name,
+            streamingCapable: typeof provider.streamStructured === 'function',
+            preset: primaryPresetName,
+            tuning,
+          }),
+        );
       } catch {}
     }
     let seq = 0;
@@ -1358,7 +1516,9 @@ export async function runCanvasAgent(args: RunArgs) {
     };
 
     const enqueueFollowupTask = async (followup: CanvasFollowupInput): Promise<boolean> => {
-      const normalizedDepth = Number.isFinite(followup.depth) ? Math.max(0, Math.floor(followup.depth)) : 0;
+      const normalizedDepth = Number.isFinite(followup.depth)
+        ? Math.max(0, Math.floor(followup.depth))
+        : 0;
       if (normalizedDepth > cfg.followups.maxDepth) return false;
 
       if (durableQueue) {
@@ -1417,7 +1577,10 @@ export async function runCanvasAgent(args: RunArgs) {
       if (Array.isArray(followup.targetIds) && followup.targetIds.length > 0) {
         fallbackInput.targetIds = followup.targetIds;
       }
-      const accepted = scheduler.enqueue(sessionId, { input: fallbackInput, depth: normalizedDepth });
+      const accepted = scheduler.enqueue(sessionId, {
+        input: fallbackInput,
+        depth: normalizedDepth,
+      });
       if (accepted) {
         emitTrace('followup_enqueued', {
           detail: {
@@ -1450,11 +1613,17 @@ export async function runCanvasAgent(args: RunArgs) {
         knownShapeIds?: Set<string>;
       },
     ): Promise<boolean> => {
-      if (!sourceFollowup || !Array.isArray(sourceFollowup.targetIds) || sourceFollowup.targetIds.length === 0) {
+      if (
+        !sourceFollowup ||
+        !Array.isArray(sourceFollowup.targetIds) ||
+        sourceFollowup.targetIds.length === 0
+      ) {
         return false;
       }
 
-      const baseDepth = Number.isFinite(sourceFollowup.depth) ? Math.max(0, Math.floor(sourceFollowup.depth)) : 0;
+      const baseDepth = Number.isFinite(sourceFollowup.depth)
+        ? Math.max(0, Math.floor(sourceFollowup.depth))
+        : 0;
       const nextDepth = baseDepth + 1;
       if (nextDepth > cfg.followups.maxDepth) {
         return false;
@@ -1470,12 +1639,15 @@ export async function runCanvasAgent(args: RunArgs) {
           }
         } catch (error) {
           if (cfg.debug) {
-            console.warn('[CanvasAgent:Followups] failed to read canvas summary for target-id verification', {
-              roomId,
-              sessionId,
-              phase,
-              error: error instanceof Error ? error.message : String(error),
-            });
+            console.warn(
+              '[CanvasAgent:Followups] failed to read canvas summary for target-id verification',
+              {
+                roomId,
+                sessionId,
+                phase,
+                error: error instanceof Error ? error.message : String(error),
+              },
+            );
           }
         }
       }
@@ -1510,7 +1682,8 @@ export async function runCanvasAgent(args: RunArgs) {
           ? sourceFollowup.message.trim()
           : userMessage;
       const sourceOriginalMessage =
-        typeof sourceFollowup.originalMessage === 'string' && sourceFollowup.originalMessage.trim().length > 0
+        typeof sourceFollowup.originalMessage === 'string' &&
+        sourceFollowup.originalMessage.trim().length > 0
           ? sourceFollowup.originalMessage.trim()
           : userMessage;
       const reason = sourceFollowup.reason?.trim() || 'missing_target_ids';
@@ -1591,10 +1764,12 @@ export async function runCanvasAgent(args: RunArgs) {
           ? sourceFollowup.message.trim()
           : userMessage;
       const baseOriginalMessage =
-        typeof sourceFollowup?.originalMessage === 'string' && sourceFollowup.originalMessage.trim().length > 0
+        typeof sourceFollowup?.originalMessage === 'string' &&
+        sourceFollowup.originalMessage.trim().length > 0
           ? sourceFollowup.originalMessage.trim()
           : userMessage;
-      const sourceDepth = typeof sourceFollowup?.depth === 'number' ? sourceFollowup.depth : Number.NaN;
+      const sourceDepth =
+        typeof sourceFollowup?.depth === 'number' ? sourceFollowup.depth : Number.NaN;
       const baseDepth = Number.isFinite(sourceDepth)
         ? Math.max(0, Math.floor(sourceDepth))
         : currentFollowupDepth;
@@ -1613,7 +1788,8 @@ export async function runCanvasAgent(args: RunArgs) {
         {
           // Reuse known ids from this phase to avoid a duplicate
           // canvas-summary fetch when missing update targets are immediately retried.
-          knownShapeIds: cachedKnownShapeIds && cachedKnownShapeIds.size > 0 ? cachedKnownShapeIds : undefined,
+          knownShapeIds:
+            cachedKnownShapeIds && cachedKnownShapeIds.size > 0 ? cachedKnownShapeIds : undefined,
         },
       );
     };
@@ -1626,7 +1802,9 @@ export async function runCanvasAgent(args: RunArgs) {
         const nextDepth = previousDepth + 1;
         if (nextDepth > cfg.followups.maxDepth) return;
         const targetIds = Array.isArray(params.targetIds)
-          ? params.targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+          ? params.targetIds.filter(
+              (id: unknown): id is string => typeof id === 'string' && id.length > 0,
+            )
           : [];
         const resolvedTargetIds = targetIds.length > 0 ? targetIds : inheritedTargetIds;
         const accepted = await enqueueFollowupTask({
@@ -1635,153 +1813,176 @@ export async function runCanvasAgent(args: RunArgs) {
           depth: nextDepth,
           enqueuedAt: Date.now(),
           ...(hint ? { hint } : {}),
-          ...(typeof params.reason === 'string' && params.reason.trim() ? { reason: params.reason.trim() } : {}),
+          ...(typeof params.reason === 'string' && params.reason.trim()
+            ? { reason: params.reason.trim() }
+            : {}),
           ...(params.strict === true || resolvedTargetIds.length > 0 ? { strict: true } : {}),
           ...(resolvedTargetIds.length > 0 ? { targetIds: resolvedTargetIds } : {}),
         });
         if (accepted) metrics.followupCount++;
       };
 
-/**
- * normalizeRawAction keeps create/update payloads in sync with the canonical
- * contract before we run schema validation. Adjustments are structural:
- * moving top-level params into props, coercing numerics, and resolving
- * shape kinds so downstream validation sees one consistent shape schema.
- */
-const normalizeRawAction = (
-  raw: unknown,
-  shapeTypeById: Map<string, string>,
-): Record<string, any> | null => {
-  if (!raw || typeof raw !== 'object') return null;
-  const action = raw as Record<string, any>;
-  if (action.name !== 'create_shape' && action.name !== 'update_shape') return action;
+    /**
+     * normalizeRawAction keeps create/update payloads in sync with the canonical
+     * contract before we run schema validation. Adjustments are structural:
+     * moving top-level params into props, coercing numerics, and resolving
+     * shape kinds so downstream validation sees one consistent shape schema.
+     */
+    const normalizeRawAction = (
+      raw: unknown,
+      shapeTypeById: Map<string, string>,
+    ): Record<string, any> | null => {
+      if (!raw || typeof raw !== 'object') return null;
+      const action = raw as Record<string, any>;
+      if (action.name !== 'create_shape' && action.name !== 'update_shape') return action;
 
-  if (action.name === 'create_shape') {
-    const params = typeof action.params === 'object' && action.params !== null ? { ...(action.params as Record<string, any>) } : {};
-    const kindValue = typeof params.kind === 'string' ? params.kind.trim().toLowerCase() : undefined;
-    const candidateType = typeof params.type === 'string' ? params.type : kindValue;
-    let resolvedType = candidateType ? resolveShapeType(candidateType) : undefined;
-    if (!resolvedType) {
-      return null;
-    }
-    params.type = resolvedType;
-    delete params.kind;
-
-    const props = typeof params.props === 'object' && params.props !== null ? { ...(params.props as Record<string, any>) } : {};
-    const moveToProps = (source: string, target?: string) => {
-      if (!(source in params)) return;
-      const value = params[source];
-      if (value === undefined || value === null) {
-        delete params[source];
-        return;
-      }
-      if (typeof value === 'string' && value.trim().length === 0) {
-        delete params[source];
-        return;
-      }
-      props[target ?? source] = value;
-      delete params[source];
-    };
-
-    const moveNumericToProps = (source: string, target?: string) => {
-      const coerced = coerceNumeric(params[source]);
-      if (coerced === undefined) {
-        delete params[source];
-        return;
-      }
-      props[target ?? source] = coerced;
-      delete params[source];
-    };
-
-    moveNumericToProps('w');
-    moveNumericToProps('width', 'w');
-    moveNumericToProps('h');
-    moveNumericToProps('height', 'h');
-    moveNumericToProps('rx');
-    moveNumericToProps('ry');
-    moveNumericToProps('x1');
-    moveNumericToProps('y1');
-    moveNumericToProps('x2');
-    moveNumericToProps('y2');
-    moveToProps('text');
-    moveToProps('label', 'text');
-    moveToProps('font');
-    moveToProps('size');
-    moveToProps('color');
-    moveToProps('fill');
-    moveToProps('dash');
-    moveToProps('points');
-    moveToProps('startPoint');
-    moveToProps('endPoint');
-    moveToProps('start');
-    moveToProps('end');
-
-    if (params.type === 'line') {
-      const x1 = coerceNumeric(props.x1);
-      const y1 = coerceNumeric(props.y1);
-      const x2 = coerceNumeric(props.x2);
-      const y2 = coerceNumeric(props.y2);
-      const hasLinePointsLike =
-        props.points !== undefined || props.startPoint !== undefined || props.endPoint !== undefined;
-      if (!hasLinePointsLike && x1 !== undefined && y1 !== undefined && x2 !== undefined && y2 !== undefined) {
-        props.startPoint = { x: x1, y: y1 };
-        props.endPoint = { x: x2, y: y2 };
-      } else if (!hasLinePointsLike) {
-        const w = coerceNumeric(props.w);
-        const h = coerceNumeric(props.h);
-        if (w !== undefined || h !== undefined) {
-          props.startPoint = { x: 0, y: 0 };
-          props.endPoint = { x: w ?? 100, y: h ?? 0 };
+      if (action.name === 'create_shape') {
+        const params =
+          typeof action.params === 'object' && action.params !== null
+            ? { ...(action.params as Record<string, any>) }
+            : {};
+        const kindValue =
+          typeof params.kind === 'string' ? params.kind.trim().toLowerCase() : undefined;
+        const candidateType = typeof params.type === 'string' ? params.type : kindValue;
+        let resolvedType = candidateType ? resolveShapeType(candidateType) : undefined;
+        if (!resolvedType) {
+          return null;
         }
+        params.type = resolvedType;
+        delete params.kind;
+
+        const props =
+          typeof params.props === 'object' && params.props !== null
+            ? { ...(params.props as Record<string, any>) }
+            : {};
+        const moveToProps = (source: string, target?: string) => {
+          if (!(source in params)) return;
+          const value = params[source];
+          if (value === undefined || value === null) {
+            delete params[source];
+            return;
+          }
+          if (typeof value === 'string' && value.trim().length === 0) {
+            delete params[source];
+            return;
+          }
+          props[target ?? source] = value;
+          delete params[source];
+        };
+
+        const moveNumericToProps = (source: string, target?: string) => {
+          const coerced = coerceNumeric(params[source]);
+          if (coerced === undefined) {
+            delete params[source];
+            return;
+          }
+          props[target ?? source] = coerced;
+          delete params[source];
+        };
+
+        moveNumericToProps('w');
+        moveNumericToProps('width', 'w');
+        moveNumericToProps('h');
+        moveNumericToProps('height', 'h');
+        moveNumericToProps('rx');
+        moveNumericToProps('ry');
+        moveNumericToProps('x1');
+        moveNumericToProps('y1');
+        moveNumericToProps('x2');
+        moveNumericToProps('y2');
+        moveToProps('text');
+        moveToProps('label', 'text');
+        moveToProps('font');
+        moveToProps('size');
+        moveToProps('color');
+        moveToProps('fill');
+        moveToProps('dash');
+        moveToProps('points');
+        moveToProps('startPoint');
+        moveToProps('endPoint');
+        moveToProps('start');
+        moveToProps('end');
+
+        if (params.type === 'line') {
+          const x1 = coerceNumeric(props.x1);
+          const y1 = coerceNumeric(props.y1);
+          const x2 = coerceNumeric(props.x2);
+          const y2 = coerceNumeric(props.y2);
+          const hasLinePointsLike =
+            props.points !== undefined ||
+            props.startPoint !== undefined ||
+            props.endPoint !== undefined;
+          if (
+            !hasLinePointsLike &&
+            x1 !== undefined &&
+            y1 !== undefined &&
+            x2 !== undefined &&
+            y2 !== undefined
+          ) {
+            props.startPoint = { x: x1, y: y1 };
+            props.endPoint = { x: x2, y: y2 };
+          } else if (!hasLinePointsLike) {
+            const w = coerceNumeric(props.w);
+            const h = coerceNumeric(props.h);
+            if (w !== undefined || h !== undefined) {
+              props.startPoint = { x: 0, y: 0 };
+              props.endPoint = { x: w ?? 100, y: h ?? 0 };
+            }
+          }
+          delete props.x1;
+          delete props.y1;
+          delete props.x2;
+          delete props.y2;
+        }
+
+        if (Object.keys(props).length > 0) {
+          const sanitized = sanitizeProps(props, params.type);
+          if (Object.keys(sanitized).length > 0) {
+            params.props = sanitized;
+          } else {
+            delete params.props;
+          }
+        } else {
+          delete params.props;
+        }
+
+        if (typeof params.id === 'string' && params.id.trim().length > 0) {
+          shapeTypeById.set(params.id.trim(), params.type);
+        }
+
+        return { ...action, params };
       }
-      delete props.x1;
-      delete props.y1;
-      delete props.x2;
-      delete props.y2;
-    }
 
-    if (Object.keys(props).length > 0) {
-      const sanitized = sanitizeProps(props, params.type);
-      if (Object.keys(sanitized).length > 0) {
-        params.props = sanitized;
-      } else {
-        delete params.props;
+      // update_shape sanitization relies on previously seen create_shape entries
+      if (action.name === 'update_shape') {
+        const params =
+          typeof action.params === 'object' && action.params !== null
+            ? { ...(action.params as Record<string, any>) }
+            : {};
+        const targetId = typeof params.id === 'string' ? params.id.trim() : '';
+        if (!targetId) return null;
+        let resolvedType = shapeTypeById.get(targetId);
+        const candidateType =
+          typeof params.type === 'string' ? resolveShapeType(params.type) : undefined;
+        if (candidateType) {
+          resolvedType = candidateType;
+          shapeTypeById.set(targetId, candidateType);
+          delete params.type;
+        }
+        if (typeof params.props === 'object' && params.props !== null) {
+          const props = { ...(params.props as Record<string, unknown>) };
+          const sanitized = resolvedType
+            ? sanitizeProps(props, resolvedType)
+            : sanitizeProps(props, 'note');
+          if (Object.keys(sanitized).length > 0) params.props = sanitized;
+          else delete params.props;
+        }
+        params.id = targetId;
+        return { ...action, params };
       }
-    } else {
-      delete params.props;
-    }
 
-    if (typeof params.id === 'string' && params.id.trim().length > 0) {
-      shapeTypeById.set(params.id.trim(), params.type);
-    }
-
-    return { ...action, params };
-  }
-
-  // update_shape sanitization relies on previously seen create_shape entries
-  if (action.name === 'update_shape') {
-    const params = typeof action.params === 'object' && action.params !== null ? { ...(action.params as Record<string, any>) } : {};
-    const targetId = typeof params.id === 'string' ? params.id.trim() : '';
-    if (!targetId) return null;
-    let resolvedType = shapeTypeById.get(targetId);
-    const candidateType = typeof params.type === 'string' ? resolveShapeType(params.type) : undefined;
-    if (candidateType) {
-      resolvedType = candidateType;
-      shapeTypeById.set(targetId, candidateType);
-      delete params.type;
-    }
-    if (typeof params.props === 'object' && params.props !== null) {
-      const props = { ...(params.props as Record<string, unknown>) };
-      const sanitized = resolvedType ? sanitizeProps(props, resolvedType) : sanitizeProps(props, 'note');
-      if (Object.keys(sanitized).length > 0) params.props = sanitized;
-      else delete params.props;
-    }
-    params.id = targetId;
-    return { ...action, params };
-  }
-
-  return action;
-};
+      return action;
+    };
 
     const processActions = async (
       rawActions: unknown,
@@ -1797,14 +1998,17 @@ const normalizeRawAction = (
       const actionSource = options?.source ?? 'present';
       if (cfg.debug) {
         try {
-          console.log('[CanvasAgent:ActionsChunk]', JSON.stringify({
-            sessionId,
-            roomId,
-            seq: seqNumber,
-            partial,
-            rawCount: Array.isArray(rawActions) ? rawActions.length : 0,
-            raw: rawActions,
-          }));
+          console.log(
+            '[CanvasAgent:ActionsChunk]',
+            JSON.stringify({
+              sessionId,
+              roomId,
+              seq: seqNumber,
+              partial,
+              rawCount: Array.isArray(rawActions) ? rawActions.length : 0,
+              raw: rawActions,
+            }),
+          );
         } catch {}
       }
       if (!Array.isArray(rawActions) || rawActions.length === 0) return 0;
@@ -1854,10 +2058,7 @@ const normalizeRawAction = (
         }
       }
       const chunkCreatedIds = new Set<string>();
-      const knownIds = new Set<string>([
-        ...existingShapeIds,
-        ...sessionCreatedIds,
-      ]);
+      const knownIds = new Set<string>([...existingShapeIds, ...sessionCreatedIds]);
 
       for (const item of queue) {
         const normalized = normalizeRawAction(item, shapeTypeById);
@@ -1894,7 +2095,11 @@ const normalizeRawAction = (
         }
         try {
           parsed.push(
-            parseAction({ id: String((normalized as any)?.id || `${Date.now()}`), name: (normalized as any)?.name, params: (normalized as any)?.params }),
+            parseAction({
+              id: String((normalized as any)?.id || `${Date.now()}`),
+              name: (normalized as any)?.name,
+              params: (normalized as any)?.params,
+            }),
           );
         } catch (parseError) {
           if (cfg.debug) {
@@ -1952,26 +2157,33 @@ const normalizeRawAction = (
       if (shouldDispatch && !metrics.firstActionAt && clean.length > 0) {
         metrics.firstActionAt = Date.now();
         metrics.ttfb = metrics.firstActionAt - metrics.startedAt;
-        logMetrics(metrics, cfg, 'ttfb');
+        emitMetricEvent('ttfb');
       }
 
       if (cfg.debug) {
         try {
-          console.log('[CanvasAgent:ActionsRaw]', JSON.stringify({
-            sessionId,
-            roomId,
-            seq: seqNumber,
-            partial,
-            actions: clean,
-          }));
+          console.log(
+            '[CanvasAgent:ActionsRaw]',
+            JSON.stringify({
+              sessionId,
+              roomId,
+              seq: seqNumber,
+              partial,
+              actions: clean,
+            }),
+          );
         } catch {}
       }
 
       const worldActions = applyOffsetToActions(enforceShapeProps(clean));
       if (worldActions.length === 0) return 0;
 
-      const dispatchableActions = worldActions.filter((action) => CLIENT_DISPATCHABLE_ACTIONS.has(action.name));
-      const mutatingActions = dispatchableActions.filter((action) => action.name !== 'set_viewport');
+      const dispatchableActions = worldActions.filter((action) =>
+        CLIENT_DISPATCHABLE_ACTIONS.has(action.name),
+      );
+      const mutatingActions = dispatchableActions.filter(
+        (action) => action.name !== 'set_viewport',
+      );
       const chatOnlyActions = worldActions.filter((action) => action.name === 'message');
       const serverOnlyActions = worldActions.filter(
         (action) => !CLIENT_DISPATCHABLE_ACTIONS.has(action.name) && action.name !== 'message',
@@ -2013,10 +2225,16 @@ const normalizeRawAction = (
               source: actionSource,
             },
           });
-          const firstSend = await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, {
-            partial,
-            correlation,
-          });
+          const firstSend = await sendActionsEnvelope(
+            roomId,
+            sessionId,
+            seqNumber,
+            dispatchableActions,
+            {
+              partial,
+              correlation,
+            },
+          );
           const ack = await awaitAck({
             sessionId,
             seq: seqNumber,
@@ -2071,10 +2289,16 @@ const normalizeRawAction = (
               partial,
               actionCount: dispatchableActions.length,
             });
-            const retrySend = await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, {
-              partial,
-              correlation,
-            });
+            const retrySend = await sendActionsEnvelope(
+              roomId,
+              sessionId,
+              seqNumber,
+              dispatchableActions,
+              {
+                partial,
+                correlation,
+              },
+            );
             const retryAck = await awaitAck({
               sessionId,
               seq: seqNumber,
@@ -2195,7 +2419,10 @@ const normalizeRawAction = (
               actionName === 'mark-duo-task-done'
             ) {
               eventPayload.taskStatus = 'done';
-            } else if (actionName === 'await-tasks-completion' || actionName === 'await-duo-tasks-completion') {
+            } else if (
+              actionName === 'await-tasks-completion' ||
+              actionName === 'await-duo-tasks-completion'
+            ) {
               eventPayload.taskStatus = 'awaiting';
             } else if (
               actionName === 'direct-to-start-project-task' ||
@@ -2252,7 +2479,9 @@ const normalizeRawAction = (
           if (action.name === 'country-info') {
             const code =
               action.params && typeof action.params === 'object' && !Array.isArray(action.params)
-                ? String((action.params as Record<string, unknown>).code ?? '').trim().toUpperCase()
+                ? String((action.params as Record<string, unknown>).code ?? '')
+                    .trim()
+                    .toUpperCase()
                 : '';
             if (code) {
               await enqueueDetail({
@@ -2285,17 +2514,26 @@ const normalizeRawAction = (
     };
 
     await sendStatus(roomId, sessionId, 'streaming');
-    const streamingEnabled = typeof provider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
-    const enqueueDetail = makeDetailEnqueuer(userMessage, currentFollowupDepth, initialFollowup?.targetIds ?? []);
+    const streamingEnabled =
+      typeof provider.streamStructured === 'function' &&
+      process.env.CANVAS_AGENT_STREAMING !== 'false';
+    const enqueueDetail = makeDetailEnqueuer(
+      userMessage,
+      currentFollowupDepth,
+      initialFollowup?.targetIds ?? [],
+    );
 
     if (cfg.debug) {
       try {
-        console.log('[CanvasAgent:StreamingMode]', JSON.stringify({
-          sessionId,
-          roomId,
-          streamingEnabled,
-          provider: provider.name,
-        }));
+        console.log(
+          '[CanvasAgent:StreamingMode]',
+          JSON.stringify({
+            sessionId,
+            roomId,
+            streamingEnabled,
+            provider: provider.name,
+          }),
+        );
       } catch {}
     }
 
@@ -2394,13 +2632,16 @@ const normalizeRawAction = (
           if (!firstPartialLogged) {
             firstPartialLogged = true;
             if (cfg.debug) {
-              console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
-                sessionId,
-                roomId,
-                ms: Date.now() - streamStartedAt,
-                source: 'teacher',
-                dispatch: dispatchActions,
-              }));
+              console.log(
+                '[CanvasAgent:FirstPartial]',
+                JSON.stringify({
+                  sessionId,
+                  roomId,
+                  ms: Date.now() - streamStartedAt,
+                  source: 'teacher',
+                  dispatch: dispatchActions,
+                }),
+              );
             }
           }
           if (dispatchActions) {
@@ -2425,7 +2666,9 @@ const normalizeRawAction = (
           sessionId,
           reason:
             getTeacherRuntimeLastError() ??
-            (cfg.teacherEndpoint ? 'teacher endpoint unavailable' : 'teacher runtime not available in this environment'),
+            (cfg.teacherEndpoint
+              ? 'teacher endpoint unavailable'
+              : 'teacher runtime not available in this environment'),
         });
         return;
       }
@@ -2447,7 +2690,9 @@ const normalizeRawAction = (
         sessionId,
         reason:
           getTeacherRuntimeLastError() ??
-          (cfg.teacherEndpoint ? 'teacher endpoint unavailable' : 'teacher runtime not available in this environment'),
+          (cfg.teacherEndpoint
+            ? 'teacher endpoint unavailable'
+            : 'teacher runtime not available in this environment'),
       });
     }
 
@@ -2504,12 +2749,15 @@ const normalizeRawAction = (
           let firstPartialLogged = false;
           if (cfg.debug) {
             try {
-              console.log('[CanvasAgent:ModelCall]', JSON.stringify({
-                sessionId,
-                roomId,
-                provider: provider.name,
-                mode: 'structured',
-              }));
+              console.log(
+                '[CanvasAgent:ModelCall]',
+                JSON.stringify({
+                  sessionId,
+                  roomId,
+                  provider: provider.name,
+                  mode: 'structured',
+                }),
+              );
             } catch {}
           }
           const structured = await provider.streamStructured?.(prompt, {
@@ -2518,13 +2766,16 @@ const normalizeRawAction = (
           });
           if (!structured && cfg.debug) {
             try {
-              console.log('[CanvasAgent:ModelCall]', JSON.stringify({
-                sessionId,
-                roomId,
-                provider: provider.name,
-                mode: 'structured',
-                result: 'no-structured-stream',
-              }));
+              console.log(
+                '[CanvasAgent:ModelCall]',
+                JSON.stringify({
+                  sessionId,
+                  roomId,
+                  provider: provider.name,
+                  mode: 'structured',
+                  result: 'no-structured-stream',
+                }),
+              );
             } catch {}
           }
           if (structured) {
@@ -2536,11 +2787,14 @@ const normalizeRawAction = (
                 if (!firstPartialLogged) {
                   firstPartialLogged = true;
                   if (cfg.debug) {
-                    console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
-                      sessionId,
-                      roomId,
-                      ms: Date.now() - streamStartedAt,
-                    }));
+                    console.log(
+                      '[CanvasAgent:FirstPartial]',
+                      JSON.stringify({
+                        sessionId,
+                        roomId,
+                        ms: Date.now() - streamStartedAt,
+                      }),
+                    );
                   }
                 }
                 pushGeneratedActions(delta);
@@ -2564,39 +2818,62 @@ const normalizeRawAction = (
             providerMetadataSnapshot = structuredTelemetry.providerMetadata;
             requestMetadataSnapshot = structuredTelemetry.request;
             responseMetadataSnapshot = structuredTelemetry.response;
+            hooks.onModelTelemetry?.({
+              roomId,
+              sessionId,
+              phase: 'initial',
+              depth: currentFollowupDepth,
+              provider: providerIdentity.provider,
+              model: providerIdentity.model,
+              usage: usageSnapshot,
+              providerMetadata: providerMetadataSnapshot,
+              request: requestMetadataSnapshot,
+              response: responseMetadataSnapshot,
+            });
           }
         } else {
           const streamStartedAt = Date.now();
           let firstPartialLogged = false;
           if (cfg.debug) {
             try {
-              console.log('[CanvasAgent:ModelCall]', JSON.stringify({
-                sessionId,
-                roomId,
-                provider: provider.name,
-                mode: 'fallback-stream',
-              }));
+              console.log(
+                '[CanvasAgent:ModelCall]',
+                JSON.stringify({
+                  sessionId,
+                  roomId,
+                  provider: provider.name,
+                  mode: 'fallback-stream',
+                }),
+              );
             } catch {}
           }
-          for await (const chunk of provider.stream(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning })) {
+          for await (const chunk of provider.stream(prompt, {
+            system: CANVAS_AGENT_SYSTEM_PROMPT,
+            tuning,
+          })) {
             if (chunk.type !== 'json') continue;
             const replay = asObjectRecord((chunk.data as any)?.__replay);
             if (replay) {
               if (usageSnapshot == null) usageSnapshot = replay.usage ?? replay.totalUsage ?? null;
-              if (providerMetadataSnapshot == null) providerMetadataSnapshot = replay.providerMetadata ?? null;
+              if (providerMetadataSnapshot == null)
+                providerMetadataSnapshot = replay.providerMetadata ?? null;
               if (requestMetadataSnapshot == null) requestMetadataSnapshot = replay.request ?? null;
-              if (responseMetadataSnapshot == null) responseMetadataSnapshot = replay.response ?? null;
+              if (responseMetadataSnapshot == null)
+                responseMetadataSnapshot = replay.response ?? null;
             }
             const actionsRaw = (chunk.data as any)?.actions;
             if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
             if (!firstPartialLogged) {
               firstPartialLogged = true;
               if (cfg.debug) {
-                console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
-                  sessionId,
-                  roomId,
-                  ms: Date.now() - streamStartedAt,
-                }));
+                console.log(
+                  '[CanvasAgent:FirstPartial]',
+                  JSON.stringify({
+                    sessionId,
+                    roomId,
+                    ms: Date.now() - streamStartedAt,
+                  }),
+                );
               }
             }
             pushGeneratedActions(actionsRaw);
@@ -2604,6 +2881,18 @@ const normalizeRawAction = (
             const currentSeq = seq++;
             await processActions(actionsRaw, currentSeq, true, enqueueDetail);
           }
+          hooks.onModelTelemetry?.({
+            roomId,
+            sessionId,
+            phase: 'initial',
+            depth: currentFollowupDepth,
+            provider: providerIdentity.provider,
+            model: providerIdentity.model,
+            usage: usageSnapshot,
+            providerMetadata: providerMetadataSnapshot,
+            request: requestMetadataSnapshot,
+            response: responseMetadataSnapshot,
+          });
         }
         recordCanvasModelEvent({
           eventId: modelCallEventId,
@@ -2705,15 +2994,15 @@ const normalizeRawAction = (
                 console.warn('[CanvasAgent:ModelCall] transient provider failure, retrying', {
                   roomId,
                   sessionId,
-                    attempt: invokeRetryAttempt,
-                    maxAttempts: INVOKE_RETRY_ATTEMPTS,
-                    delayMs,
-                    error: retryableProviderFailure
-                      ? describeRetryError(error)
-                      : error instanceof Error
-                        ? `${error.name}: ${error.message}`
-                        : String(error),
-                  });
+                  attempt: invokeRetryAttempt,
+                  maxAttempts: INVOKE_RETRY_ATTEMPTS,
+                  delayMs,
+                  error: retryableProviderFailure
+                    ? describeRetryError(error)
+                    : error instanceof Error
+                      ? `${error.name}: ${error.message}`
+                      : String(error),
+                });
               } catch {}
             }
             await delay(delayMs);
@@ -2762,7 +3051,8 @@ const normalizeRawAction = (
       const followInputRaw = (next.input || {}) as Record<string, unknown>;
       const followInput = { ...followInputRaw };
       const followEnqueuedAt =
-        typeof (followInput as any).enqueuedAt === 'number' && Number.isFinite((followInput as any).enqueuedAt)
+        typeof (followInput as any).enqueuedAt === 'number' &&
+        Number.isFinite((followInput as any).enqueuedAt)
           ? Number((followInput as any).enqueuedAt)
           : Date.now();
       const requiredFollowupDelayMs = computeFollowupLoopDelayMs(loops);
@@ -2771,17 +3061,22 @@ const normalizeRawAction = (
         await delay(requiredFollowupDelayMs - elapsedSinceFollowupEnqueueMs);
       }
       const followTargetIds = Array.isArray((followInput as any).targetIds)
-        ? (followInput as any).targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+        ? (followInput as any).targetIds.filter(
+            (id: unknown): id is string => typeof id === 'string' && id.length > 0,
+          )
         : [];
-      const followMessageRaw = typeof (followInput as any).message === 'string' ? (followInput as any).message : undefined;
-      const followMessage = followMessageRaw && followMessageRaw.trim().length > 0 ? followMessageRaw : userMessage;
+      const followMessageRaw =
+        typeof (followInput as any).message === 'string' ? (followInput as any).message : undefined;
+      const followMessage =
+        followMessageRaw && followMessageRaw.trim().length > 0 ? followMessageRaw : userMessage;
       const followBaseDepth =
         typeof (followInput as any).depth === 'number'
           ? Number((followInput as any).depth)
-          : next.depth ?? currentFollowupDepth + loops;
+          : (next.depth ?? currentFollowupDepth + loops);
 
       let followScreenshot: ScreenshotPayload | null = null;
-      const followBounds = latestScreenshot?.bounds ?? latestScreenshot?.viewport ?? args.initialViewport;
+      const followBounds =
+        latestScreenshot?.bounds ?? latestScreenshot?.viewport ?? args.initialViewport;
       if (followBounds) {
         followScreenshot = await captureScreenshot('followup', followBounds, 0, screenshotEdge);
       }
@@ -2796,7 +3091,8 @@ const normalizeRawAction = (
       const followParts = await buildPromptParts(roomId, {
         windowMs: transcriptWindowMs,
         viewport: followScreenshot?.viewport ?? args.initialViewport,
-        selection: followTargetIds.length > 0 ? followTargetIds : followScreenshot?.selection ?? [],
+        selection:
+          followTargetIds.length > 0 ? followTargetIds : (followScreenshot?.selection ?? []),
         sessionId,
         screenshot: followScreenshot
           ? {
@@ -2830,21 +3126,30 @@ const normalizeRawAction = (
       const followPrompt = JSON.stringify(followPayload);
       const followProvider = selectModel(model || cfg.modelName);
       const followProviderIdentity = (() => {
-        const providerName = typeof followProvider.name === 'string' ? followProvider.name.trim() : 'unknown';
+        const providerName =
+          typeof followProvider.name === 'string' ? followProvider.name.trim() : 'unknown';
         if (providerName === 'debug/fake') return { provider: 'debug', model: 'debug/fake' };
         const split = providerName.split(':');
         if (split.length > 1) {
-          return { provider: split[0] || 'unknown', model: split.slice(1).join(':') || providerName };
+          return {
+            provider: split[0] || 'unknown',
+            model: split.slice(1).join(':') || providerName,
+          };
         }
-        return { provider: providerName || 'unknown', model: model || cfg.modelName || providerName };
+        return {
+          provider: providerName || 'unknown',
+          model: model || cfg.modelName || providerName,
+        };
       })();
       let followSeq = 0;
       const followEnqueueDetail = makeDetailEnqueuer(
         followMessage,
         followBaseDepth,
-        followTargetIds.length > 0 ? followTargetIds : initialFollowup?.targetIds ?? [],
+        followTargetIds.length > 0 ? followTargetIds : (initialFollowup?.targetIds ?? []),
       );
-      const followStreamingEnabled = typeof followProvider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
+      const followStreamingEnabled =
+        typeof followProvider.streamStructured === 'function' &&
+        process.env.CANVAS_AGENT_STREAMING !== 'false';
       const followPresetName = (followInput.strict ? 'precise' : cfg.preset) as CanvasAgentPreset;
       const followTuning = getModelTuning(followPresetName);
       const followCallEventId = randomUUID();
@@ -2918,17 +3223,36 @@ const normalizeRawAction = (
             followProviderMetadataSnapshot = structuredTelemetry.providerMetadata;
             followRequestMetadataSnapshot = structuredTelemetry.request;
             followResponseMetadataSnapshot = structuredTelemetry.response;
+            hooks.onModelTelemetry?.({
+              roomId,
+              sessionId,
+              phase: 'followup',
+              depth: followBaseDepth,
+              provider: followProviderIdentity.provider,
+              model: followProviderIdentity.model,
+              usage: followUsageSnapshot,
+              providerMetadata: followProviderMetadataSnapshot,
+              request: followRequestMetadataSnapshot,
+              response: followResponseMetadataSnapshot,
+            });
           }
           return;
         }
-        for await (const chunk of followProvider.stream(followPrompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning: followTuning })) {
+        for await (const chunk of followProvider.stream(followPrompt, {
+          system: CANVAS_AGENT_SYSTEM_PROMPT,
+          tuning: followTuning,
+        })) {
           if (chunk.type !== 'json') continue;
           const replay = asObjectRecord((chunk.data as any)?.__replay);
           if (replay) {
-            if (followUsageSnapshot == null) followUsageSnapshot = replay.usage ?? replay.totalUsage ?? null;
-            if (followProviderMetadataSnapshot == null) followProviderMetadataSnapshot = replay.providerMetadata ?? null;
-            if (followRequestMetadataSnapshot == null) followRequestMetadataSnapshot = replay.request ?? null;
-            if (followResponseMetadataSnapshot == null) followResponseMetadataSnapshot = replay.response ?? null;
+            if (followUsageSnapshot == null)
+              followUsageSnapshot = replay.usage ?? replay.totalUsage ?? null;
+            if (followProviderMetadataSnapshot == null)
+              followProviderMetadataSnapshot = replay.providerMetadata ?? null;
+            if (followRequestMetadataSnapshot == null)
+              followRequestMetadataSnapshot = replay.request ?? null;
+            if (followResponseMetadataSnapshot == null)
+              followResponseMetadataSnapshot = replay.response ?? null;
           }
           const actionsRaw = (chunk.data as any)?.actions;
           if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
@@ -2936,6 +3260,18 @@ const normalizeRawAction = (
           const currentSeq = followSeq++;
           await processActions(actionsRaw, currentSeq, true, followEnqueueDetail);
         }
+        hooks.onModelTelemetry?.({
+          roomId,
+          sessionId,
+          phase: 'followup',
+          depth: followBaseDepth,
+          provider: followProviderIdentity.provider,
+          model: followProviderIdentity.model,
+          usage: followUsageSnapshot,
+          providerMetadata: followProviderMetadataSnapshot,
+          request: followRequestMetadataSnapshot,
+          response: followResponseMetadataSnapshot,
+        });
       };
 
       let followInvokeRetryAttempt = 0;
@@ -3004,19 +3340,22 @@ const normalizeRawAction = (
               });
               if (cfg.debug) {
                 try {
-                  console.warn('[CanvasAgent:FollowupModelCall] transient provider failure, retrying', {
-                    roomId,
-                    sessionId,
-                    depth: followBaseDepth,
-                    attempt: followInvokeRetryAttempt,
-                    maxAttempts: FOLLOWUP_INVOKE_RETRY_ATTEMPTS,
-                    delayMs,
-                    error: retryableProviderFailure
-                      ? describeRetryError(error)
-                      : error instanceof Error
-                        ? `${error.name}: ${error.message}`
-                        : String(error),
-                  });
+                  console.warn(
+                    '[CanvasAgent:FollowupModelCall] transient provider failure, retrying',
+                    {
+                      roomId,
+                      sessionId,
+                      depth: followBaseDepth,
+                      attempt: followInvokeRetryAttempt,
+                      maxAttempts: FOLLOWUP_INVOKE_RETRY_ATTEMPTS,
+                      delayMs,
+                      error: retryableProviderFailure
+                        ? describeRetryError(error)
+                        : error instanceof Error
+                          ? `${error.name}: ${error.message}`
+                          : String(error),
+                    },
+                  );
                 } catch {}
               }
               await delay(delayMs);
@@ -3043,8 +3382,11 @@ const normalizeRawAction = (
       }
 
       const followOriginalMessageRaw =
-        typeof (followInput as any).originalMessage === 'string' ? (followInput as any).originalMessage : undefined;
-      const followReasonRaw = typeof (followInput as any).reason === 'string' ? (followInput as any).reason : undefined;
+        typeof (followInput as any).originalMessage === 'string'
+          ? (followInput as any).originalMessage
+          : undefined;
+      const followReasonRaw =
+        typeof (followInput as any).reason === 'string' ? (followInput as any).reason : undefined;
       const normalizedFollowup: CanvasFollowupInput = {
         message: followMessage,
         originalMessage:
@@ -3054,7 +3396,9 @@ const normalizeRawAction = (
         depth: followBaseDepth,
         ...(followTargetIds.length > 0 ? { targetIds: followTargetIds } : {}),
         ...(followInput.strict === true ? { strict: true } : {}),
-        ...(followReasonRaw && followReasonRaw.trim().length > 0 ? { reason: followReasonRaw.trim() } : {}),
+        ...(followReasonRaw && followReasonRaw.trim().length > 0
+          ? { reason: followReasonRaw.trim() }
+          : {}),
       };
       await scheduleMissingTargetIdsFollowup(normalizedFollowup, 'followup');
       await scheduleDroppedUpdateTargetFollowup('followup', normalizedFollowup);
@@ -3074,7 +3418,15 @@ const normalizeRawAction = (
             type: 'rectangle',
             x: 0,
             y: 0,
-            props: { w: 280, h: 180, dash: 'dotted', size: 'm', color: 'red', fill: 'none', font: 'mono' },
+            props: {
+              w: 280,
+              h: 180,
+              dash: 'dotted',
+              size: 'm',
+              color: 'red',
+              fill: 'none',
+              font: 'mono',
+            },
           },
         },
         {
@@ -3091,7 +3443,7 @@ const normalizeRawAction = (
           seq: currentSeq,
           partial: false,
           actionCount: fallback.length,
-            detail: { source: 'fallback', verbs: fallback.map((action) => action.name) },
+          detail: { source: 'fallback', verbs: fallback.map((action) => action.name) },
         });
         recordCanvasToolEvent({
           eventType: 'tool_call',
@@ -3105,7 +3457,9 @@ const normalizeRawAction = (
             source: 'fallback',
           },
         });
-        const firstSend = await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback, { correlation });
+        const firstSend = await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback, {
+          correlation,
+        });
         envelopeDispatched = true;
         const ack = await awaitAck({
           sessionId,
@@ -3146,7 +3500,9 @@ const normalizeRawAction = (
             actionCount: fallback.length,
             detail: { source: 'fallback' },
           });
-          const retrySend = await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback, { correlation });
+          const retrySend = await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback, {
+            correlation,
+          });
           emitTrace('ack_retry', {
             seq: currentSeq,
             partial: false,
@@ -3240,7 +3596,7 @@ const normalizeRawAction = (
     await sendStatus(roomId, sessionId, 'done');
 
     metrics.completedAt = Date.now();
-    logMetrics(metrics, cfg, 'complete');
+    emitMetricEvent('complete');
     emitTrace('run_complete', {
       detail: {
         durationMs: metrics.completedAt - metrics.startedAt,
@@ -3284,7 +3640,7 @@ const normalizeRawAction = (
       lastDispatchedChunk,
     });
     metrics.completedAt = Date.now();
-    logMetrics(metrics, cfg, 'error', detail);
+    emitMetricEvent('error', detail);
     recordCanvasModelEvent({
       eventType: 'session_error',
       status: 'error',

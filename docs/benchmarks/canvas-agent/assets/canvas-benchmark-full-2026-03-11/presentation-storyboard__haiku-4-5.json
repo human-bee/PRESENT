@@ -1,0 +1,245 @@
+{
+  "runId": "presentation-storyboard-haiku-4-5-mmlzixa2",
+  "scenarioId": "presentation-storyboard",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Presentation Storyboard",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "presentation",
+  "startedAt": "2026-03-11T11:58:00.968Z",
+  "completedAt": "2026-03-11T11:59:06.952Z",
+  "status": "completed",
+  "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+  "canvasId": "d225033e-b7d8-423b-8c29-5acb1894effd",
+  "canvasName": "presentation-storyboard-haiku-4-5-presentation-storyboard-haiku-4-5-mmlzixa2",
+  "viewerPath": "/canvas?room=canvas-d225033e-b7d8-423b-8c29-5acb1894effd&id=d225033e-b7d8-423b-8c29-5acb1894effd&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__haiku-4-5-doc.json",
+  "finalShapeCount": 12,
+  "actionSummary": {
+    "total": 14,
+    "byName": {
+      "create_shape": 11,
+      "align": 2,
+      "stack": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 53054,
+    "initialTtfbMs": 11883,
+    "totalActionCount": 14,
+    "totalMutatingActionCount": 14,
+    "totalFollowupCount": 1,
+    "totalRetryCount": 14,
+    "avgFirstAckMs": 17473,
+    "avgScreenshotRttMs": 77
+  },
+  "steps": [
+    {
+      "stepId": "opening-slide",
+      "label": "Opening slide",
+      "sessionId": "1773230290748-8xinq9",
+      "status": "completed",
+      "actionSummary": {
+        "total": 14,
+        "byName": {
+          "create_shape": 11,
+          "align": 2,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 44325,
+        "ttfbMs": 11883,
+        "actionCount": 14,
+        "mutatingActionCount": 14,
+        "followupCount": 0,
+        "retryCount": 14,
+        "firstAckMs": 17473,
+        "screenshotRttMs": 24,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773230290748-8xinq9",
+          "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+          "ts": 1773230290749,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773230290748-8xinq9",
+          "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+          "ts": 1773230290778,
+          "preset": "creative",
+          "request_id": "48cf9db9-7b53-40a1-bb30-4ecfbc521b47",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 24,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773230290748-8xinq9",
+          "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+          "ts": 1773230290874,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773230290748-8xinq9",
+          "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+          "ts": 1773230302632,
+          "preset": "creative",
+          "ttfb": 11883,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773230290748-8xinq9",
+          "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+          "ts": 1773230335073,
+          "preset": "creative",
+          "duration": 44324,
+          "chunkCount": 16,
+          "actionCount": 14,
+          "mutatingActionCount": 14,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 14,
+          "first_ack_ms": 17473,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    },
+    {
+      "stepId": "continue-storyboard",
+      "label": "Continue storyboard",
+      "sessionId": "1773230336575-rfcneb",
+      "status": "completed",
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "metrics": {
+        "durationMs": 8729,
+        "ttfbMs": 5004,
+        "actionCount": 2,
+        "mutatingActionCount": 0,
+        "followupCount": 1,
+        "retryCount": 0,
+        "firstAckMs": null,
+        "screenshotRttMs": 130,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773230336575-rfcneb",
+          "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+          "ts": 1773230336575,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773230336575-rfcneb",
+          "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+          "ts": 1773230336712,
+          "preset": "creative",
+          "request_id": "6eab64e9-c221-40b0-9790-9469ef3e305a",
+          "timeout_ms": 12000,
+          "image_bytes": 71414,
+          "rtt": 130,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773230336575-rfcneb",
+          "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+          "ts": 1773230336770,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773230336575-rfcneb",
+          "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+          "ts": 1773230341579,
+          "preset": "creative",
+          "ttfb": 5004,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773230336575-rfcneb",
+          "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+          "ts": 1773230345304,
+          "preset": "creative",
+          "duration": 8729,
+          "chunkCount": 1,
+          "actionCount": 2,
+          "mutatingActionCount": 0,
+          "followupCount": 1,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 0,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 87,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 3,
+      "screenshot": 10,
+      "stability": 4
+    },
+    "notes": [
+      "Followups fired 1 time(s).",
+      "Retries recorded 14 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 12,
+    "byType": {
+      "box": 4,
+      "note": 3,
+      "draw": 2,
+      "text": 3
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows a large dotted red rectangle and a debug panel, reflecting partial but clear shape creation and alignment.",
+    "scoreRationale": "The score likely reflects well-executed shape creation and alignment with minor issues and an extra debug widget.",
+    "strengths": [
+      "Clear creation of multiple shapes",
+      "Proper alignment and stacking actions"
+    ],
+    "issues": [
+      "Presence of a degraded sync health panel visible",
+      "Only one shape visibly rendered beyond the panel"
+    ]
+  }
+}

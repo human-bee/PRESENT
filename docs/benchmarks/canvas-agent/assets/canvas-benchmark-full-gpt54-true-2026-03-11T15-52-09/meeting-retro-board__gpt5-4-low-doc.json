@@ -1,0 +1,214 @@
+{
+  "roomId": "canvas-e784ea7b-5322-4f83-9ffa-28ed0b27615d",
+  "canvasId": "e784ea7b-5322-4f83-9ffa-28ed0b27615d",
+  "canvasName": "meeting-retro-board-gpt5-4-low-meeting-retro-board-gpt5-4-low-mmmo4nm2",
+  "source": "viewer",
+  "shapeCount": 20,
+  "shapes": [
+    {
+      "id": "shape:retro-board-frame",
+      "type": "geo",
+      "x": 176,
+      "y": 160,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:retro-title",
+      "type": "text",
+      "x": 208,
+      "y": 192,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:col-wins-frame",
+      "type": "geo",
+      "x": 208,
+      "y": 272,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:col-friction-frame",
+      "type": "geo",
+      "x": 560,
+      "y": 272,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:col-experiments-frame",
+      "type": "geo",
+      "x": 912,
+      "y": 272,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-header",
+      "type": "text",
+      "x": 240,
+      "y": 304,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-header",
+      "type": "text",
+      "x": 592,
+      "y": 304,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:experiments-header",
+      "type": "text",
+      "x": 944,
+      "y": 304,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-note-1",
+      "type": "note",
+      "x": 240,
+      "y": 368,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-note-2",
+      "type": "note",
+      "x": 240,
+      "y": 400,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-note-3",
+      "type": "note",
+      "x": 240,
+      "y": 432,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-note-4",
+      "type": "note",
+      "x": 240,
+      "y": 464,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-note-1",
+      "type": "note",
+      "x": 592,
+      "y": 368,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-note-2",
+      "type": "note",
+      "x": 592,
+      "y": 400,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-note-3",
+      "type": "note",
+      "x": 592,
+      "y": 432,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-note-4",
+      "type": "note",
+      "x": 592,
+      "y": 464,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:experiments-note-1",
+      "type": "note",
+      "x": 944,
+      "y": 368,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:experiments-note-2",
+      "type": "note",
+      "x": 944,
+      "y": 400,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:experiments-note-3",
+      "type": "note",
+      "x": 944,
+      "y": 432,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:experiments-note-4",
+      "type": "note",
+      "x": 944,
+      "y": 464,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271710313
+  }
+}

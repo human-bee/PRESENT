@@ -88,6 +88,14 @@ const inferProviderFromModel = (model?: string): ModelKeyProvider | null => {
   if (!model) return null;
   const normalized = model.trim().toLowerCase();
   if (!normalized) return null;
+  if (
+    normalized.startsWith('cerebras:') ||
+    normalized.startsWith('gpt-oss') ||
+    normalized.startsWith('llama') ||
+    normalized.startsWith('qwen')
+  ) {
+    return 'cerebras';
+  }
   if (normalized.startsWith('openai:') || normalized.startsWith('gpt')) return 'openai';
   if (normalized.startsWith('anthropic:') || normalized.startsWith('claude')) return 'anthropic';
   if (normalized.startsWith('google:') || normalized.startsWith('gemini')) return 'google';
@@ -345,7 +353,7 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
         metadata,
         configOverrides,
       });
-    if (BYOK_ENABLED && billingUserId && ['openai', 'anthropic', 'google'].includes(provider)) {
+    if (BYOK_ENABLED && billingUserId && ['openai', 'anthropic', 'google', 'cerebras'].includes(provider)) {
       const byokKey = await getDecryptedUserModelKey({
         userId: billingUserId,
         provider,
@@ -368,8 +376,15 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
           ? 'OPENAI_API_KEY'
           : provider === 'anthropic'
             ? 'ANTHROPIC_API_KEY'
-            : 'GOOGLE_API_KEY';
-      const runtimeKeys: { OPENAI_API_KEY?: string; ANTHROPIC_API_KEY?: string; GOOGLE_API_KEY?: string } = {};
+            : provider === 'google'
+              ? 'GOOGLE_API_KEY'
+              : 'CEREBRAS_API_KEY';
+      const runtimeKeys: {
+        OPENAI_API_KEY?: string;
+        ANTHROPIC_API_KEY?: string;
+        GOOGLE_API_KEY?: string;
+        CEREBRAS_API_KEY?: string;
+      } = {};
       runtimeKeys[keyName] = providerKey;
       await withRuntimeModelKeys(runtimeKeys, invokeCanvasRunner);
     } else {

@@ -110,6 +110,15 @@ export type CanvasAgentPromptPayload = {
   bounds?: CanvasAgentPromptBounds;
   selectionIds?: string[];
   metadata?: JsonObject | null;
+  model?: string;
+  provider?: string;
+  billingUserId?: string;
+  requesterUserId?: string;
+  sharedUnlockSessionId?: string;
+  modelKeySource?: string;
+  primaryModelKeySource?: string;
+  fastModelKeySource?: string;
+  canvasConfigOverrides?: JsonObject | null;
 };
 
 const GLOBAL_APEX = globalThis as Record<string, unknown>;
@@ -1164,6 +1173,9 @@ export async function broadcastAgentPrompt(event: {
       ? payload.selectionIds.filter((id) => typeof id === 'string' && id.trim().length > 0)
       : undefined,
     metadata: payload?.metadata ?? null,
+    model: typeof payload?.model === 'string' && payload.model.trim() ? payload.model.trim() : undefined,
+    provider:
+      typeof payload?.provider === 'string' && payload.provider.trim() ? payload.provider.trim() : undefined,
   };
 
   if (!sanitizedPayload.message) {

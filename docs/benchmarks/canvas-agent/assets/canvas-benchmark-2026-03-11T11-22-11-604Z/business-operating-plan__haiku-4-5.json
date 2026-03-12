@@ -1,0 +1,160 @@
+{
+  "runId": "business-operating-plan-haiku-4-5-mmly8vaa",
+  "scenarioId": "business-operating-plan",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Business Operating Plan",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "business",
+  "startedAt": "2026-03-11T11:22:14.359Z",
+  "completedAt": "2026-03-11T11:25:06.205Z",
+  "status": "completed",
+  "roomId": "canvas-321c2fc3-84b8-4161-a280-ff3a8c5685da",
+  "canvasId": "321c2fc3-84b8-4161-a280-ff3a8c5685da",
+  "canvasName": "business-operating-plan-haiku-4-5-business-operating-plan-haiku-4-5-mmly8vaa",
+  "viewerPath": "/canvas?room=canvas-321c2fc3-84b8-4161-a280-ff3a8c5685da&id=321c2fc3-84b8-4161-a280-ff3a8c5685da&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-2026-03-11T11-22-11-604Z/business-operating-plan__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-2026-03-11T11-22-11-604Z/business-operating-plan__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-2026-03-11T11-22-11-604Z/business-operating-plan__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 24,
+    "byName": {
+      "create_shape": 17,
+      "align": 3,
+      "stack": 3,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 144053,
+    "initialTtfbMs": 47832,
+    "totalActionCount": 24,
+    "totalMutatingActionCount": 24,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 24,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "steps": [
+    {
+      "stepId": "plan-board",
+      "label": "Plan board",
+      "sessionId": "1773228160485-c0myjk",
+      "status": "completed",
+      "actionSummary": {
+        "total": 24,
+        "byName": {
+          "create_shape": 17,
+          "align": 3,
+          "stack": 3,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 144053,
+        "ttfbMs": 47832,
+        "actionCount": 24,
+        "mutatingActionCount": 24,
+        "followupCount": 0,
+        "retryCount": 24,
+        "firstAckMs": null,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773228160485-c0myjk",
+          "roomId": "canvas-321c2fc3-84b8-4161-a280-ff3a8c5685da",
+          "ts": 1773228160510,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773228160485-c0myjk",
+          "roomId": "canvas-321c2fc3-84b8-4161-a280-ff3a8c5685da",
+          "ts": 1773228173188,
+          "preset": "creative",
+          "request_id": "15a996c3-5e6a-4fdb-9331-c844c064f5e8",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773228160485-c0myjk",
+          "roomId": "canvas-321c2fc3-84b8-4161-a280-ff3a8c5685da",
+          "ts": 1773228185503,
+          "preset": "creative",
+          "request_id": "c5a48716-1b56-4182-98e2-7e8c061d2289",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773228160485-c0myjk",
+          "roomId": "canvas-321c2fc3-84b8-4161-a280-ff3a8c5685da",
+          "ts": 1773228197824,
+          "preset": "creative",
+          "request_id": "a4dbf014-45bd-4338-b977-6706ec805b43",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773228160485-c0myjk",
+          "roomId": "canvas-321c2fc3-84b8-4161-a280-ff3a8c5685da",
+          "ts": 1773228197951,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773228160485-c0myjk",
+          "roomId": "canvas-321c2fc3-84b8-4161-a280-ff3a8c5685da",
+          "ts": 1773228208342,
+          "preset": "creative",
+          "ttfb": 47832,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773228160485-c0myjk",
+          "roomId": "canvas-321c2fc3-84b8-4161-a280-ff3a8c5685da",
+          "ts": 1773228304535,
+          "preset": "creative",
+          "duration": 144025,
+          "chunkCount": 24,
+          "actionCount": 24,
+          "mutatingActionCount": 24,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 24,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 57,
+    "grade": "partial",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 35,
+      "preferredVerbs": 7,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Shape count below target (0/8).",
+      "Retries recorded 24 time(s)."
+    ]
+  }
+}

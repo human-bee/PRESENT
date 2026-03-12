@@ -1,0 +1,68 @@
+{
+  "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+  "canvasId": "c1c8cd47-734d-48c4-9e07-2366fdce012d",
+  "canvasName": "collaborative-brainstorm-cerebras-gpt-oss-120b-collaborative-brainstorm-cerebras-gpt-oss-120b-mmlzd5i5",
+  "source": "viewer",
+  "shapeCount": 6,
+  "shapes": [
+    {
+      "id": "shape:cluster-1",
+      "type": "geo",
+      "x": 120,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:cluster-2",
+      "type": "geo",
+      "x": 470,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:cluster-3",
+      "type": "geo",
+      "x": 820,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzdela-82",
+      "type": "note",
+      "x": 130,
+      "y": 350,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzdela-418",
+      "type": "note",
+      "x": 480,
+      "y": 350,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzdela-430",
+      "type": "note",
+      "x": 830,
+      "y": 350,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773230028245
+  }
+}

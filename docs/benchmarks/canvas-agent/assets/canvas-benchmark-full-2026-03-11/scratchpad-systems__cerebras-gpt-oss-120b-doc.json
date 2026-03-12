@@ -1,0 +1,113 @@
+{
+  "roomId": "canvas-287aaa94-2c63-4bdf-b5a6-21c614717ff9",
+  "canvasId": "287aaa94-2c63-4bdf-b5a6-21c614717ff9",
+  "canvasName": "scratchpad-systems-cerebras-gpt-oss-120b-scratchpad-systems-cerebras-gpt-oss-120b-mmlziikj",
+  "source": "viewer",
+  "shapeCount": 11,
+  "shapes": [
+    {
+      "id": "shape:voice-input",
+      "type": "note",
+      "x": 220,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:queue",
+      "type": "note",
+      "x": 420,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:steward",
+      "type": "note",
+      "x": 620,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:screenshot",
+      "type": "note",
+      "x": 820,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:action-stream",
+      "type": "note",
+      "x": 1020,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:ack-loop",
+      "type": "note",
+      "x": 1220,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:arrow-1",
+      "type": "draw",
+      "x": 340,
+      "y": 380,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-2",
+      "type": "draw",
+      "x": 540,
+      "y": 380,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-3",
+      "type": "draw",
+      "x": 740,
+      "y": 380,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-4",
+      "type": "draw",
+      "x": 940,
+      "y": 380,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-loop",
+      "type": "draw",
+      "x": 1340,
+      "y": 380,
+      "props": {
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773230280693
+  }
+}

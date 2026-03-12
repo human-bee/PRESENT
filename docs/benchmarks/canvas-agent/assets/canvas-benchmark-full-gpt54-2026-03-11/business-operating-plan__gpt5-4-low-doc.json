@@ -1,0 +1,214 @@
+{
+  "roomId": "canvas-0cb42862-91cd-4167-9620-40d569f4a1df",
+  "canvasId": "0cb42862-91cd-4167-9620-40d569f4a1df",
+  "canvasName": "business-operating-plan-gpt5-4-low-business-operating-plan-gpt5-4-low-mmmkh9sp",
+  "source": "viewer",
+  "shapeCount": 20,
+  "shapes": [
+    {
+      "id": "shape:qop-frame",
+      "type": "geo",
+      "x": 80,
+      "y": 100,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:qop-title",
+      "type": "text",
+      "x": 112,
+      "y": 140,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-objectives",
+      "type": "geo",
+      "x": 112,
+      "y": 232,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-owners",
+      "type": "geo",
+      "x": 504,
+      "y": 232,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-risks",
+      "type": "geo",
+      "x": 896,
+      "y": 232,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-objectives",
+      "type": "text",
+      "x": 144,
+      "y": 260,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-owners",
+      "type": "text",
+      "x": 536,
+      "y": 260,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-risks",
+      "type": "text",
+      "x": 928,
+      "y": 260,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-1",
+      "type": "note",
+      "x": 144,
+      "y": 320,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-2",
+      "type": "note",
+      "x": 144,
+      "y": 352,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-3",
+      "type": "note",
+      "x": 144,
+      "y": 384,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-4",
+      "type": "note",
+      "x": 144,
+      "y": 416,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-1",
+      "type": "note",
+      "x": 536,
+      "y": 320,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-2",
+      "type": "note",
+      "x": 536,
+      "y": 352,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-3",
+      "type": "note",
+      "x": 536,
+      "y": 384,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-4",
+      "type": "note",
+      "x": 536,
+      "y": 416,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-1",
+      "type": "note",
+      "x": 928,
+      "y": 320,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-2",
+      "type": "note",
+      "x": 928,
+      "y": 352,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-3",
+      "type": "note",
+      "x": 928,
+      "y": 384,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-4",
+      "type": "note",
+      "x": 928,
+      "y": 416,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773265546737
+  }
+}

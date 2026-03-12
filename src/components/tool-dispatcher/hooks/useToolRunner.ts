@@ -36,6 +36,11 @@ import {
   attachExperimentAssignmentToMetadata,
   readExperimentAssignmentFromUnknown,
 } from '@/lib/agents/shared/experiment-assignment';
+import {
+  buildFairyCanvasModelRequest,
+  readStoredFairyCanvasModel,
+  resetFairyCanvasModelSelectionIfUnavailable,
+} from '@/lib/fairy-canvas-model-selection';
 
 type ToolMetricEntry = {
   callId: string;
@@ -932,14 +937,14 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             typeof params?.intentId === 'string' && params.intentId.trim().length > 0
               ? params.intentId.trim()
               : requestId;
-          const idempotencyKey =
-            typeof params?.idempotency_key === 'string' && params.idempotency_key.trim().length > 0
-              ? params.idempotency_key.trim()
-              : `quick-${routeType}-${stableQuickHash(`${targetRoom}|${requestId}|${messageText}`)}`;
           const participantId =
             typeof params?.participant_id === 'string' && params.participant_id.trim().length > 0
               ? params.participant_id.trim()
               : undefined;
+          const idempotencyKey =
+            typeof params?.idempotency_key === 'string' && params.idempotency_key.trim().length > 0
+              ? params.idempotency_key.trim()
+              : `quick-${routeType}-${stableQuickHash(`${targetRoom}|${participantId || 'unknown'}|${requestId}|${messageText}`)}`;
           const participantViewport =
             participantId && participantViewportRef.current.has(participantId)
               ? participantViewportRef.current.get(participantId)?.viewport
@@ -1285,6 +1290,26 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         if (tool === 'dispatch_to_conductor') {
           const task = typeof params?.task === 'string' ? params.task.trim() : '';
           const dispatchParams = (params?.params as Record<string, unknown>) || {};
+          // Keep the quick fairy model override scoped to fairy-triggered canvas work only.
+          if (task === 'fairy.intent') {
+            const explicitModel =
+              typeof dispatchParams.model === 'string' && dispatchParams.model.trim()
+                ? dispatchParams.model.trim()
+                : typeof params?.model === 'string' && params.model.trim()
+                  ? params.model.trim()
+                  : null;
+            const runtimeSelection = buildFairyCanvasModelRequest(
+              explicitModel ?? readStoredFairyCanvasModel(),
+            );
+            if (runtimeSelection) {
+              if (!dispatchParams.model) {
+                dispatchParams.model = runtimeSelection.model;
+              }
+              if (!dispatchParams.provider) {
+                dispatchParams.provider = runtimeSelection.provider;
+              }
+            }
+          }
           const dispatchMetadata = experimentAssignment
             ? attachExperimentAssignmentToMetadata(
                 (dispatchParams.metadata as JsonObject | undefined) ?? null,
@@ -1410,6 +1435,10 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 body: JSON.stringify({
                   room: targetRoom,
                   task,
+                  model:
+                    typeof dispatchParams.model === 'string' ? dispatchParams.model : undefined,
+                  provider:
+                    typeof dispatchParams.provider === 'string' ? dispatchParams.provider : undefined,
                   params: dispatchParams,
                   ...experimentEnvelope,
                   executionId,
@@ -1423,7 +1452,13 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 }),
               });
               if (!res.ok) {
-                const message = `Steward dispatch failed: HTTP ${res.status}`;
+                const detail = await res.text().catch(() => '');
+                const selectionReset =
+                  task === 'fairy.intent' && resetFairyCanvasModelSelectionIfUnavailable(detail);
+                const detailSuffix = detail ? `: ${detail}` : '';
+                const message = selectionReset
+                  ? 'Steward dispatch failed: selected fairy canvas model was unavailable and has been reset to Auto.'
+                  : `Steward dispatch failed: HTTP ${res.status}${detailSuffix}`;
                 queue.markError(call.id, message);
                 emitError(call, message);
                 if (task === 'canvas.agent_prompt') {

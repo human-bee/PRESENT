@@ -1,0 +1,66 @@
+{
+  "runId": "freehand-sketchnote-recap-cerebras-gpt-oss-120b-mmmllb4h",
+  "scenarioId": "freehand-sketchnote-recap",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Freehand Sketchnote Recap",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "freehand",
+  "startedAt": "2026-03-11T22:15:43.746Z",
+  "completedAt": "2026-03-11T22:15:43.747Z",
+  "status": "failed",
+  "roomId": "canvas-fc47df86-5dbb-4e47-93ff-5bf2dcbfc8e0",
+  "canvasId": "fc47df86-5dbb-4e47-93ff-5bf2dcbfc8e0",
+  "canvasName": "freehand-sketchnote-recap-cerebras-gpt-oss-120b-freehand-sketchnote-recap-cerebras-gpt-oss-120b-mmmllb4h",
+  "viewerPath": "/canvas?room=canvas-fc47df86-5dbb-4e47-93ff-5bf2dcbfc8e0&id=fc47df86-5dbb-4e47-93ff-5bf2dcbfc8e0&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": {
+    "summary": "Visual analysis failed.",
+    "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__cerebras-gpt-oss-120b.png'",
+    "strengths": [],
+    "issues": [
+      "Analysis pass failed for this artifact."
+    ]
+  },
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

@@ -1,0 +1,164 @@
+{
+  "roomId": "canvas-44789bfd-4c47-49f3-88be-b49b89a9a59f",
+  "canvasId": "44789bfd-4c47-49f3-88be-b49b89a9a59f",
+  "canvasName": "collaborative-drawing-mural-gpt5-4-low-collaborative-drawing-mural-gpt5-4-low-mmmnns3f",
+  "source": "viewer",
+  "shapeCount": 15,
+  "shapes": [
+    {
+      "id": "shape:mural-frame",
+      "type": "geo",
+      "x": 272,
+      "y": 192,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mural-center-ring",
+      "type": "geo",
+      "x": 568,
+      "y": 344,
+      "props": {
+        "geo": "ellipse",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mural-center-disc",
+      "type": "geo",
+      "x": 648,
+      "y": 408,
+      "props": {
+        "geo": "ellipse",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mural-center-label",
+      "type": "text",
+      "x": 612,
+      "y": 636,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mural-left-note",
+      "type": "note",
+      "x": 368,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mural-right-note",
+      "type": "note",
+      "x": 896,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mural-bottom-note",
+      "type": "note",
+      "x": 632,
+      "y": 672,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mural-stroke-1",
+      "type": "draw",
+      "x": 384,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:mural-stroke-2",
+      "type": "draw",
+      "x": 784,
+      "y": 264,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:mural-stroke-3",
+      "type": "draw",
+      "x": 536,
+      "y": 544,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:mural-spark-1",
+      "type": "draw",
+      "x": 456,
+      "y": 544,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:mural-spark-2",
+      "type": "draw",
+      "x": 944,
+      "y": 568,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:mural-spark-3",
+      "type": "draw",
+      "x": 736,
+      "y": 248,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:mural-side-bar-left",
+      "type": "geo",
+      "x": 304,
+      "y": 448,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mural-side-bar-right",
+      "type": "geo",
+      "x": 1120,
+      "y": 416,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773270875236
+  }
+}

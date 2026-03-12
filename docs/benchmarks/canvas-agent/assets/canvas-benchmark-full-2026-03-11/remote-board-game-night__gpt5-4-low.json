@@ -1,0 +1,162 @@
+{
+  "runId": "remote-board-game-night-gpt5-4-low-mmlzs9ep",
+  "scenarioId": "remote-board-game-night",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Remote Board Game Night",
+  "variantLabel": "GPT-5 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "play",
+  "startedAt": "2026-03-11T12:05:16.645Z",
+  "completedAt": "2026-03-11T12:08:55.106Z",
+  "status": "completed",
+  "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+  "canvasId": "c69096b8-8820-4d5f-83c4-22317ca8aff5",
+  "canvasName": "remote-board-game-night-gpt5-4-low-remote-board-game-night-gpt5-4-low-mmlzs9ep",
+  "viewerPath": "/canvas?room=canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5&id=c69096b8-8820-4d5f-83c4-22317ca8aff5&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__gpt5-4-low-doc.json",
+  "finalShapeCount": 25,
+  "actionSummary": {
+    "total": 30,
+    "byName": {
+      "create_shape": 25,
+      "align": 2,
+      "stack": 2,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 206763,
+    "initialTtfbMs": 139156,
+    "totalActionCount": 30,
+    "totalMutatingActionCount": 30,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 30,
+    "avgFirstAckMs": 144750,
+    "avgScreenshotRttMs": 34
+  },
+  "steps": [
+    {
+      "stepId": "game-state",
+      "label": "Game state board",
+      "sessionId": "1773230726769-la07a0",
+      "status": "completed",
+      "actionSummary": {
+        "total": 30,
+        "byName": {
+          "create_shape": 25,
+          "align": 2,
+          "stack": 2,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 206763,
+        "ttfbMs": 139156,
+        "actionCount": 30,
+        "mutatingActionCount": 30,
+        "followupCount": 0,
+        "retryCount": 30,
+        "firstAckMs": 144750,
+        "screenshotRttMs": 34,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773230726769-la07a0",
+          "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+          "ts": 1773230726772,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773230726769-la07a0",
+          "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+          "ts": 1773230726816,
+          "preset": "creative",
+          "request_id": "683138ec-62ce-41f0-9455-5393d2db5ae1",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 34,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773230726769-la07a0",
+          "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+          "ts": 1773230726899,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773230726769-la07a0",
+          "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+          "ts": 1773230865928,
+          "preset": "creative",
+          "ttfb": 139156,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773230726769-la07a0",
+          "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+          "ts": 1773230933532,
+          "preset": "creative",
+          "duration": 206760,
+          "chunkCount": 30,
+          "actionCount": 30,
+          "mutatingActionCount": 30,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 30,
+          "first_ack_ms": 144750,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 95,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 10,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 30 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 25,
+    "byType": {
+      "box": 18,
+      "note": 7
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows a structured layout with labeled sections and shapes representing game elements, demonstrating good organization and use of features.",
+    "scoreRationale": "High score due to completion of required shapes and verbs with well-aligned components and minimal issues.",
+    "strengths": [
+      "Clear labeling of game sections like 'Remote' and 'Shared Resource Pool'",
+      "Good use of shape creation and alignment actions"
+    ],
+    "issues": [
+      "Presence of a visible 'Realtime Sync Health' dialog overlapping content",
+      "Minor clutter in the lower part of the canvas with overlapping elements"
+    ]
+  }
+}

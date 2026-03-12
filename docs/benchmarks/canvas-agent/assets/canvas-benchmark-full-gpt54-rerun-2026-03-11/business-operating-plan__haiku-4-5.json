@@ -1,0 +1,155 @@
+{
+  "runId": "business-operating-plan-haiku-4-5-mmmklzkq",
+  "scenarioId": "business-operating-plan",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Business Operating Plan",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "business",
+  "startedAt": "2026-03-11T21:48:16.306Z",
+  "completedAt": "2026-03-11T21:49:32.704Z",
+  "status": "failed",
+  "roomId": "canvas-a720f093-9d42-480b-a01e-c0aa37258836",
+  "canvasId": "a720f093-9d42-480b-a01e-c0aa37258836",
+  "canvasName": "business-operating-plan-haiku-4-5-business-operating-plan-haiku-4-5-mmmklzkq",
+  "viewerPath": "/canvas?room=canvas-a720f093-9d42-480b-a01e-c0aa37258836&id=a720f093-9d42-480b-a01e-c0aa37258836&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/business-operating-plan__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/business-operating-plan__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/business-operating-plan__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 24,
+    "byName": {
+      "create_shape": 17,
+      "align": 3,
+      "stack": 3,
+      "reorder": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 64711,
+    "initialTtfbMs": 10106,
+    "totalActionCount": 24,
+    "totalMutatingActionCount": 24,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 24,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "plan-board",
+      "label": "Plan board",
+      "sessionId": "1773265706357-84fyb3",
+      "status": "completed",
+      "actionSummary": {
+        "total": 24,
+        "byName": {
+          "create_shape": 17,
+          "align": 3,
+          "stack": 3,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 64711,
+        "ttfbMs": 10106,
+        "actionCount": 24,
+        "mutatingActionCount": 24,
+        "followupCount": 0,
+        "retryCount": 24,
+        "firstAckMs": 15687,
+        "screenshotRttMs": 32,
+        "screenshotResult": null,
+        "usage": null,
+        "estimatedCostUsd": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773265706357-84fyb3",
+          "roomId": "canvas-a720f093-9d42-480b-a01e-c0aa37258836",
+          "ts": 1773265706373,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773265706357-84fyb3",
+          "roomId": "canvas-a720f093-9d42-480b-a01e-c0aa37258836",
+          "ts": 1773265706416,
+          "preset": "creative",
+          "request_id": "9e9cf1b5-d6b7-4ffd-a686-0d3963d0288c",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 32,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773265706357-84fyb3",
+          "roomId": "canvas-a720f093-9d42-480b-a01e-c0aa37258836",
+          "ts": 1773265706547,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773265706357-84fyb3",
+          "roomId": "canvas-a720f093-9d42-480b-a01e-c0aa37258836",
+          "ts": 1773265716479,
+          "preset": "creative",
+          "ttfb": 10106,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773265706357-84fyb3",
+          "roomId": "canvas-a720f093-9d42-480b-a01e-c0aa37258836",
+          "ts": 1773265771065,
+          "preset": "creative",
+          "duration": 64692,
+          "chunkCount": 24,
+          "actionCount": 24,
+          "mutatingActionCount": 24,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 24,
+          "first_ack_ms": 15687,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "status is not defined"
+    ]
+  },
+  "error": "status is not defined"
+}

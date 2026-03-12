@@ -1,0 +1,149 @@
+{
+  "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+  "canvasId": "a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+  "canvasName": "collaborative-drawing-mural-gpt5-4-low-collaborative-drawing-mural-gpt5-4-low-mmlzykfe",
+  "source": "viewer",
+  "shapeCount": 15,
+  "shapes": [
+    {
+      "id": "shape:mural-bg",
+      "type": "geo",
+      "x": 208,
+      "y": 192,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:hero-underlay",
+      "type": "geo",
+      "x": 496,
+      "y": 352,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:hero-title",
+      "type": "note",
+      "x": 528,
+      "y": 384,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:swoosh-underline",
+      "type": "draw",
+      "x": 528,
+      "y": 512,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:spark-left",
+      "type": "draw",
+      "x": 400,
+      "y": 320,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:spark-right",
+      "type": "draw",
+      "x": 976,
+      "y": 352,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:support-1",
+      "type": "note",
+      "x": 1024,
+      "y": 464,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-2",
+      "type": "note",
+      "x": 1024,
+      "y": 496,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:left-label-1",
+      "type": "note",
+      "x": 208,
+      "y": 464,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:left-label-2",
+      "type": "note",
+      "x": 208,
+      "y": 496,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:tile-1",
+      "type": "geo",
+      "x": 560,
+      "y": 640,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:tile-2",
+      "type": "geo",
+      "x": 688,
+      "y": 640,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:tile-3",
+      "type": "geo",
+      "x": 816,
+      "y": 640,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:connector-1",
+      "type": "draw",
+      "x": 1008,
+      "y": 472,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:connector-2",
+      "type": "draw",
+      "x": 1008,
+      "y": 520,
+      "props": {
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773231187713
+  }
+}

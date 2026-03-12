@@ -1,0 +1,59 @@
+{
+  "runId": "presentation-storyboard-cerebras-gpt-oss-120b-mmmmnmbo",
+  "scenarioId": "presentation-storyboard",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Presentation Storyboard",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "presentation",
+  "startedAt": "2026-03-11T22:45:31.141Z",
+  "completedAt": "2026-03-11T22:45:31.146Z",
+  "status": "failed",
+  "roomId": "canvas-2ea2bdfd-6609-4158-9b74-3821e1b56f24",
+  "canvasId": "2ea2bdfd-6609-4158-9b74-3821e1b56f24",
+  "canvasName": "presentation-storyboard-cerebras-gpt-oss-120b-presentation-storyboard-cerebras-gpt-oss-120b-mmmmnmbo",
+  "viewerPath": "/canvas?room=canvas-2ea2bdfd-6609-4158-9b74-3821e1b56f24&id=2ea2bdfd-6609-4158-9b74-3821e1b56f24&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/presentation-storyboard__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/presentation-storyboard__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/presentation-storyboard__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "browser.newPage: Target page, context or browser has been closed"
+    ]
+  },
+  "error": "browser.newPage: Target page, context or browser has been closed"
+}

@@ -1,0 +1,32 @@
+{
+  "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+  "canvasId": "0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+  "canvasName": "podcast-episode-map-cerebras-gpt-oss-120b-podcast-episode-map-cerebras-gpt-oss-120b-mmlz9iey",
+  "source": "viewer",
+  "shapeCount": 2,
+  "shapes": [
+    {
+      "id": "shape:plan-bg",
+      "type": "geo",
+      "x": 340,
+      "y": 240,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:episode-hero",
+      "type": "geo",
+      "x": 320,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773229864606
+  }
+}

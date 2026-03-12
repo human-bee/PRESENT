@@ -1,0 +1,34 @@
+{
+  "roomId": "canvas-a1321939-39ac-4919-b37d-6d72b56ab11c",
+  "canvasId": "a1321939-39ac-4919-b37d-6d72b56ab11c",
+  "canvasName": "podcast-episode-map-cerebras-gpt-oss-120b-podcast-episode-map-cerebras-gpt-oss-120b-mmmn4la4",
+  "source": "viewer",
+  "shapeCount": 2,
+  "shapes": [
+    {
+      "id": "shape:podcast-board-bg",
+      "type": "geo",
+      "x": -400,
+      "y": -300,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmn6erj-528",
+      "type": "note",
+      "x": -340,
+      "y": -240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773270012008
+  }
+}

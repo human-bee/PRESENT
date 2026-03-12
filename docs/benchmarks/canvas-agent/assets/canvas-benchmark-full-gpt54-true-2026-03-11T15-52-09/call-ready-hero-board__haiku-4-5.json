@@ -1,0 +1,175 @@
+{
+  "runId": "call-ready-hero-board-haiku-4-5-mmmo7bb6",
+  "scenarioId": "call-ready-hero-board",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Call-Ready Hero Board",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "realtime",
+  "startedAt": "2026-03-11T23:28:49.652Z",
+  "completedAt": "2026-03-11T23:29:28.558Z",
+  "status": "completed",
+  "roomId": "canvas-ff52a6e2-60ce-4e96-9d0f-9eb42f7077cc",
+  "canvasId": "ff52a6e2-60ce-4e96-9d0f-9eb42f7077cc",
+  "canvasName": "call-ready-hero-board-haiku-4-5-call-ready-hero-board-haiku-4-5-mmmo7bb6",
+  "viewerPath": "/canvas?room=canvas-ff52a6e2-60ce-4e96-9d0f-9eb42f7077cc&id=ff52a6e2-60ce-4e96-9d0f-9eb42f7077cc&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/call-ready-hero-board__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/call-ready-hero-board__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/call-ready-hero-board__haiku-4-5-doc.json",
+  "finalShapeCount": 6,
+  "actionSummary": {
+    "total": 9,
+    "byName": {
+      "create_shape": 6,
+      "align": 1,
+      "stack": 1,
+      "reorder": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 6,
+    "byType": {
+      "rectangle": 1,
+      "note": 5
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 27543,
+    "initialTtfbMs": 6302,
+    "totalActionCount": 9,
+    "totalMutatingActionCount": 9,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 9,
+    "avgFirstAckMs": 11914,
+    "avgScreenshotRttMs": 22
+  },
+  "usage": {
+    "inputTokens": 24527,
+    "outputTokens": 911,
+    "reasoningTokens": null,
+    "cachedInputTokens": 0,
+    "totalTokens": 25438
+  },
+  "estimatedCost": {
+    "inputUsd": 0.024527,
+    "outputUsd": 0.004555,
+    "totalUsd": 0.029082,
+    "notes": "Anthropic Claude Platform list pricing for Haiku 4.5.",
+    "sourceUrl": "https://www.anthropic.com/claude/haiku"
+  },
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "hero-board",
+      "label": "Hero board",
+      "sessionId": "1773271739447-jvcr34",
+      "status": "completed",
+      "actionSummary": {
+        "total": 9,
+        "byName": {
+          "create_shape": 6,
+          "align": 1,
+          "stack": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 27543,
+        "ttfbMs": 6302,
+        "actionCount": 9,
+        "mutatingActionCount": 9,
+        "followupCount": 0,
+        "retryCount": 9,
+        "firstAckMs": 11914,
+        "screenshotRttMs": 22,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 24527,
+          "outputTokens": 911,
+          "reasoningTokens": null,
+          "cachedInputTokens": 0,
+          "totalTokens": 25438
+        },
+        "estimatedCostUsd": 0.029082
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773271739447-jvcr34",
+          "roomId": "canvas-ff52a6e2-60ce-4e96-9d0f-9eb42f7077cc",
+          "ts": 1773271739448,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773271739447-jvcr34",
+          "roomId": "canvas-ff52a6e2-60ce-4e96-9d0f-9eb42f7077cc",
+          "ts": 1773271739475,
+          "preset": "creative",
+          "request_id": "b19222df-e771-4812-ad5a-1067d5ab755c",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 22,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773271739447-jvcr34",
+          "roomId": "canvas-ff52a6e2-60ce-4e96-9d0f-9eb42f7077cc",
+          "ts": 1773271739584,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773271739447-jvcr34",
+          "roomId": "canvas-ff52a6e2-60ce-4e96-9d0f-9eb42f7077cc",
+          "ts": 1773271745750,
+          "preset": "creative",
+          "ttfb": 6302,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773271739447-jvcr34",
+          "roomId": "canvas-ff52a6e2-60ce-4e96-9d0f-9eb42f7077cc",
+          "ts": 1773271766990,
+          "preset": "creative",
+          "duration": 27542,
+          "chunkCount": 10,
+          "actionCount": 9,
+          "mutatingActionCount": 9,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 9,
+          "first_ack_ms": 11914,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 95,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 10,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 9 time(s)."
+    ]
+  }
+}

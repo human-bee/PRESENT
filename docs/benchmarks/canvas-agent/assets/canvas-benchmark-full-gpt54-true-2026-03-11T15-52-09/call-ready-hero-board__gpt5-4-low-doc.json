@@ -1,0 +1,104 @@
+{
+  "roomId": "canvas-b77d0183-6722-4218-93dd-0eeea9bf21ff",
+  "canvasId": "b77d0183-6722-4218-93dd-0eeea9bf21ff",
+  "canvasName": "call-ready-hero-board-gpt5-4-low-call-ready-hero-board-gpt5-4-low-mmmo85ip",
+  "source": "viewer",
+  "shapeCount": 9,
+  "shapes": [
+    {
+      "id": "shape:board-frame",
+      "type": "geo",
+      "x": 176,
+      "y": 160,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:notes-rail",
+      "type": "geo",
+      "x": 848,
+      "y": 256,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:idea-area",
+      "type": "geo",
+      "x": 240,
+      "y": 256,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo8idt-792",
+      "type": "note",
+      "x": 288,
+      "y": 304,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:hero-underline",
+      "type": "draw",
+      "x": 288,
+      "y": 456,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:preset-mmmo8lu0-672",
+      "type": "note",
+      "x": 288,
+      "y": 520,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-1",
+      "type": "note",
+      "x": 880,
+      "y": 320,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-2",
+      "type": "note",
+      "x": 880,
+      "y": 352,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-3",
+      "type": "note",
+      "x": 880,
+      "y": 384,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271805373
+  }
+}

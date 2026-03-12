@@ -1,0 +1,156 @@
+{
+  "runId": "collaborative-brainstorm-cerebras-gpt-oss-120b-mmlzd5i5",
+  "scenarioId": "collaborative-brainstorm",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Collaborative Brainstorm",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "brainstorm",
+  "startedAt": "2026-03-11T11:53:31.888Z",
+  "completedAt": "2026-03-11T11:53:48.246Z",
+  "status": "completed",
+  "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+  "canvasId": "c1c8cd47-734d-48c4-9e07-2366fdce012d",
+  "canvasName": "collaborative-brainstorm-cerebras-gpt-oss-120b-collaborative-brainstorm-cerebras-gpt-oss-120b-mmlzd5i5",
+  "viewerPath": "/canvas?room=canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d&id=c1c8cd47-734d-48c4-9e07-2366fdce012d&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 6,
+  "actionSummary": {
+    "total": 6,
+    "byName": {
+      "create_shape": 6
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 5012,
+    "initialTtfbMs": 1626,
+    "totalActionCount": 6,
+    "totalMutatingActionCount": 6,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 1,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": 26
+  },
+  "steps": [
+    {
+      "stepId": "theme-clusters",
+      "label": "Theme clusters",
+      "sessionId": "1773230021573-hbbe35",
+      "status": "completed",
+      "actionSummary": {
+        "total": 6,
+        "byName": {
+          "create_shape": 6
+        }
+      },
+      "metrics": {
+        "durationMs": 5012,
+        "ttfbMs": 1626,
+        "actionCount": 6,
+        "mutatingActionCount": 6,
+        "followupCount": 0,
+        "retryCount": 1,
+        "firstAckMs": null,
+        "screenshotRttMs": 26,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773230021573-hbbe35",
+          "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+          "ts": 1773230021573,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773230021573-hbbe35",
+          "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+          "ts": 1773230021604,
+          "preset": "creative",
+          "request_id": "caab1b26-5ca4-48fb-9f84-c55c90f67772",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 26,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773230021573-hbbe35",
+          "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+          "ts": 1773230021696,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773230021573-hbbe35",
+          "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+          "ts": 1773230023199,
+          "preset": "creative",
+          "ttfb": 1626,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773230021573-hbbe35",
+          "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+          "ts": 1773230026584,
+          "preset": "creative",
+          "duration": 5011,
+          "chunkCount": 1,
+          "actionCount": 6,
+          "mutatingActionCount": 6,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 1,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 77,
+    "grade": "strong",
+    "rubric": {
+      "shapes": 23,
+      "requiredVerbs": 35,
+      "preferredVerbs": 0,
+      "screenshot": 10,
+      "stability": 9
+    },
+    "notes": [
+      "Shape count below target (6/9).",
+      "Retries recorded 1 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 6,
+    "byType": {
+      "box": 3,
+      "note": 3
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows three orange sticky notes labeled Ideas, UX, and Tech with dotted red rectangles around each.",
+    "scoreRationale": "The score reflects a partial achievement due to only six shapes created out of the required 23 and moderate stability and screenshot scores.",
+    "strengths": [
+      "Clear labeling of concepts",
+      "Use of consistent styling for shapes"
+    ],
+    "issues": [
+      "Insufficient number of shapes",
+      "Presence of degraded realtime sync health"
+    ]
+  }
+}

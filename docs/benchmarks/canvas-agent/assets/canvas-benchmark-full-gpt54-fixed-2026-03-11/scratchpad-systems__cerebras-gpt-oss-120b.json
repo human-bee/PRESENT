@@ -1,0 +1,66 @@
+{
+  "runId": "scratchpad-systems-cerebras-gpt-oss-120b-mmmll9d6",
+  "scenarioId": "scratchpad-systems",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Scratchpad Systems Sketch",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "scratchpad",
+  "startedAt": "2026-03-11T22:15:41.427Z",
+  "completedAt": "2026-03-11T22:15:41.428Z",
+  "status": "failed",
+  "roomId": "canvas-474c9d2b-bb55-4dfe-abc7-6c8c6c5ebb35",
+  "canvasId": "474c9d2b-bb55-4dfe-abc7-6c8c6c5ebb35",
+  "canvasName": "scratchpad-systems-cerebras-gpt-oss-120b-scratchpad-systems-cerebras-gpt-oss-120b-mmmll9d6",
+  "viewerPath": "/canvas?room=canvas-474c9d2b-bb55-4dfe-abc7-6c8c6c5ebb35&id=474c9d2b-bb55-4dfe-abc7-6c8c6c5ebb35&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": {
+    "summary": "Visual analysis failed.",
+    "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b.png'",
+    "strengths": [],
+    "issues": [
+      "Analysis pass failed for this artifact."
+    ]
+  },
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

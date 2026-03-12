@@ -1,0 +1,64 @@
+{
+  "roomId": "canvas-8d9b43fd-6f36-42ec-87c9-371b96e489ef",
+  "canvasId": "8d9b43fd-6f36-42ec-87c9-371b96e489ef",
+  "canvasName": "freehand-mascot-poster-cerebras-gpt-oss-120b-freehand-mascot-poster-cerebras-gpt-oss-120b-mmmnvnd3",
+  "source": "viewer",
+  "shapeCount": 5,
+  "shapes": [
+    {
+      "id": "shape:preset-mmmnvwfc-793",
+      "type": "note",
+      "x": 420,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnvwfc-373",
+      "type": "note",
+      "x": 470,
+      "y": 400,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnvwfc-702",
+      "type": "note",
+      "x": 470,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnvwfd-91",
+      "type": "note",
+      "x": 470,
+      "y": 560,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mascot-1",
+      "type": "draw",
+      "x": 520,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271201940
+  }
+}

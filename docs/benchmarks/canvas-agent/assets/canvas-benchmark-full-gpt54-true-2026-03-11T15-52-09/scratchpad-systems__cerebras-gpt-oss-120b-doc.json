@@ -1,0 +1,134 @@
+{
+  "roomId": "canvas-fdddfb38-53f9-4a0e-8e2f-6d6222f152cd",
+  "canvasId": "fdddfb38-53f9-4a0e-8e2f-6d6222f152cd",
+  "canvasName": "scratchpad-systems-cerebras-gpt-oss-120b-scratchpad-systems-cerebras-gpt-oss-120b-mmmncjvt",
+  "source": "viewer",
+  "shapeCount": 12,
+  "shapes": [
+    {
+      "id": "shape:voice-input",
+      "type": "note",
+      "x": 120,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:queue",
+      "type": "note",
+      "x": 360,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:steward",
+      "type": "note",
+      "x": 600,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:screenshot",
+      "type": "note",
+      "x": 840,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:action-stream",
+      "type": "note",
+      "x": 1080,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:ack-loop",
+      "type": "note",
+      "x": 1320,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:arrow-vi-queue",
+      "type": "draw",
+      "x": 720,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-queue-steward",
+      "type": "draw",
+      "x": 720,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-steward-screenshot",
+      "type": "draw",
+      "x": 720,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-screenshot-action",
+      "type": "draw",
+      "x": 720,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-action-ack",
+      "type": "draw",
+      "x": 720,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-ack-loopback",
+      "type": "draw",
+      "x": 720,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773270313522
+  }
+}
