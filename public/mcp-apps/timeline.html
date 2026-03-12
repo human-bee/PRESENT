@@ -33,14 +33,12 @@
       html,
       body {
         margin: 0;
-        height: 100%;
-        min-height: 100%;
       }
 
       body {
         color: var(--ink);
         font-family: 'Avenir Next', 'Manrope', 'Segoe UI', sans-serif;
-        overflow: hidden;
+        overflow: visible;
         background:
           radial-gradient(1000px 400px at 0% 0%, rgba(126, 159, 143, 0.18), transparent 58%),
           radial-gradient(900px 340px at 100% 0%, rgba(208, 176, 118, 0.18), transparent 56%),
@@ -63,7 +61,6 @@
       main {
         position: relative;
         width: min(1240px, 100%);
-        height: 100%;
         margin: 0 auto;
         padding: 14px;
       }
@@ -72,8 +69,7 @@
         position: relative;
         display: flex;
         flex-direction: column;
-        height: 100%;
-        overflow: hidden;
+        overflow: visible;
         border: 1px solid rgba(23, 33, 29, 0.08);
         border-radius: 28px;
         background:
@@ -223,8 +219,8 @@
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         gap: 14px;
         flex: 1 1 auto;
-        min-height: 0;
-        overflow: auto;
+        min-height: min-content;
+        overflow: visible;
         align-content: start;
         padding: 0 22px 18px;
       }
@@ -554,7 +550,12 @@
           </div>
         </section>
 
-        <section class="lane-grid" id="lane-grid" aria-label="Timeline lanes"></section>
+        <section
+          class="lane-grid"
+          id="lane-grid"
+          data-testid="timeline-lane-grid"
+          aria-label="Timeline lanes"
+        ></section>
         <div class="empty" id="empty-state">The host will post the canonical roadmap snapshot into this widget.</div>
 
         <footer class="footer">
@@ -621,19 +622,24 @@
         const width = Math.ceil(
           Math.max(
             shellEl ? shellEl.scrollWidth : 0,
+            laneGridEl ? laneGridEl.scrollWidth : 0,
             mainEl ? mainEl.scrollWidth : 0,
-            shellEl ? shellEl.getBoundingClientRect().width : 0,
+            shellEl ? shellEl.offsetWidth : 0,
+            mainEl ? mainEl.offsetWidth : 0,
             document.documentElement ? document.documentElement.scrollWidth : 0,
             document.body ? document.body.scrollWidth : 0,
           ),
         ) || undefined;
         const height = Math.ceil(
           Math.max(
+            laneGridEl ? laneGridEl.scrollHeight : 0,
             mainEl ? mainEl.scrollHeight : 0,
             shellEl ? shellEl.scrollHeight : 0,
-            shellEl ? shellEl.getBoundingClientRect().height : 0,
             document.documentElement ? document.documentElement.scrollHeight : 0,
             document.body ? document.body.scrollHeight : 0,
+            shellEl ? shellEl.offsetHeight : 0,
+            mainEl ? mainEl.offsetHeight : 0,
+            document.body ? document.body.offsetHeight : 0,
           ),
         ) || undefined;
         if (!width && !height) return;
@@ -873,6 +879,7 @@
         });
         if (mainEl) layoutObserver.observe(mainEl);
         if (shellEl) layoutObserver.observe(shellEl);
+        if (laneGridEl) layoutObserver.observe(laneGridEl);
       }
 
       window.addEventListener('resize', () => {

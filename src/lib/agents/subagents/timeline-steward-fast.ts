@@ -6,6 +6,7 @@ import {
 } from '@/lib/agents/shared/supabase-context';
 import {
   createDefaultTimelineDocument,
+  type TimelineDocument,
   type TimelineDependency,
   type TimelineItem,
   type TimelineLane,
@@ -467,7 +468,7 @@ export async function runTimelineStewardFast(params: {
             : params.horizonLabel?.trim() || 'Active planning horizon',
       },
       ...lanes.map((lane, index) => ({
-        type: 'upsert_lane',
+        type: 'upsert_lane' as const,
         lane: {
           ...lane,
           id: lane.id || `lane-${slugify(lane.name || `lane-${index + 1}`)}`,
@@ -476,7 +477,7 @@ export async function runTimelineStewardFast(params: {
         },
       })),
       ...items.map((item, index) => ({
-        type: 'upsert_item',
+        type: 'upsert_item' as const,
         item: {
           ...item,
           id: item.id || `item-${index + 1}`,
@@ -489,7 +490,7 @@ export async function runTimelineStewardFast(params: {
         },
       })),
       ...dependencies.map((dependency, index) => ({
-        type: 'set_dependency',
+        type: 'set_dependency' as const,
         dependency: {
           ...dependency,
           id: dependency.id || `dep-${index + 1}`,
@@ -514,7 +515,7 @@ export async function runTimelineStewardFast(params: {
             exportStage: {
               id: `export-${String(args.exportTarget)}`,
               target: args.exportTarget as 'linear' | 'trello' | 'asana' | 'manual',
-              status: 'pending',
+              status: 'pending' as const,
               summary:
                 typeof args.exportSummary === 'string' && args.exportSummary.trim().length > 0
                   ? args.exportSummary.trim()

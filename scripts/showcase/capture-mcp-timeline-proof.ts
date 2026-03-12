@@ -19,6 +19,7 @@ const TRACE_JSON_OUTPUT = path.join(PROOF_DIR, 'agent-trace-report.json');
 const SCREENSHOT_OUTPUT = path.join(PROOF_DIR, 'timeline-widget-proof.png');
 const TIMELINE_COMPONENT_ID = 'mcp-timeline-widget-proof';
 const TIMELINE_TITLE = 'Super Bowl Ad Sprint';
+const SKIP_VOICE_INGRESS_PROBE = process.env.MCP_TIMELINE_PROOF_SKIP_VOICE === '1';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const ensureDir = (dir: string) => fs.mkdirSync(dir, { recursive: true });
@@ -66,6 +67,12 @@ type TimelineProofSync = {
   blockerRendered: boolean;
   blockedStatusRendered: boolean;
   dependencyRendered: boolean;
+  laneGridOverflowing: boolean;
+  laneGridClientHeight: number;
+  laneGridScrollHeight: number;
+  frameClipped: boolean;
+  frameViewportHeight: number;
+  frameDocumentHeight: number;
 };
 
 const escapeHtml = (input: unknown) =>
@@ -141,7 +148,8 @@ async function waitForCanvasRoom(page: Page): Promise<{ canvasId: string | null;
 async function waitForCanvasComponentShape(page: Page, componentId: string, timeoutMs = 60_000) {
   await page.waitForFunction(
     (targetComponentId) => {
-      const editor = (window as any).__tldrawEditor;
+      const editor =
+        (window as any).__present?.tldrawEditor || (window as any).__tldrawEditor;
       const shapes = editor?.getCurrentPageShapes?.() ?? [];
       return shapes.some(
         (shape: any) =>
@@ -157,7 +165,8 @@ async function waitForCanvasComponentShape(page: Page, componentId: string, time
 async function placeTimelineWidgetOnCanvas(page: Page, componentId: string) {
   await page.evaluate(
     (targetComponentId) => {
-      const editor = (window as any).__tldrawEditor;
+      const editor =
+        (window as any).__present?.tldrawEditor || (window as any).__tldrawEditor;
       const shapes = editor?.getCurrentPageShapes?.() ?? [];
       const widget = shapes.find(
         (shape: any) =>
@@ -678,10 +687,15 @@ async function loadTaskScopedEvents(supabase: SupabaseClient, taskId: string): P
   return (data || []) as TraceEventRow[];
 }
 
-async function waitForTimelineRender(frameLocator: FrameLocator): Promise<TimelineProofSync> {
+async function waitForTimelineRender(
+  page: Page,
+  frameLocator: FrameLocator,
+  componentId: string,
+): Promise<TimelineProofSync> {
   const start = Date.now();
   let detailExpanded = false;
   const expectedExportChip = 'export linear queued';
+  let lastObserved: Record<string, unknown> | null = null;
 
   while (Date.now() - start < 60_000) {
     const titleText = ((await frameLocator.locator('[data-testid="timeline-title"]').textContent()) || '').trim();
@@ -709,6 +723,50 @@ async function waitForTimelineRender(frameLocator: FrameLocator): Promise<Timeli
         .locator('[data-testid="timeline-dependency"]')
         .filter({ hasText: 'Talent Rights Clearance' })
         .count()) > 0;
+    const laneGridMetrics = await frameLocator.locator('[data-testid="timeline-lane-grid"]').evaluate((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return { clientHeight: 0, scrollHeight: 0, overflowing: false };
+      }
+      return {
+        clientHeight: node.clientHeight,
+        scrollHeight: node.scrollHeight,
+        overflowing: node.scrollHeight - node.clientHeight > 4,
+      };
+    });
+    const frameMetrics = await frameLocator.locator('body').evaluate(() => {
+      const doc = document.documentElement;
+      const body = document.body;
+      const documentHeight = Math.max(
+        doc?.scrollHeight ?? 0,
+        body?.scrollHeight ?? 0,
+      );
+      const viewportHeight = window.innerHeight;
+      return {
+        documentHeight,
+        viewportHeight,
+        clipped: documentHeight - viewportHeight > 8,
+      };
+    });
+    const shapeMetrics = await page.evaluate((targetComponentId) => {
+      const editor =
+        (window as any).__present?.tldrawEditor || (window as any).__tldrawEditor;
+      const shapes = editor?.getCurrentPageShapes?.() ?? [];
+      const widget = shapes.find(
+        (shape: any) =>
+          shape?.type === 'custom' &&
+          String(shape?.props?.customComponent || '') === targetComponentId,
+      );
+      return widget
+        ? {
+            w: widget.props?.w ?? null,
+            h: widget.props?.h ?? null,
+            preferredHeight: widget.props?.state?.preferredHeight ?? null,
+            reportedContentHeight: widget.props?.state?.reportedContentHeight ?? null,
+            autoFitHeight: widget.props?.state?.autoFitHeight ?? null,
+            sizingPolicyOverride: widget.props?.state?.sizingPolicyOverride ?? null,
+          }
+        : null;
+    }, componentId);
 
     const noLegacyCopy =
       !bodyText.includes('scorecard') &&
@@ -724,7 +782,26 @@ async function waitForTimelineRender(frameLocator: FrameLocator): Promise<Timeli
       blockerRendered &&
       blockedStatusRendered &&
       dependencyRendered &&
+      !laneGridMetrics.overflowing &&
+      !frameMetrics.clipped &&
       noLegacyCopy;
+
+    lastObserved = {
+      titleText,
+      laneCount,
+      itemCount,
+      dependencyCount,
+      syncChipText,
+      exportChipText,
+      blockerRendered,
+      blockedStatusRendered,
+      dependencyRendered,
+      laneGridMetrics,
+      frameMetrics,
+      shapeMetrics,
+      noLegacyCopy,
+      ready,
+    };
 
     if (ready) {
       const firstCard = frameLocator.locator('[data-testid="timeline-item"]').first();
@@ -748,12 +825,20 @@ async function waitForTimelineRender(frameLocator: FrameLocator): Promise<Timeli
         blockerRendered,
         blockedStatusRendered,
         dependencyRendered,
+        laneGridOverflowing: laneGridMetrics.overflowing,
+        laneGridClientHeight: laneGridMetrics.clientHeight,
+        laneGridScrollHeight: laneGridMetrics.scrollHeight,
+        frameClipped: frameMetrics.clipped,
+        frameViewportHeight: frameMetrics.viewportHeight,
+        frameDocumentHeight: frameMetrics.documentHeight,
       };
     }
     await sleep(1000);
   }
 
-  throw new Error('Timeline widget did not render the roadmap proof state within timeout.');
+  throw new Error(
+    `Timeline widget did not render the roadmap proof state within timeout. lastObserved=${JSON.stringify(lastObserved)}`,
+  );
 }
 
 function buildTraceReportHtml(args: {
@@ -827,6 +912,12 @@ function buildTraceReportHtml(args: {
         <div class="label">Sync Chip</div><div>${escapeHtml(args.sync.syncChipText)}</div>
         <div class="label">Export Chip</div><div>${escapeHtml(args.sync.exportChipText)}</div>
         <div class="label">Detail Expanded</div><div>${args.sync.detailExpanded ? 'yes' : 'no'}</div>
+        <div class="label">Lane Grid Overflowing</div><div>${args.sync.laneGridOverflowing ? 'yes' : 'no'}</div>
+        <div class="label">Lane Grid Client Height</div><div>${args.sync.laneGridClientHeight}</div>
+        <div class="label">Lane Grid Scroll Height</div><div>${args.sync.laneGridScrollHeight}</div>
+        <div class="label">Frame Clipped</div><div>${args.sync.frameClipped ? 'yes' : 'no'}</div>
+        <div class="label">Frame Viewport Height</div><div>${args.sync.frameViewportHeight}</div>
+        <div class="label">Frame Document Height</div><div>${args.sync.frameDocumentHeight}</div>
       </div>
     </section>
     <section class="card">
@@ -883,9 +974,11 @@ async function main() {
     null,
     { timeout: 120_000 },
   );
-  await page.waitForFunction(() => Boolean((window as any).__tldrawEditor), null, {
-    timeout: 120_000,
-  });
+  await page.waitForFunction(
+    () => Boolean((window as any).__present?.tldrawEditor || (window as any).__tldrawEditor),
+    null,
+    { timeout: 120_000 },
+  );
 
   const { room } = await waitForCanvasRoom(page);
   logStep(`canvas room resolved: ${room}`);
@@ -946,26 +1039,35 @@ async function main() {
     task: TaskRow | null;
     validation: TaskValidation;
   } | null = null;
-  try {
-    logStep('dispatching fairy.intent voice ingress probe: rename timeline to Super Bowl Ad Sprint');
-    const response = await dispatchFairyTimelineTurn(page, room, TIMELINE_COMPONENT_ID, 'rename timeline to Super Bowl Ad Sprint');
-    const taskId = requireQueuedRun('fairy.intent', response);
-    const task = await waitForTaskCompletion(supabase, taskId, 45_000);
-    const validation = validateCompletedTask('fairy.intent', task);
-    if (validation.status === 'warning') {
-      logStep(`voice ingress warning: ${validation.message}`);
-    } else {
-      logStep(`voice ingress task completed: ${task.id}`);
-    }
-    voiceIngressResult = { response, task, validation };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logStep(`voice ingress warning: ${message}`);
+  if (SKIP_VOICE_INGRESS_PROBE) {
     voiceIngressResult = {
-      response: { ok: false, status: 0, payload: { error: message } },
+      response: { ok: true, status: 204, payload: { skipped: true } },
       task: null,
-      validation: { status: 'warning', message },
+      validation: { status: 'warning', message: 'skipped via MCP_TIMELINE_PROOF_SKIP_VOICE=1' },
     };
+    logStep('voice ingress probe skipped');
+  } else {
+    try {
+      logStep('dispatching fairy.intent voice ingress probe: rename timeline to Super Bowl Ad Sprint');
+      const response = await dispatchFairyTimelineTurn(page, room, TIMELINE_COMPONENT_ID, 'rename timeline to Super Bowl Ad Sprint');
+      const taskId = requireQueuedRun('fairy.intent', response);
+      const task = await waitForTaskCompletion(supabase, taskId, 45_000);
+      const validation = validateCompletedTask('fairy.intent', task);
+      if (validation.status === 'warning') {
+        logStep(`voice ingress warning: ${validation.message}`);
+      } else {
+        logStep(`voice ingress task completed: ${task.id}`);
+      }
+      voiceIngressResult = { response, task, validation };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logStep(`voice ingress warning: ${message}`);
+      voiceIngressResult = {
+        response: { ok: false, status: 0, payload: { error: message } },
+        task: null,
+        validation: { status: 'warning', message },
+      };
+    }
   }
   const timelineTurnResults: Array<{
     response: Record<string, unknown>;
@@ -1022,7 +1124,7 @@ async function main() {
     );
   }
 
-  const sync = await waitForTimelineRender(frameLocator);
+  const sync = await waitForTimelineRender(page, frameLocator, TIMELINE_COMPONENT_ID);
   logStep('timeline widget rendered proof state');
   await page.screenshot({ path: SCREENSHOT_OUTPUT, fullPage: false });
   await page.waitForTimeout(2500);
@@ -1059,6 +1161,12 @@ async function main() {
     blockerRendered: sync.blockerRendered,
     blockedStatusRendered: sync.blockedStatusRendered,
     dependencyRendered: sync.dependencyRendered,
+    laneGridOverflowing: sync.laneGridOverflowing,
+    laneGridClientHeight: sync.laneGridClientHeight,
+    laneGridScrollHeight: sync.laneGridScrollHeight,
+    frameClipped: sync.frameClipped,
+    frameViewportHeight: sync.frameViewportHeight,
+    frameDocumentHeight: sync.frameDocumentHeight,
     traceTaskSource: 'timeline' as const,
     traceId,
     traceEvents,

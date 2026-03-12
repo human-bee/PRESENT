@@ -356,11 +356,11 @@ const resolveStageExport = (instruction: string, now: number): TimelineTurnResol
     action: { type: 'stage_export', target },
     ops: [
       {
-        type: 'stage_export',
+        type: 'stage_export' as const,
         exportStage: {
           id: `export-${target}`,
           target,
-          status: 'queued',
+          status: 'queued' as const,
           summary: `Export queued from timeline.turn.`,
           queuedAt: now,
           updatedAt: now,
@@ -407,7 +407,7 @@ const resolveUpsertLane = (instruction: string, document: TimelineDocument): Tim
     action: { type: 'upsert_lane', laneName },
     ops: [
       {
-        type: 'upsert_lane',
+        type: 'upsert_lane' as const,
         lane: {
           id: `lane-${slugify(laneName)}`,
           name: laneName,
@@ -464,7 +464,7 @@ const resolveUpsertItem = (
     action: { type: 'upsert_item', itemTitle: title, itemType, laneName: laneQuery || undefined },
     ops: [
       {
-        type: 'upsert_item',
+        type: 'upsert_item' as const,
         item: {
           ...(current ?? {
             id: itemId,
@@ -521,7 +521,7 @@ const resolveMoveItem = (
     action: { type: 'move_item', itemId: item.id, laneId: laneResult.match.id },
     ops: [
       {
-        type: 'upsert_item',
+        type: 'upsert_item' as const,
         item: {
           ...item,
           laneId: laneResult.match.id,
@@ -572,7 +572,7 @@ const resolveSetStatus = (
     action: { type: 'set_status', itemId: item.id, status },
     ops: [
       {
-        type: 'upsert_item',
+        type: 'upsert_item' as const,
         item: {
           ...item,
           status,
@@ -659,7 +659,7 @@ const resolveSetDependency = (
               item: {
                 ...targetItem,
                 blockedBy,
-                status: nextStatus,
+                status: nextStatus ?? 'planned',
                 updatedAt: now,
               },
             },
@@ -702,7 +702,7 @@ const resolveAnnotateItem = (
       action: { type: 'annotate_item', itemId: item.id, field: 'owner', value: owner },
       ops: [
         {
-          type: 'upsert_item',
+          type: 'upsert_item' as const,
           item: {
             ...item,
             owner,
@@ -740,7 +740,7 @@ const resolveAnnotateItem = (
       action: { type: 'annotate_item', itemId: item.id, field: 'notes', value: note },
       ops: [
         {
-          type: 'upsert_item',
+          type: 'upsert_item' as const,
           item: {
             ...item,
             notes: item.notes ? `${item.notes}\n${note}` : note,

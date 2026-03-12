@@ -492,7 +492,9 @@ export function McpAppWidget(props: McpAppWidgetProps) {
   }, [timelineSync.componentId, timelineSync.room]);
 
   useEffect(() => {
-    if (!timelineSync.enabled || !timelineSync.room || !timelineSync.componentId) return;
+    const syncRoom = timelineSync.room;
+    const syncComponentId = timelineSync.componentId;
+    if (!timelineSync.enabled || !syncRoom || !syncComponentId) return;
 
     let cancelled = false;
     let timer: number | null = null;
@@ -504,8 +506,8 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       inflightController = new AbortController();
       try {
         const search = new URLSearchParams({
-          room: timelineSync.room,
-          componentId: timelineSync.componentId,
+          room: syncRoom,
+          componentId: syncComponentId,
         });
         const res = await fetchWithSupabaseAuth(`/api/steward/timeline?${search.toString()}`, {
           cache: 'no-store',
@@ -523,13 +525,27 @@ export function McpAppWidget(props: McpAppWidgetProps) {
         const version = coerceFiniteNumber(payload.version ?? document.version);
         const lastUpdated = coerceFiniteNumber(payload.lastUpdated ?? document.lastUpdated);
         const timelineFingerprint = buildTimelineFingerprint(document);
-        const signature = `${timelineSync.room}:${timelineSync.componentId}:${version ?? 'na'}:${timelineFingerprint}`;
-        if (signature === lastTimelineSyncSignatureRef.current) return;
+        const signature = `${syncRoom}:${syncComponentId}:${version ?? 'na'}:${timelineFingerprint}`;
+        const latestSnapshot = latestTimelineSnapshotRef.current;
+        const latestDocument =
+          latestSnapshot &&
+          latestSnapshot.room === syncRoom &&
+          latestSnapshot.componentId === syncComponentId &&
+          isRecord(latestSnapshot.document)
+            ? latestSnapshot.document
+            : null;
+        const recoveringFromClientSyncError =
+          isRecord(latestDocument?.sync) && latestDocument.sync.status === 'error';
+        if (
+          signature === lastTimelineSyncSignatureRef.current &&
+          !recoveringFromClientSyncError
+        )
+          return;
         lastTimelineSyncSignatureRef.current = signature;
 
         const snapshot: TimelineSyncSnapshot = {
-          room: timelineSync.room,
-          componentId: timelineSync.componentId,
+          room: syncRoom,
+          componentId: syncComponentId,
           document,
           version,
           lastUpdated,
@@ -546,8 +562,8 @@ export function McpAppWidget(props: McpAppWidgetProps) {
               : 'live';
           const nextArgs: Record<string, unknown> = {
             ...prevArgs,
-            room: timelineSync.room,
-            componentId: timelineSync.componentId,
+            room: syncRoom,
+            componentId: syncComponentId,
             timelineTitle: coerceText(document.title) ?? prevArgs.timelineTitle,
             timelineSubtitle: coerceText(document.subtitle) ?? prevArgs.timelineSubtitle,
             timelineVersion: snapshot.version != null ? snapshot.version : prevArgs.timelineVersion,
@@ -593,8 +609,8 @@ export function McpAppWidget(props: McpAppWidgetProps) {
         const latestSnapshot = latestTimelineSnapshotRef.current;
         if (
           latestSnapshot &&
-          latestSnapshot.room === timelineSync.room &&
-          latestSnapshot.componentId === timelineSync.componentId
+          latestSnapshot.room === syncRoom &&
+          latestSnapshot.componentId === syncComponentId
         ) {
           const latestDocument = isRecord(latestSnapshot.document) ? latestSnapshot.document : {};
           const nextDocument = {
@@ -634,8 +650,8 @@ export function McpAppWidget(props: McpAppWidgetProps) {
         });
         if (consecutiveFailures === 1 || consecutiveFailures % 5 === 0) {
           console.warn('[McpAppWidget] timeline sync failed', {
-            room: timelineSync.room,
-            componentId: timelineSync.componentId,
+            room: syncRoom,
+            componentId: syncComponentId,
             error: errorMessage,
             retryInMs: nextDelayMs,
             consecutiveFailures,
@@ -906,6 +922,7 @@ export function McpAppWidget(props: McpAppWidgetProps) {
 
   const title = state.title || state.toolName || 'MCP App';
   const allowAttr = buildAllowAttribute(uiMeta.permissions as any);
+  const showHostChrome = !timelineSync.enabled;
 
   return (
     <div
@@ -915,18 +932,20 @@ export function McpAppWidget(props: McpAppWidgetProps) {
         className,
       )}
     >
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs text-white/70">
-        <span className="font-semibold text-white/80">{title}</span>
-        <span className="uppercase tracking-wide">
-          {status === 'loading'
-            ? 'Loading'
-            : status === 'error'
-              ? 'Error'
-              : timelineSync.enabled
-                ? timelineShellStatus
-                : 'Ready'}
-        </span>
-      </div>
+      {showHostChrome ? (
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs text-white/70">
+          <span className="font-semibold text-white/80">{title}</span>
+          <span className="uppercase tracking-wide">
+            {status === 'loading'
+              ? 'Loading'
+              : status === 'error'
+                ? 'Error'
+                : timelineSync.enabled
+                  ? timelineShellStatus
+                  : 'Ready'}
+          </span>
+        </div>
+      ) : null}
       {status === 'error' ? (
         <div className="flex flex-1 items-center justify-center px-4 text-sm text-red-200">
           {error || 'Failed to load MCP app'}

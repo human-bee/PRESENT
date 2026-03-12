@@ -220,7 +220,7 @@ export async function runTimelinePatchTask(parsed: TimelineTaskInput) {
             type: 'set_sync_state' as const,
             sync: {
               ...record.document.sync,
-              status: 'live',
+              status: 'live' as const,
               lastSyncedAt: now,
               lastError: undefined,
               retryMs: undefined,
