@@ -88,8 +88,9 @@ export function BenchmarkRunCard({
   useEffect(() => {
     let active = true;
     let objectUrl: string | null = null;
+    const screenshotHref = run?.screenshotHref ?? null;
 
-    if (!run?.screenshotHref) {
+    if (!screenshotHref) {
       setScreenshotStatus('idle');
       setScreenshotUrl(null);
       setAssetError(null);
@@ -105,7 +106,7 @@ export function BenchmarkRunCard({
       try {
         setAssetError(null);
         setScreenshotStatus('loading');
-        const response = await fetchWithSupabaseAuth(run.screenshotHref, { cache: 'no-store' });
+        const response = await fetchWithSupabaseAuth(screenshotHref, { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`Screenshot request failed (${response.status})`);
         }

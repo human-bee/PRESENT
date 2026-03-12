@@ -141,7 +141,7 @@ export function BenchmarkExplorer({ manifest }: { manifest: BenchmarkManifestVie
             onChange={setVariantFilter}
             options={[
               ['all', 'All variants'],
-              ...manifest.variants.map((variant) => [variant.id, variant.label]),
+              ...manifest.variants.map((variant) => [variant.id, variant.label] as const),
             ]}
           />
           <FilterSelect
@@ -150,7 +150,7 @@ export function BenchmarkExplorer({ manifest }: { manifest: BenchmarkManifestVie
             onChange={setScenarioFilter}
             options={[
               ['all', 'All scenarios'],
-              ...manifest.scenarios.map((scenario) => [scenario.id, scenario.label]),
+              ...manifest.scenarios.map((scenario) => [scenario.id, scenario.label] as const),
             ]}
           />
         </div>
@@ -186,23 +186,23 @@ export function BenchmarkExplorer({ manifest }: { manifest: BenchmarkManifestVie
   );
 }
 
-function FilterSelect({
+function FilterSelect<TValue extends string>({
   label,
   options,
   value,
   onChange,
 }: {
   label: string;
-  options: Array<[string, string]>;
-  value: string;
-  onChange: (value: string) => void;
+  options: Array<readonly [TValue, string]>;
+  value: TValue;
+  onChange: (value: TValue) => void;
 }) {
   return (
     <label className="rounded-[1.2rem] border border-white/10 bg-white/[0.04] px-4 py-3">
       <span className="text-[10px] uppercase tracking-[0.3em] text-[#bba894]">{label}</span>
       <select
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => onChange(event.target.value as TValue)}
         className="mt-2 w-full bg-transparent text-sm text-[#fff7ed] outline-none"
       >
         {options.map(([optionValue, optionLabel]) => (

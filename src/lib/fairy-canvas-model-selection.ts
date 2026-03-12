@@ -1,6 +1,7 @@
 import {
   getCanvasModelDefinition,
   normalizeCanvasModelName,
+  type CanvasModelName,
   type CanvasModelProvider,
 } from '@/lib/agents/subagents/canvas-models';
 
@@ -39,9 +40,7 @@ export type FairyCanvasModelId = (typeof FAIRY_CANVAS_MODEL_OPTIONS)[number]['id
 type StorageReader = Pick<Storage, 'getItem'> | null | undefined;
 type StorageWriter = Pick<Storage, 'setItem' | 'removeItem'> | null | undefined;
 
-const FAIRY_CANVAS_MODEL_IDS = new Set(
-  FAIRY_CANVAS_MODEL_OPTIONS.map((option) => option.id),
-);
+const FAIRY_CANVAS_MODEL_IDS = FAIRY_CANVAS_MODEL_OPTIONS.map((option) => option.id);
 const FAIRY_CANVAS_MODEL_RESET_PATTERNS = [
   /unsupported or unavailable canvas model/i,
   /provider not configured/i,
@@ -72,11 +71,13 @@ const toSelectionErrorText = (value: unknown): string => {
   return String(value ?? '');
 };
 
+const isFairyCanvasModelId = (value: CanvasModelName): value is FairyCanvasModelId => {
+  return (FAIRY_CANVAS_MODEL_IDS as readonly CanvasModelName[]).includes(value);
+};
+
 export function normalizeFairyCanvasModelId(raw: unknown): FairyCanvasModelId | null {
   const normalized = normalizeCanvasModelName(raw);
-  return normalized && FAIRY_CANVAS_MODEL_IDS.has(normalized)
-    ? (normalized as FairyCanvasModelId)
-    : null;
+  return normalized && isFairyCanvasModelId(normalized) ? normalized : null;
 }
 
 export function getFairyCanvasModelOption(model: FairyCanvasModelId | null | undefined) {
