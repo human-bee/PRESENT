@@ -352,10 +352,19 @@ async function handleCanvasAgentPrompt(rawParams: JsonObject) {
     fastModelKeySource: parsed.fastModelKeySource?.trim() || undefined,
     canvasConfigOverrides: parsed.canvasConfigOverrides ?? null,
   };
+  const broadcastPayload: CanvasAgentPromptPayload = {
+    message: payload.message,
+    requestId: payload.requestId,
+    bounds: payload.bounds,
+    selectionIds: payload.selectionIds,
+    metadata: payload.metadata,
+    model: payload.model,
+    provider: payload.provider,
+  };
 
   await broadcastAgentPrompt({
     room: parsed.room.trim(),
-    payload,
+    payload: broadcastPayload,
   });
 
   return { status: 'queued', requestId, room: parsed.room.trim(), payload };

@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
 
-const DOCS_ROOT = path.join(process.cwd(), 'docs');
+const BENCHMARK_ROOT = path.join(process.cwd(), 'docs', 'benchmarks', 'canvas-agent');
 
 const MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
@@ -26,8 +26,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ slug?: 
     return NextResponse.json({ error: 'missing_asset_path' }, { status: 400 });
   }
 
-  const resolved = path.normalize(path.join(DOCS_ROOT, ...slug));
-  if (!resolved.startsWith(DOCS_ROOT)) {
+  const resolved = path.resolve(BENCHMARK_ROOT, ...slug);
+  const relative = path.relative(BENCHMARK_ROOT, resolved);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

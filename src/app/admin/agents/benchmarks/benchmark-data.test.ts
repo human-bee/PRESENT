@@ -86,9 +86,18 @@ describe('loadBenchmarkManifest', () => {
       requestedModel: 'openai:gpt-5.4',
       resolvedModel: 'gpt-5.4',
       viewerHref: '/canvas?room=bench-room',
-      artifactHref: '/admin/agents/benchmarks/asset/benchmarks/canvas-agent/assets/foo.json',
-      docHref: '/admin/agents/benchmarks/asset/benchmarks/canvas-agent/assets/foo-doc.json',
+      screenshotHref: '/admin/agents/benchmarks/asset/assets/foo.png',
+      artifactHref: '/admin/agents/benchmarks/asset/assets/foo.json',
+      docHref: '/admin/agents/benchmarks/asset/assets/foo-doc.json',
       error: 'structured output invalid',
     });
+  });
+
+  it('throws a helpful error when the manifest is invalid JSON', async () => {
+    readFileMock.mockResolvedValue('{not-json');
+
+    const { loadBenchmarkManifest } = await import('./benchmark-data');
+
+    await expect(loadBenchmarkManifest()).rejects.toThrow('Benchmark manifest is not valid JSON');
   });
 });

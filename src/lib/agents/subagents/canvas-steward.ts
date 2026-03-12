@@ -88,17 +88,17 @@ const inferProviderFromModel = (model?: string): ModelKeyProvider | null => {
   if (!model) return null;
   const normalized = model.trim().toLowerCase();
   if (!normalized) return null;
-  if (normalized.startsWith('openai:') || normalized.startsWith('gpt')) return 'openai';
-  if (normalized.startsWith('anthropic:') || normalized.startsWith('claude')) return 'anthropic';
-  if (normalized.startsWith('google:') || normalized.startsWith('gemini')) return 'google';
   if (
     normalized.startsWith('cerebras:') ||
+    normalized.startsWith('gpt-oss') ||
     normalized.startsWith('llama') ||
-    normalized.startsWith('qwen') ||
-    normalized.startsWith('gpt-oss')
+    normalized.startsWith('qwen')
   ) {
     return 'cerebras';
   }
+  if (normalized.startsWith('openai:') || normalized.startsWith('gpt')) return 'openai';
+  if (normalized.startsWith('anthropic:') || normalized.startsWith('claude')) return 'anthropic';
+  if (normalized.startsWith('google:') || normalized.startsWith('gemini')) return 'google';
   return null;
 };
 

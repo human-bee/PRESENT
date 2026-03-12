@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  FAIRY_CANVAS_MODEL_CHANGE_EVENT,
   FAIRY_CANVAS_MODEL_OPTIONS,
   FAIRY_CANVAS_MODEL_STORAGE_KEY,
   getFairyCanvasModelOption,
@@ -17,13 +18,19 @@ export function useFairyCanvasModelSelection() {
   useEffect(() => {
     setSelectedModelState(readStoredFairyCanvasModel());
 
+    const syncSelection = () => setSelectedModelState(readStoredFairyCanvasModel());
     const handleStorage = (event: StorageEvent) => {
       if (event.key && event.key !== FAIRY_CANVAS_MODEL_STORAGE_KEY) return;
-      setSelectedModelState(readStoredFairyCanvasModel());
+      syncSelection();
     };
+    const handleLocalChange = () => syncSelection();
 
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    window.addEventListener(FAIRY_CANVAS_MODEL_CHANGE_EVENT, handleLocalChange);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener(FAIRY_CANVAS_MODEL_CHANGE_EVENT, handleLocalChange);
+    };
   }, []);
 
   return useMemo(

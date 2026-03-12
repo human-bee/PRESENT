@@ -2,14 +2,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { config as loadEnv } from 'dotenv';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
 import { getCanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
+import { loadPresentEnv } from './_env';
 
-loadEnv({ path: path.join(process.cwd(), '.env.local') });
-loadEnv({ path: '/Users/bsteinher/PRESENT/.env.local', override: false });
+loadPresentEnv(process.cwd());
 
 type ScenarioId = 'poster' | 'pen' | 'layout';
 

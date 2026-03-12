@@ -358,6 +358,7 @@ describe('conductor router executeTask', () => {
   it('preserves explicit model runtime context through fairy.intent to canvas.agent_prompt', async () => {
     const { flags } = await import('@/lib/feature-flags');
     const { runCanvasSteward } = await import('@/lib/agents/subagents/canvas-steward');
+    const { broadcastAgentPrompt } = await import('@/lib/agents/shared/supabase-context');
 
     flags.swarmOrchestrationEnabled = false;
     const { executeTask } = await import('@/lib/agents/conductor/router');
@@ -398,5 +399,24 @@ describe('conductor router executeTask', () => {
         }),
       }),
     });
+
+    expect(broadcastAgentPrompt).toHaveBeenCalledWith({
+      room: 'canvas-room-model',
+      payload: expect.objectContaining({
+        message: 'Draw a product launch board.',
+        requestId: 'intent-model-propagation',
+        model: 'gpt-5.4',
+        provider: 'openai',
+      }),
+    });
+    const broadcastPayload = (broadcastAgentPrompt as jest.Mock).mock.calls[0]?.[0]?.payload;
+    expect(broadcastPayload).toBeTruthy();
+    expect(broadcastPayload).not.toHaveProperty('billingUserId');
+    expect(broadcastPayload).not.toHaveProperty('requesterUserId');
+    expect(broadcastPayload).not.toHaveProperty('sharedUnlockSessionId');
+    expect(broadcastPayload).not.toHaveProperty('modelKeySource');
+    expect(broadcastPayload).not.toHaveProperty('primaryModelKeySource');
+    expect(broadcastPayload).not.toHaveProperty('fastModelKeySource');
+    expect(broadcastPayload).not.toHaveProperty('canvasConfigOverrides');
   });
 });

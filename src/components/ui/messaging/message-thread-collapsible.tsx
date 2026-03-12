@@ -29,6 +29,7 @@ import { createAudioCommandRecorder } from './audio-command-recorder';
 import {
   buildFairyCanvasModelRequest,
   readStoredFairyCanvasModel,
+  resetFairyCanvasModelSelectionIfUnavailable,
 } from '@/lib/fairy-canvas-model-selection';
 
 /**
@@ -633,7 +634,12 @@ export const MessageThreadCollapsible = React.forwardRef<
       });
       if (!res.ok) {
         const detail = await res.text();
-        throw new Error(`Canvas steward prompt failed (${res.status}): ${detail}`);
+        const selectionReset = resetFairyCanvasModelSelectionIfUnavailable(detail);
+        throw new Error(
+          selectionReset
+            ? 'Canvas steward prompt failed: selected fairy canvas model was unavailable and has been reset to Auto.'
+            : `Canvas steward prompt failed (${res.status}): ${detail}`,
+        );
       }
     },
     [livekitCtx?.roomName, room],

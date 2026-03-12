@@ -13,6 +13,9 @@
 - For local benchmarking, live viewer truth is more reliable than persisted canvas state. The browser can successfully render and execute actions while local persistence still fails under session/RLS constraints.
 - The current system rewards models that emit valid TLDraw-native actions immediately. Extra reasoning depth does not help if it delays first action envelopes past realtime tolerances.
 - Multi-zone and presentation layouts stress different behavior than sticky-note boards. The benchmark needs both structured business boards and freer drawing scenarios because model rankings change by scenario type.
+- The fairy quick-picker only works if it writes into the same server-first contract the queue path reads. Anything scoped to the retired client fairy state is operationally fake.
+- Admin benchmark surfaces have to follow the browser bearer-token model the rest of PRESENT uses. SSR-only auth checks look correct in code review, but they fail in practice against localStorage-backed Supabase sessions.
+- Room-wide `agent_prompt` broadcasts are an observability surface, not a private runtime channel. They must carry enough context for the viewer, but never BYOK identity or key-source metadata.
 
 ## Concrete Bugs Found
 
@@ -26,6 +29,8 @@
 - Queue propagation gap: `runCanvas` accepted request-level model overrides, but the `fairy.intent -> canvas.agent_prompt` handoff rebuilt a smaller payload and dropped model/provider plus BYOK runtime context before the steward executed.
 - Provider misclassification: bare `gpt-oss-120b` strings were inferred as Cerebras at ingress but matched the OpenAI branch in the runner because generic `gpt*` detection ran before `gpt-oss*`.
 - Benchmark admin auth gap: the operator page and asset route originally served local benchmark files without the same admin access checks used elsewhere in the agent admin surface.
+- Sticky picker outage: once a user chose an unavailable benchmark lane, that localStorage value could poison later fairy prompts until the browser state was cleared manually.
+- Benchmark asset fetch gap: screenshot and JSON links worked as plain URLs in theory, but they bypassed Supabase bearer auth and silently broke in the actual browser session model.
 
 ## Fixes Already Made
 
@@ -35,6 +40,9 @@
 - Added viewer-shell detection and explicit connect handling before running steward actions.
 - Changed final scoring to use live viewer canvas state when persisted state is missing or stale.
 - Added an admin benchmark surface and static HTML report, then fixed the admin normalization bug so run metrics render correctly.
+- Moved benchmark manifest loading behind an authenticated admin API route and switched the page to client-authenticated fetching so the surface works with the same auth contract as the rest of agent admin.
+- Restricted benchmark asset serving to `docs/benchmarks/canvas-agent/**`, hardened the traversal guard, and changed screenshot or artifact rendering to use auth-backed blob fetches instead of raw asset URLs.
+- Added sticky model reset handling so unavailable quick-picker lanes fall back to Auto instead of repeatedly bricking fairy prompts.
 
 ## Model Takeaways
 
@@ -65,6 +73,7 @@
 - Scenario design matters: one benchmark catalog should include structured boards, collaborative zones, and freehand pressure tests, because no single model won every category.
 - A model picker has to be backed by the server-first contract, not the retired fairy client state. Otherwise it becomes a UI placebo.
 - The benchmark report needs both requested and resolved runtime model ids. Labels such as `gpt5.4-low` are useful for comparisons, but the operator surface still has to reveal the actual runtime model that executed.
+- Benchmark UI polish is only worth trusting if the auth path is real. A beautiful operator surface that cannot load screenshots or JSON under normal admin auth is worse than a raw report because it hides the actual failure mode.
 
 ## Recommended Next Experiments
 

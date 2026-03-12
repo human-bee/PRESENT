@@ -1,7 +1,10 @@
 import {
   buildFairyCanvasModelRequest,
+  clearStoredFairyCanvasModel,
   normalizeFairyCanvasModelId,
   readStoredFairyCanvasModel,
+  resetFairyCanvasModelSelectionIfUnavailable,
+  shouldResetFairyCanvasModelSelection,
   writeStoredFairyCanvasModel,
 } from './fairy-canvas-model-selection';
 
@@ -21,7 +24,7 @@ describe('fairy canvas model selection', () => {
     expect(writeStoredFairyCanvasModel('gpt-5.4')).toBe('gpt-5.4');
     expect(readStoredFairyCanvasModel()).toBe('gpt-5.4');
 
-    expect(writeStoredFairyCanvasModel(null)).toBeNull();
+    expect(clearStoredFairyCanvasModel()).toBeNull();
     expect(readStoredFairyCanvasModel()).toBeNull();
   });
 
@@ -34,5 +37,22 @@ describe('fairy canvas model selection', () => {
       model: 'gpt-oss-120b',
       provider: 'cerebras',
     });
+  });
+
+  it('detects unavailable-model failures that should reset sticky selection', () => {
+    expect(shouldResetFairyCanvasModelSelection('Unsupported or unavailable canvas model: gpt-oss-120b')).toBe(
+      true,
+    );
+    expect(shouldResetFairyCanvasModelSelection('Provider not configured: cerebras')).toBe(true);
+    expect(shouldResetFairyCanvasModelSelection('Queue unavailable')).toBe(false);
+  });
+
+  it('clears sticky selection when an unavailable-model failure occurs', () => {
+    writeStoredFairyCanvasModel('gpt-oss-120b');
+
+    expect(
+      resetFairyCanvasModelSelectionIfUnavailable('Unsupported or unavailable canvas model: gpt-oss-120b'),
+    ).toBe(true);
+    expect(readStoredFairyCanvasModel()).toBeNull();
   });
 });

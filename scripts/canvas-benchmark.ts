@@ -2,7 +2,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { config as loadEnv } from 'dotenv';
 import { chromium, type Browser, type Page } from '@playwright/test';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { RoomServiceClient } from 'livekit-server-sdk';
@@ -23,13 +22,10 @@ import type {
   BenchmarkTokenUsage,
   BenchmarkVariant,
 } from '@/lib/benchmarks/canvas-agent/types';
+import { loadPresentEnv } from './_env';
 
 const cwd = process.cwd();
-const localEnvPath = path.join(cwd, '.env.local');
-const canonicalEnvPath = '/Users/bsteinher/PRESENT/.env.local';
-loadEnv({ path: localEnvPath });
-// Worktree env files are often partial. Always backfill missing keys from the canonical checkout.
-loadEnv({ path: canonicalEnvPath, override: false });
+loadPresentEnv(cwd);
 
 const args = new Map<string, string>();
 for (const raw of process.argv.slice(2)) {

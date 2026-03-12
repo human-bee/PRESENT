@@ -160,10 +160,10 @@ const toAccent = (seed: string) =>
 const toAssetHref = (input: string | null): string | null => {
   if (!input) return null;
   const absolute = path.isAbsolute(input) ? input : path.join(process.cwd(), input);
-  const normalized = path.normalize(absolute);
-  if (!normalized.startsWith(DOCS_ROOT)) return null;
-  const relative = path
-    .relative(DOCS_ROOT, normalized)
+  const normalized = path.resolve(absolute);
+  const relativePath = path.relative(BENCHMARK_ROOT, normalized);
+  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) return null;
+  const relative = relativePath
     .split(path.sep)
     .map(encodeURIComponent)
     .join('/');
@@ -301,9 +301,18 @@ const normalizeRun = (input: unknown, index: number): BenchmarkRunView | null =>
 export async function loadBenchmarkManifest(): Promise<BenchmarkManifestView | null> {
   try {
     const raw = await fs.readFile(LATEST_MANIFEST_PATH, 'utf8');
-    const parsed = JSON.parse(raw) as unknown;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw) as unknown;
+    } catch (error) {
+      throw new Error(
+        `Benchmark manifest is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     const root = asRecord(parsed);
-    if (!root) return null;
+    if (!root) {
+      throw new Error('Benchmark manifest must be a JSON object.');
+    }
 
     const variants = asArray(root.variants)
       .map(normalizeVariant)
@@ -367,7 +376,12 @@ export async function loadBenchmarkManifest(): Promise<BenchmarkManifestView | n
       },
       sourcePath: LATEST_MANIFEST_PATH,
     };
-  } catch {
-    return null;
+  } catch (error) {
+    const code =
+      error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : null;
+    if (code === 'ENOENT') {
+      return null;
+    }
+    throw error;
   }
 }

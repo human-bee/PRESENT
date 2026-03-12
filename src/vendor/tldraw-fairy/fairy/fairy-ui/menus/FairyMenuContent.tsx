@@ -312,7 +312,7 @@ export function FairyMenuContent({
 										key={option.id}
 										id={`fairy-canvas-model-${option.id}`}
 										onSelect={() => setSelectedModel(option.id)}
-										label={`${selectedModel === option.id ? '[Current] ' : ''}${option.shortLabel} - ${option.label}`}
+										label={`${selectedModel === option.id ? '[Current] ' : ''}${option.shortLabel} - ${option.label} (${option.providerLabel})`}
 									/>
 								))}
 							</TldrawUiMenuGroup>

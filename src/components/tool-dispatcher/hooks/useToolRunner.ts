@@ -39,6 +39,7 @@ import {
 import {
   buildFairyCanvasModelRequest,
   readStoredFairyCanvasModel,
+  resetFairyCanvasModelSelectionIfUnavailable,
 } from '@/lib/fairy-canvas-model-selection';
 
 type ToolMetricEntry = {
@@ -1289,7 +1290,8 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         if (tool === 'dispatch_to_conductor') {
           const task = typeof params?.task === 'string' ? params.task.trim() : '';
           const dispatchParams = (params?.params as Record<string, unknown>) || {};
-          if (task === 'fairy.intent' || task === 'canvas.agent_prompt') {
+          // Keep the quick fairy model override scoped to fairy-triggered canvas work only.
+          if (task === 'fairy.intent') {
             const explicitModel =
               typeof dispatchParams.model === 'string' && dispatchParams.model.trim()
                 ? dispatchParams.model.trim()
@@ -1450,7 +1452,13 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 }),
               });
               if (!res.ok) {
-                const message = `Steward dispatch failed: HTTP ${res.status}`;
+                const detail = await res.text().catch(() => '');
+                const selectionReset =
+                  task === 'fairy.intent' && resetFairyCanvasModelSelectionIfUnavailable(detail);
+                const detailSuffix = detail ? `: ${detail}` : '';
+                const message = selectionReset
+                  ? 'Steward dispatch failed: selected fairy canvas model was unavailable and has been reset to Auto.'
+                  : `Steward dispatch failed: HTTP ${res.status}${detailSuffix}`;
                 queue.markError(call.id, message);
                 emitError(call, message);
                 if (task === 'canvas.agent_prompt') {

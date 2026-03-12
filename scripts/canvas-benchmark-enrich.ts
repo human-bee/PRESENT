@@ -1,7 +1,6 @@
 #!/usr/bin/env tsx
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { config as loadEnv } from 'dotenv';
 import OpenAI from 'openai';
 import { renderBenchmarkHtml } from '@/lib/benchmarks/canvas-agent/report-html';
 import type {
@@ -9,10 +8,10 @@ import type {
   BenchmarkShapeSummary,
   BenchmarkVisualAnalysis,
 } from '@/lib/benchmarks/canvas-agent/types';
+import { loadPresentEnv } from './_env';
 
 const cwd = process.cwd();
-loadEnv({ path: path.join(cwd, '.env.local') });
-loadEnv({ path: '/Users/bsteinher/PRESENT/.env.local', override: false });
+loadPresentEnv(cwd);
 
 const args = new Map<string, string>();
 for (const raw of process.argv.slice(2)) {

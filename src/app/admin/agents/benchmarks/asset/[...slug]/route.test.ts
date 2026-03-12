@@ -31,7 +31,7 @@ describe('/admin/agents/benchmarks/asset route', () => {
 
     const response = await GET(
       new NextRequest('http://localhost/admin/agents/benchmarks/asset/docs/foo.png'),
-      { params: Promise.resolve({ slug: ['benchmarks', 'canvas-agent', 'foo.png'] }) },
+      { params: Promise.resolve({ slug: ['assets', 'foo.png'] }) },
     );
 
     expect(response.status).toBe(401);
@@ -39,7 +39,7 @@ describe('/admin/agents/benchmarks/asset route', () => {
     expect(readFileMock).not.toHaveBeenCalled();
   });
 
-  it('serves allowed docs assets for authorized users', async () => {
+  it('serves benchmark assets for authorized users', async () => {
     requireAgentAdminUserIdMock.mockResolvedValue({
       ok: true,
       userId: 'admin-1',
@@ -49,8 +49,8 @@ describe('/admin/agents/benchmarks/asset route', () => {
     const { GET } = await import('./route');
 
     const response = await GET(
-      new NextRequest('http://localhost/admin/agents/benchmarks/asset/benchmarks/canvas-agent/foo.png'),
-      { params: Promise.resolve({ slug: ['benchmarks', 'canvas-agent', 'foo.png'] }) },
+      new NextRequest('http://localhost/admin/agents/benchmarks/asset/assets/foo.png'),
+      { params: Promise.resolve({ slug: ['assets', 'foo.png'] }) },
     );
 
     expect(response.status).toBe(200);
@@ -69,6 +69,24 @@ describe('/admin/agents/benchmarks/asset route', () => {
     const response = await GET(
       new NextRequest('http://localhost/admin/agents/benchmarks/asset/../../secrets.txt'),
       { params: Promise.resolve({ slug: ['..', '..', 'secrets.txt'] }) },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: 'forbidden' });
+    expect(readFileMock).not.toHaveBeenCalled();
+  });
+
+  it('blocks sibling prefix traversal outside benchmark root', async () => {
+    requireAgentAdminUserIdMock.mockResolvedValue({
+      ok: true,
+      userId: 'admin-1',
+      mode: 'allowlist',
+    });
+    const { GET } = await import('./route');
+
+    const response = await GET(
+      new NextRequest('http://localhost/admin/agents/benchmarks/asset/../other-suite/artifact.json'),
+      { params: Promise.resolve({ slug: ['..', 'other-suite', 'artifact.json'] }) },
     );
 
     expect(response.status).toBe(403);
