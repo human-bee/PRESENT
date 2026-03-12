@@ -7,6 +7,10 @@ jest.mock('next/navigation', () => ({
   }),
 }));
 
+jest.mock('./reset-collaboration-surface', () => ({
+  ResetCollaborationSurface: () => <div>Reset-native TLDraw collaboration</div>,
+}));
+
 class MockEventSource {
   close() {}
   addEventListener() {}
@@ -237,6 +241,7 @@ describe('ResetWorkspaceShell', () => {
     expect(await screen.findByRole('button', { name: /Create Patch Artifact/i })).toBeTruthy();
     expect(await screen.findByText(/Recent Sessions/i)).toBeTruthy();
     expect(await screen.findByText(/OpenClaw \+ MCP Pack/i)).toBeTruthy();
+    expect(await screen.findByText(/Server-Owned Preview/i)).toBeTruthy();
     expect((await screen.findAllByText('package.json')).length).toBeGreaterThan(0);
   });
 });

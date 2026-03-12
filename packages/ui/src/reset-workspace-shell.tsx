@@ -16,7 +16,7 @@ import type {
   WorkspaceSession,
 } from '@present/contracts';
 import { ArtifactPreviewFrame } from './artifact-preview-frame';
-import { ResetRoomPanel } from './reset-room-panel';
+import { ResetCollaborationSurface } from './reset-collaboration-surface';
 
 const initialDraft = `// Codex-native workspace draft
 // This shell is backed by reset-era kernel contracts.
@@ -166,10 +166,7 @@ export function ResetWorkspaceShell({
   const [activeDocument, setActiveDocument] = useState<WorkspaceFileDocument | null>(null);
   const [localIdentity, setLocalIdentity] = useState('');
   const [localPresenceLabel, setLocalPresenceLabel] = useState('Mission Control');
-  const [draftSyncPeer, setDraftSyncPeer] = useState<string | null>(null);
-  const [draftSyncEnabled, setDraftSyncEnabled] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(initialTasks[0]?.id ?? null);
-  const [legacyCanvasVisible, setLegacyCanvasVisible] = useState(false);
   const [roomTelemetry, setRoomTelemetry] = useState<{
     roomName: string | null;
     connectionState: string;
@@ -190,10 +187,8 @@ export function ResetWorkspaceShell({
   const [isBusy, setIsBusy] = useState(false);
   const deferredTraceQuery = useDeferredValue(traceQuery);
   const eventSourceRef = useRef<EventSource | null>(null);
-  const liveDraftChannelRef = useRef<BroadcastChannel | null>(null);
   const localIdentityRef = useRef('');
   const localDisplayNameRef = useRef('Mission Control');
-  const pendingRemoteDraftRef = useRef<string | null>(null);
 
   const latestWidgetArtifact = useMemo(
     () => artifacts.find((artifact) => artifact.kind === 'widget_bundle') ?? null,
@@ -207,7 +202,6 @@ export function ResetWorkspaceShell({
     () => activeDocument?.path.split('/').filter(Boolean) ?? [],
     [activeDocument],
   );
-  const legacyCanvasUrl = '/canvas?legacy=1&embed=1';
   const formatCommand = (command: AgentInteropPack['commands'][keyof AgentInteropPack['commands']]) =>
     [command.command, ...command.args].join(' ');
 
@@ -321,7 +315,7 @@ export function ResetWorkspaceShell({
           metadata: {
             activeFilePath: activeDocument?.path ?? null,
             editorMode: 'reset_shell',
-            draftSyncEnabled,
+            draftSyncEnabled: false,
             roomName: roomTelemetry.roomName,
             roomConnectionState: roomTelemetry.connectionState,
             roomParticipantCount: roomTelemetry.participantCount,
@@ -405,76 +399,9 @@ export function ResetWorkspaceShell({
   }, [deferredTraceQuery, localIdentity, refreshWorkspaceState, roomTelemetry, syncPresence, workspace.id]);
 
   useEffect(() => {
-    if (!activeDocument?.path || typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') {
-      setDraftSyncEnabled(false);
-      setDraftSyncPeer(null);
-      liveDraftChannelRef.current?.close();
-      liveDraftChannelRef.current = null;
-      return;
-    }
-
-    const channel = new BroadcastChannel(`present-reset-draft:${workspace.id}:${activeDocument.path}`);
-    liveDraftChannelRef.current?.close();
-    liveDraftChannelRef.current = channel;
-    setDraftSyncEnabled(true);
-    setDraftSyncPeer(null);
-
-    channel.onmessage = (event) => {
-      const payload = event.data as {
-        sourceId?: string;
-        displayName?: string;
-        content?: string;
-      };
-      if (!payload || payload.sourceId === localIdentityRef.current || typeof payload.content !== 'string') {
-        return;
-      }
-      pendingRemoteDraftRef.current = payload.content;
-      setDraftSyncPeer(payload.displayName ?? 'Another editor');
-      setCodeDraft(payload.content);
-    };
-
-    channel.postMessage({
-      type: 'hello',
-      sourceId: localIdentityRef.current,
-      displayName: localDisplayNameRef.current,
-      content: codeDraft,
-    });
-    void syncPresence(document.hidden ? 'idle' : 'connected');
-
-    return () => {
-      channel.close();
-      if (liveDraftChannelRef.current === channel) {
-        liveDraftChannelRef.current = null;
-      }
-      setDraftSyncEnabled(false);
-      setDraftSyncPeer(null);
-    };
-  }, [activeDocument?.path, syncPresence, workspace.id]);
-
-  useEffect(() => {
-    if (!activeDocument?.path || !draftSyncEnabled || !liveDraftChannelRef.current) return;
-
-    if (pendingRemoteDraftRef.current === codeDraft) {
-      pendingRemoteDraftRef.current = null;
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      liveDraftChannelRef.current?.postMessage({
-        type: 'draft',
-        sourceId: localIdentityRef.current,
-        displayName: localDisplayNameRef.current,
-        content: codeDraft,
-      });
-    }, 90);
-
-    return () => window.clearTimeout(timeout);
-  }, [activeDocument?.path, codeDraft, draftSyncEnabled]);
-
-  useEffect(() => {
     if (!localIdentity) return;
     void syncPresence(document.hidden ? 'idle' : 'connected');
-  }, [activeDocument?.path, draftSyncEnabled, localIdentity, syncPresence]);
+  }, [activeDocument?.path, localIdentity, syncPresence]);
 
   useEffect(() => {
     const currentTaskId = activeTaskId ?? tasks[0]?.id ?? null;
@@ -899,11 +826,7 @@ export function ResetWorkspaceShell({
                     <p>Browse the workspace tree and load a real file into the editor.</p>
                   )}
                   <p>
-                    {draftSyncEnabled
-                      ? draftSyncPeer
-                        ? `Live draft bridge active with ${draftSyncPeer}.`
-                        : `Live draft bridge active as ${localPresenceLabel}.`
-                      : 'Live draft bridge offline.'}
+                    Editing the real workspace file directly from mission control as {localPresenceLabel}.
                   </p>
                 </div>
                 <div className="reset-inline-actions">
@@ -939,33 +862,22 @@ export function ResetWorkspaceShell({
               <div className="reset-panel__eyebrow">Canvas / Widget Rail</div>
               <h2>Server-Owned Preview</h2>
             </div>
-            <div className="reset-panel__microcopy">Widgets, diffs, and the archived canvas runtime are all bridged back into the reset shell so `/` stays the product entry point.</div>
+            <div className="reset-panel__microcopy">Reset-native TLDraw collaboration, widget artifacts, and patch review now live in the shell without ceding `/` back to the archived canvas route.</div>
           </div>
           <div className="reset-frame-shell">
-            <div className="reset-panel__header">
-              <div>
-                  <div className="reset-frame-title">Legacy Bridge</div>
-                  <strong>Archived TLDraw + old room runtime</strong>
-                  <p>Kept as an optional archive lane while the reset shell absorbs collaboration features directly.</p>
-                </div>
-                <div className="reset-inline-actions">
-                  <button
-                    type="button"
-                    onClick={() => setLegacyCanvasVisible((current) => !current)}
-                    className="reset-button reset-button--ghost"
-                  >
-                    {legacyCanvasVisible ? 'Hide Legacy Bridge' : 'Show Legacy Bridge'}
-                  </button>
-                  <a href="/canvas?legacy=1" className="reset-button reset-button--ghost">
-                    Open Legacy Canvas
-                  </a>
-                </div>
-              </div>
-            {legacyCanvasVisible ? (
-              <iframe title="Legacy canvas bridge" className="reset-legacy-frame" src={legacyCanvasUrl} loading="lazy" />
-            ) : (
-              <div className="reset-empty">Legacy canvas bridge hidden. Open it only when you need the archived TLDraw runtime.</div>
-            )}
+            <ResetCollaborationSurface
+              workspaceSessionId={workspace.id}
+              operatorLabel={localPresenceLabel}
+              onTelemetryChange={(telemetry) => {
+                setRoomTelemetry({
+                  roomName: telemetry.roomName,
+                  connectionState: telemetry.connectionState,
+                  participantCount: telemetry.participantCount,
+                  agentStatus: telemetry.agentStatus,
+                  media: telemetry.media,
+                });
+              }}
+            />
           </div>
           <div className="reset-widget-form">
             <input
@@ -1192,19 +1104,14 @@ export function ResetWorkspaceShell({
               <strong>{initialManifest.collaboration.dualClient ? 'web + desktop' : 'single'}</strong>
             </div>
           </div>
-          <ResetRoomPanel
-            workspaceSessionId={workspace.id}
-            operatorLabel={localPresenceLabel}
-            onTelemetryChange={(telemetry) => {
-              setRoomTelemetry({
-                roomName: telemetry.roomName,
-                connectionState: telemetry.connectionState,
-                participantCount: telemetry.participantCount,
-                agentStatus: telemetry.agentStatus,
-                media: telemetry.media,
-              });
-            }}
-          />
+          <div className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Room State</div>
+            <strong>{roomTelemetry.roomName ?? 'no room selected'}</strong>
+            <p>
+              {roomTelemetry.connectionState} / {roomTelemetry.participantCount} participant
+              {roomTelemetry.participantCount === 1 ? '' : 's'} / agent {roomTelemetry.agentStatus}
+            </p>
+          </div>
           <div className="reset-list">
             {presence.slice(0, 4).map((member) => (
               <article className="reset-list-card" key={member.id}>
