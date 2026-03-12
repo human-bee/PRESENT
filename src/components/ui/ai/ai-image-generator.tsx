@@ -365,7 +365,9 @@ export function AIImageGenerator({
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<ImageAspectRatio>(aspectRatio);
   const [selectedResolution, setSelectedResolution] = useState<ImageResolutionPreset>(resolution);
   const [selectedQuality, setSelectedQuality] = useState<ImageQualityPreset>(quality);
-  const [selectedImageCount, setSelectedImageCount] = useState<ImageCountOption>(imageCount);
+  const [selectedImageCount, setSelectedImageCount] = useState<ImageCountOption>(
+    clampImageCount(model, imageCount),
+  );
   const [groundingEnabled, setGroundingEnabled] = useState(useGrounding);
   const [seedMode, setSeedMode] = useState(iterativeMode);
   const [autoRegenerateEnabled, setAutoRegenerateEnabled] = useState(autoRegenerate);
@@ -723,6 +725,8 @@ export function AIImageGenerator({
     if (!prompt.trim() || autoRegenerateEnabled) return;
     if (history.length > 0) return;
 
+    const initialImageCount = clampImageCount(model, imageCount);
+
     const signature = JSON.stringify({
       prompt: prompt.trim(),
       style,
@@ -730,7 +734,7 @@ export function AIImageGenerator({
       aspectRatio,
       resolution,
       quality,
-      imageCount,
+      imageCount: initialImageCount,
       useGrounding,
       iterativeMode,
       mode: 'initial',
@@ -745,7 +749,7 @@ export function AIImageGenerator({
       aspectRatio,
       resolution,
       quality,
-      imageCount,
+      imageCount: initialImageCount,
       useGrounding,
       iterativeMode,
     });
