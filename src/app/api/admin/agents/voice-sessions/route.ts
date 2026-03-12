@@ -70,6 +70,18 @@ const firstInteger = (...values: unknown[]): number | null => {
   return null;
 };
 
+const normalizeFilterToken = (value: string | undefined): string | undefined => {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const isCorrelatedTraceRow = (row: RowRecord | null | undefined): boolean => {
+  const traceId = readText(row?.trace_id);
+  const requestId = readText(row?.request_id);
+  return Boolean(traceId && traceId !== requestId);
+};
+
 const pickLatestRow = (...rows: Array<RowRecord | null | undefined>): RowRecord | null => {
   let latest: RowRecord | null = null;
   let latestTs = Number.NEGATIVE_INFINITY;
@@ -131,8 +143,8 @@ export async function GET(req: NextRequest) {
 
   const searchParams = req.nextUrl.searchParams;
   const room = readOptional(searchParams, 'room');
-  const provider = readOptional(searchParams, 'provider');
-  const providerPath = readOptional(searchParams, 'providerPath');
+  const provider = normalizeFilterToken(readOptional(searchParams, 'provider'));
+  const providerPath = normalizeFilterToken(readOptional(searchParams, 'providerPath'));
   const traceId = readOptional(searchParams, 'traceId');
   const limit = parseLimit(searchParams);
   const scanLimit = traceId ? Math.max(limit, Math.min(500, limit * 10)) : limit;
@@ -201,8 +213,8 @@ export async function GET(req: NextRequest) {
       .eq('event_type', START_EVENT)
       .order('created_at', { ascending: false });
     if (room) startedQuery = startedQuery.eq('room', room);
-    if (provider) startedQuery = startedQuery.eq('provider', provider);
-    if (providerPath) startedQuery = startedQuery.eq('provider_path', providerPath);
+    if (provider && provider !== 'unknown') startedQuery = startedQuery.eq('provider', provider);
+    if (providerPath && providerPath !== 'unknown') startedQuery = startedQuery.eq('provider_path', providerPath);
     if (traceSessionIds) {
       startedQuery = startedQuery.in('session_id', traceSessionIds);
     } else {
@@ -301,6 +313,12 @@ export async function GET(req: NextRequest) {
       const latestEventRow = pickLatestRow(latestModelRow, latestToolRow);
       const closeRow =
         modelRows.find((row) => readText(row.event_type) === CLOSE_EVENT) ?? null;
+      const latestCorrelatedTraceRow =
+        pickLatestRow(
+          ...modelRows.filter(isCorrelatedTraceRow),
+          ...toolRows.filter(isCorrelatedTraceRow),
+          closeRow,
+        ) ?? latestToolRow ?? latestModelRow;
       const startMetadata = asRecord(startRow.metadata);
       const modelControl = asRecord(startMetadata?.modelControl);
       const fieldSource = asRecord(modelControl?.fieldSource);
@@ -339,7 +357,7 @@ export async function GET(req: NextRequest) {
           latestModelRow.provider_request_id,
         ),
         trace_id: firstText(
-          latestEventRow?.trace_id,
+          latestCorrelatedTraceRow?.trace_id,
           closeRow?.trace_id,
           latestToolRow?.trace_id,
           latestModelRow.trace_id,
@@ -382,6 +400,8 @@ export async function GET(req: NextRequest) {
         const toolRows = toolEventsBySession.get(session.session_id) ?? [];
         return [...modelRows, ...toolRows].some((row) => readText(row.trace_id) === traceId);
       })
+      .filter((session) => (provider ? session.provider === provider : true))
+      .filter((session) => (providerPath ? session.provider_path === providerPath : true))
       .slice(0, limit);
 
     return NextResponse.json({
