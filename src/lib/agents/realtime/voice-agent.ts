@@ -73,6 +73,13 @@ import {
   type LazyLoadPolicyLevel,
 } from '@/lib/agents/shared/experiment-assignment';
 import { resolveModelControl } from '@/lib/agents/control-plane/resolver';
+import {
+  IMAGE_ASPECT_RATIOS,
+  IMAGE_MODEL_IDS,
+  IMAGE_QUALITY_PRESETS,
+  IMAGE_RESOLUTION_PRESETS,
+} from '@/lib/ai/image-models';
+import { FAIRY_CONTEXT_PROFILES } from '@/lib/fairy-context/profiles';
 
 const RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
@@ -3076,12 +3083,56 @@ Your only output is function calls. Never use plain text unless absolutely neces
         parameters: z
           .object({
             useGrounding: z.boolean().nullish(),
+            direction: z.string().nullish(),
+            prompt: z.string().nullish(),
+            instruction: z.string().nullish(),
+            style: z.string().nullish(),
+            model: z.enum(IMAGE_MODEL_IDS).nullish(),
+            aspectRatio: z.enum(IMAGE_ASPECT_RATIOS).nullish(),
+            resolution: z.enum(IMAGE_RESOLUTION_PRESETS).nullish(),
+            quality: z.enum(IMAGE_QUALITY_PRESETS).nullish(),
+            iterativeMode: z.boolean().nullish(),
+            contextProfile: z.enum(FAIRY_CONTEXT_PROFILES).nullish(),
+            dropLatest: z.boolean().nullish(),
           })
           .passthrough(),
         execute: async (args) => {
           const payload: JsonObject = {};
-          if (typeof (args as any)?.useGrounding === 'boolean') {
-            payload.useGrounding = (args as any).useGrounding;
+          if (typeof args.useGrounding === 'boolean') {
+            payload.useGrounding = args.useGrounding;
+          }
+          if (typeof args.direction === 'string') {
+            payload.direction = args.direction;
+          }
+          if (typeof args.prompt === 'string') {
+            payload.prompt = args.prompt;
+          }
+          if (typeof args.instruction === 'string') {
+            payload.instruction = args.instruction;
+          }
+          if (typeof args.style === 'string') {
+            payload.style = args.style;
+          }
+          if (typeof args.model === 'string') {
+            payload.model = args.model;
+          }
+          if (typeof args.aspectRatio === 'string') {
+            payload.aspectRatio = args.aspectRatio;
+          }
+          if (typeof args.resolution === 'string') {
+            payload.resolution = args.resolution;
+          }
+          if (typeof args.quality === 'string') {
+            payload.quality = args.quality;
+          }
+          if (typeof args.iterativeMode === 'boolean') {
+            payload.iterativeMode = args.iterativeMode;
+          }
+          if (typeof args.contextProfile === 'string') {
+            payload.contextProfile = args.contextProfile;
+          }
+          if (typeof args.dropLatest === 'boolean') {
+            payload.dropLatest = args.dropLatest;
           }
           await sendToolCall('create_infographic', payload);
           return { status: 'queued' };

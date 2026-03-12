@@ -63,10 +63,8 @@ import {
 import { ComponentToolbox } from '@/components/ui/shared/component-toolbox';
 
 // Add debate scorecard @debate-scorecard.tsx
-import DebateScorecard, {
-  debateScoreCardSchema,
-} from '@/components/ui/productivity/debate-scorecard';
-import { InfographicWidget } from '@/components/InfographicWidget';
+import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/productivity/debate-scorecard';
+import { InfographicWidget, infographicWidgetSchema } from '@/components/InfographicWidget';
 
 // Context feeder widget for document/text context injection
 import { ContextFeeder, contextFeederSchema } from '@/components/ui/documents/context-feeder';
@@ -81,11 +79,6 @@ const extendedSchema = <T extends z.ZodObject<any>>(schema: T) => {
     y: z.number().optional().describe('Y position'),
   });
 };
-
-const infographicWidgetSchema = z.object({
-  useGrounding: z.boolean().optional().describe('Whether to enable Google Search grounding'),
-  isShape: z.boolean().optional().default(true).describe('Render inside the canvas shape'),
-});
 
 const TIER1_LIFECYCLE_OPS: LifecycleOp[] = [
   'create',
@@ -347,7 +340,7 @@ const baseComponents: RegistryComponentEntry[] = [
   {
     name: 'InfographicWidget',
     description:
-      'Generates infographics from recent conversation context (Gemini image model) and allows dragging results onto the canvas.',
+      'Generates board-ready infographics from live conversation context with selectable image model tiers and hidden production controls.',
     component: InfographicWidget,
     propsSchema: extendedSchema(infographicWidgetSchema),
     tier: 'tier1',

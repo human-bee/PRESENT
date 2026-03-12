@@ -264,7 +264,7 @@ const ALL_COMPONENT_CAPABILITIES: ComponentCapability[] = [
   },
   {
     name: 'InfographicWidget',
-    description: 'AI-powered infographic generator',
+    description: 'Context-driven infographic generator with selectable image model tiers',
     examples: ['create infographic', 'generate infographic', 'visualize conversation'],
   },
   {
