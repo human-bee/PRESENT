@@ -185,8 +185,8 @@ const supabaseSerializers: { [K in ResetCollectionKey]: (value: ResetCollectionM
     latency_class: profile.latencyClass,
     supports: profile.supports,
     metadata: profile.metadata,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_at: profile.createdAt,
+    updated_at: profile.updatedAt,
   }),
   traces: (event) => {
     const { id, traceId, workspaceSessionId, emittedAt, type, ...payload } = event;
@@ -310,6 +310,8 @@ const supabaseDeserializers: { [K in ResetCollectionKey]: (value: SupabaseRow) =
       latencyClass: value.latency_class,
       supports: value.supports ?? [],
       metadata: value.metadata ?? {},
+      createdAt: value.created_at,
+      updatedAt: value.updated_at,
     }),
   traces: (value) => {
     const payload = typeof value.payload === 'object' && value.payload ? (value.payload as SupabaseRow) : {};
@@ -359,6 +361,24 @@ const ensureParentDirectory = (statePath: string) => {
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
 };
 
+const backupUnreadableState = (statePath: string, detail: string) => {
+  const backupPath = `${statePath}.invalid-${Date.now()}.json`;
+  try {
+    ensureParentDirectory(statePath);
+    fs.copyFileSync(statePath, backupPath);
+    warnOnce(
+      `state:invalid:${statePath}`,
+      `[present-reset] Reset state at ${statePath} could not be read (${detail}). Backed up to ${backupPath} and continuing with a fresh cache.`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    warnOnce(
+      `state:invalid:${statePath}`,
+      `[present-reset] Reset state at ${statePath} could not be read (${detail}), and backup failed: ${message}. Continuing with a fresh cache.`,
+    );
+  }
+};
+
 const warnOnce = (key: string, message: string) => {
   if (warningKeys.has(key)) return;
   warningKeys.add(key);
@@ -390,8 +410,17 @@ const readPersistedState = (): ResetKernelState => {
   try {
     const text = fs.readFileSync(statePath, 'utf8');
     if (!text.trim()) return defaultResetKernelState();
-    return resetKernelStateSchema.parse(JSON.parse(text));
-  } catch {
+    const parsed = resetKernelStateSchema.safeParse(JSON.parse(text));
+    if (parsed.success) {
+      return parsed.data;
+    }
+    backupUnreadableState(statePath, parsed.error.issues[0]?.message ?? 'schema validation failed');
+    return defaultResetKernelState();
+  } catch (error) {
+    backupUnreadableState(
+      statePath,
+      error instanceof Error ? error.message : 'unknown parse failure',
+    );
     return defaultResetKernelState();
   }
 };

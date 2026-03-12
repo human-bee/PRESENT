@@ -77,7 +77,7 @@ describe('reset workspace collaboration route', () => {
       updatedAt: new Date().toISOString(),
       metadata: {},
     }));
-    const getCollaborationDocumentMock = jest.fn(() => ({
+    const getCollaborationDocumentMock = jest.fn(async () => ({
       workspaceSessionId: 'ws_123',
       filePath: 'README.md',
       encodedState: 'Zmlyc3Q=',
@@ -85,7 +85,7 @@ describe('reset workspace collaboration route', () => {
       updatedAt: new Date().toISOString(),
       collaborators: [{ identity: 'op-1', displayName: 'Mission One', updatedAt: new Date().toISOString() }],
     }));
-    const upsertCollaborationDocumentMock = jest.fn(() => ({
+    const upsertCollaborationDocumentMock = jest.fn(async () => ({
       workspaceSessionId: 'ws_123',
       filePath: 'README.md',
       encodedState: 'c2Vjb25k',
@@ -104,7 +104,9 @@ describe('reset workspace collaboration route', () => {
     const { GET, POST } = await import('./route');
 
     const getResponse = await GET(
-      new Request('http://localhost/api/reset/workspaces/ws_123/collaboration?filePath=README.md') as never,
+      new Request(
+        'http://localhost/api/reset/workspaces/ws_123/collaboration?filePath=README.md&sourceUpdatedAt=2026-03-11T00%3A00%3A00.000Z',
+      ) as never,
       { params: Promise.resolve({ workspaceSessionId: 'ws_123' }) },
     );
     const getPayload = await getResponse.json();
@@ -113,6 +115,7 @@ describe('reset workspace collaboration route', () => {
       new Request('http://localhost/api/reset/workspaces/ws_123/collaboration', {
         body: JSON.stringify({
           filePath: 'README.md',
+          sourceUpdatedAt: '2026-03-11T00:00:00.000Z',
           encodedState: 'c2Vjb25k',
           identity: 'op-2',
           displayName: 'Mission Two',
@@ -124,13 +127,19 @@ describe('reset workspace collaboration route', () => {
 
     expect(ensureResetKernelHydratedMock).toHaveBeenCalledTimes(2);
     expect(getWorkspaceSessionMock).toHaveBeenCalledWith('ws_123');
-    expect(getCollaborationDocumentMock).toHaveBeenCalledWith('ws_123', 'README.md');
+    expect(getCollaborationDocumentMock).toHaveBeenCalledWith(
+      'ws_123',
+      'README.md',
+      '2026-03-11T00:00:00.000Z',
+    );
     expect(upsertCollaborationDocumentMock).toHaveBeenCalledWith({
       workspaceSessionId: 'ws_123',
       filePath: 'README.md',
+      sourceUpdatedAt: '2026-03-11T00:00:00.000Z',
       encodedState: 'c2Vjb25k',
       identity: 'op-2',
       displayName: 'Mission Two',
+      seedContent: undefined,
     });
     expect(getPayload.document.version).toBe(2);
     expect(postPayload.document.version).toBe(3);

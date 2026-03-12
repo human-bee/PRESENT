@@ -2,11 +2,15 @@ import { modelProfileSchema, type ModelProfile } from '@present/contracts';
 import { resolveModelControl } from '@/lib/agents/control-plane/resolver';
 import { RESET_ID_PREFIXES, createResetId } from './ids';
 
-const baseProfile = (input: Omit<ModelProfile, 'id'>) =>
-  modelProfileSchema.parse({
+const baseProfile = (input: Omit<ModelProfile, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const now = new Date().toISOString();
+  return modelProfileSchema.parse({
     ...input,
     id: createResetId(RESET_ID_PREFIXES.modelProfile),
+    createdAt: now,
+    updatedAt: now,
   });
+};
 
 export const DEFAULT_MODEL_PROFILES = [
   baseProfile({

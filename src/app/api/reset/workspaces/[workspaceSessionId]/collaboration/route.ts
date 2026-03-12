@@ -18,11 +18,12 @@ export async function GET(
   }
 
   const filePath = request.nextUrl.searchParams.get('filePath')?.trim();
+  const sourceUpdatedAt = request.nextUrl.searchParams.get('sourceUpdatedAt')?.trim() || null;
   if (!filePath) {
     return NextResponse.json({ error: 'filePath is required.' }, { status: 400 });
   }
 
-  const document = getCollaborationDocument(workspaceSessionId, filePath);
+  const document = await getCollaborationDocument(workspaceSessionId, filePath, sourceUpdatedAt);
   return NextResponse.json({
     document: document ?? {
       workspaceSessionId,
@@ -48,9 +49,11 @@ export async function POST(
 
   const body = (await request.json()) as {
     filePath?: string;
+    sourceUpdatedAt?: string;
     encodedState?: string;
     identity?: string;
     displayName?: string;
+    seedContent?: string;
   };
 
   if (!body.filePath?.trim()) {
@@ -65,12 +68,14 @@ export async function POST(
     return NextResponse.json({ error: 'identity and displayName are required.' }, { status: 400 });
   }
 
-  const document = upsertCollaborationDocument({
+  const document = await upsertCollaborationDocument({
     workspaceSessionId,
     filePath: body.filePath,
+    sourceUpdatedAt: body.sourceUpdatedAt?.trim() || null,
     encodedState: body.encodedState,
     identity: body.identity,
     displayName: body.displayName,
+    seedContent: body.seedContent,
   });
 
   return NextResponse.json({ document });

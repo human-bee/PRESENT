@@ -23,6 +23,7 @@ type CollaborationSnapshot = {
 export type ResetMonacoEditorProps = {
   workspaceSessionId: string;
   filePath: string;
+  sourceUpdatedAt?: string | null;
   initialValue: string;
   language?: string | null;
   identity: string;
@@ -78,6 +79,7 @@ class ResetYjsSyncSession {
   private readonly ydoc: Y.Doc;
   private readonly workspaceSessionId: string;
   private readonly filePath: string;
+  private readonly sourceUpdatedAt: string | null;
   private readonly identity: string;
   private readonly displayName: string;
   private readonly seedContent: string;
@@ -101,6 +103,7 @@ class ResetYjsSyncSession {
     ydoc: Y.Doc;
     workspaceSessionId: string;
     filePath: string;
+    sourceUpdatedAt?: string | null;
     identity: string;
     displayName: string;
     seedContent: string;
@@ -112,6 +115,7 @@ class ResetYjsSyncSession {
     this.ydoc = input.ydoc;
     this.workspaceSessionId = input.workspaceSessionId;
     this.filePath = input.filePath;
+    this.sourceUpdatedAt = input.sourceUpdatedAt ?? null;
     this.identity = input.identity;
     this.displayName = input.displayName;
     this.seedContent = input.seedContent;
@@ -126,19 +130,22 @@ class ResetYjsSyncSession {
       this.remoteVersion = snapshot.document.version;
       this.setCollaborators(snapshot.document.collaborators);
 
-      const ytext = this.ydoc.getText('source');
       if (snapshot.document.encodedState) {
         Y.applyUpdate(this.ydoc, fromBase64(snapshot.document.encodedState), this);
-      } else if (ytext.length === 0 && this.seedContent) {
-        this.ydoc.transact(() => {
-          ytext.insert(0, this.seedContent);
-        }, this);
       }
 
       this.ydoc.on('update', this.handleUpdate);
 
       if (!snapshot.document.encodedState && this.seedContent) {
-        await this.pushSnapshot();
+        const seededSnapshot = await this.pushSnapshot({
+          encodedState: '',
+          seedContent: this.seedContent,
+        });
+        this.remoteVersion = seededSnapshot.document.version;
+        this.setCollaborators(seededSnapshot.document.collaborators);
+        if (seededSnapshot.document.encodedState) {
+          Y.applyUpdate(this.ydoc, fromBase64(seededSnapshot.document.encodedState), this);
+        }
       } else {
         this.setStatus('synced');
       }
@@ -199,8 +206,8 @@ class ResetYjsSyncSession {
     }
   }
 
-  private async pushSnapshot() {
-    const encodedState = toBase64(Y.encodeStateAsUpdate(this.ydoc));
+  private async pushSnapshot(input?: { encodedState?: string; seedContent?: string }) {
+    const encodedState = input?.encodedState ?? toBase64(Y.encodeStateAsUpdate(this.ydoc));
     try {
       const response = await fetch(
         `/api/reset/workspaces/${encodeURIComponent(this.workspaceSessionId)}/collaboration`,
@@ -209,9 +216,11 @@ class ResetYjsSyncSession {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             filePath: this.filePath,
+            sourceUpdatedAt: this.sourceUpdatedAt ?? undefined,
             encodedState,
             identity: this.identity,
             displayName: this.displayName,
+            seedContent: input?.seedContent,
           }),
         },
       );
@@ -224,14 +233,21 @@ class ResetYjsSyncSession {
       this.remoteVersion = snapshot.document.version;
       this.setCollaborators(snapshot.document.collaborators);
       this.setStatus('synced');
+      return snapshot;
     } catch (error) {
       console.error('[present-reset] Failed to push collaborative editor session:', error);
       this.setStatus('offline');
+      throw error;
     }
   }
 
   private async fetchSnapshot() {
-    const search = new URLSearchParams({ filePath: this.filePath });
+    const search = new URLSearchParams({
+      filePath: this.filePath,
+    });
+    if (this.sourceUpdatedAt) {
+      search.set('sourceUpdatedAt', this.sourceUpdatedAt);
+    }
     const response = await fetch(
       `/api/reset/workspaces/${encodeURIComponent(this.workspaceSessionId)}/collaboration?${search.toString()}`,
     );
@@ -245,6 +261,7 @@ class ResetYjsSyncSession {
 export function ResetMonacoEditor({
   workspaceSessionId,
   filePath,
+  sourceUpdatedAt,
   initialValue,
   language,
   identity,
@@ -287,6 +304,7 @@ export function ResetMonacoEditor({
       ydoc,
       workspaceSessionId,
       filePath,
+      sourceUpdatedAt,
       identity,
       displayName,
       seedContent: initialValue,
@@ -307,7 +325,7 @@ export function ResetMonacoEditor({
       awarenessRef.current = null;
       ydocRef.current = null;
     };
-  }, [displayName, filePath, identity, initialValue, onValueChange, workspaceSessionId]);
+  }, [displayName, filePath, identity, initialValue, onValueChange, sourceUpdatedAt, workspaceSessionId]);
 
   const handleMount = (
     editor: MonacoEditor.editor.IStandaloneCodeEditor,
@@ -350,7 +368,7 @@ export function ResetMonacoEditor({
         height="100%"
         path={filePath}
         defaultLanguage={editorLanguage}
-        defaultValue={initialValue}
+        defaultValue=""
         options={{
           minimap: { enabled: false },
           fontSize: 13,

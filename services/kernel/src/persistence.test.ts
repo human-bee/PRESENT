@@ -1,5 +1,6 @@
+import fs from 'node:fs';
 import path from 'node:path';
-import type { KernelEvent, WorkspaceSession } from '@present/contracts';
+import type { KernelEvent, ModelProfile, WorkspaceSession } from '@present/contracts';
 
 type SupabaseRow = Record<string, unknown>;
 
@@ -231,5 +232,53 @@ describe('reset persistence', () => {
 
     await ensureResetKernelHydrated();
     expect(readResetCollection('workspaces').map((workspace) => workspace.id)).toEqual(['ws_new']);
+  });
+
+  it('preserves model profile timestamps when mirroring to Supabase', async () => {
+    const profile: ModelProfile = {
+      id: 'profile_executor',
+      role: 'executor',
+      provider: 'openai',
+      model: 'gpt-5.3-codex',
+      label: 'Executor',
+      source: 'default',
+      default: true,
+      latencyClass: 'interactive',
+      supports: ['file_edits'],
+      metadata: {},
+      createdAt: '2026-03-10T00:00:00.000Z',
+      updatedAt: '2026-03-11T00:00:00.000Z',
+    };
+
+    await ensureResetKernelHydrated();
+    writeResetCollection('modelProfiles', [profile]);
+    await flushResetPersistenceMirrors();
+
+    expect(supabaseTables.model_profiles).toEqual([
+      expect.objectContaining({
+        id: profile.id,
+        created_at: profile.createdAt,
+        updated_at: profile.updatedAt,
+      }),
+    ]);
+  });
+
+  it('backs up unreadable persisted state instead of silently discarding it', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const statePath = getResetKernelStatePath();
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, JSON.stringify({ schemaVersion: 2, workspaces: [] }), 'utf8');
+
+    await ensureResetKernelHydrated();
+
+    const backupFiles = fs
+      .readdirSync(path.dirname(statePath))
+      .filter((entry) => entry.startsWith(`${path.basename(statePath)}.invalid-`));
+
+    expect(readResetCollection('workspaces')).toEqual([]);
+    expect(backupFiles.length).toBe(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('could not be read'));
+
+    warnSpy.mockRestore();
   });
 });
