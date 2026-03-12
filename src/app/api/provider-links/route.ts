@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 
 type ProviderLinkState = 'linked_supported' | 'linked_unsupported' | 'api_key_configured' | 'missing';
 
-const PROVIDERS = ['openai', 'anthropic', 'google', 'together', 'cerebras'] as const;
+const PROVIDERS = ['openai', 'anthropic', 'google', 'together', 'cerebras', 'fal', 'xai'] as const;
 
 export async function GET(req: NextRequest) {
   const userId = await resolveRequestUserId(req);
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const byProvider = new Map(keyStatuses.map((entry) => [entry.provider, entry]));
     const links = PROVIDERS.map((provider) => {
       const keyStatus = byProvider.get(provider);
-      const state: ProviderLinkState = keyStatus?.configured ? 'api_key_configured' : 'linked_unsupported';
+      const state: ProviderLinkState = keyStatus?.configured ? 'api_key_configured' : 'missing';
       return {
         provider,
         state,
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       links,
-      note: 'Official subscription-credit linking requires provider OAuth/API support. Unsupported providers remain blocked-state.',
+      note: 'Official subscription-credit linking requires provider OAuth/API support. This endpoint reports whether an API key is configured.',
     });
   } catch (error) {
     return NextResponse.json(

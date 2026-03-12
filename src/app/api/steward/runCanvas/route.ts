@@ -93,6 +93,8 @@ const normalizeProvider = (value: unknown): ModelKeyProvider | null => {
   if (normalized === 'google') return 'google';
   if (normalized === 'together') return 'together';
   if (normalized === 'cerebras') return 'cerebras';
+  if (normalized === 'fal') return 'fal';
+  if (normalized === 'xai') return 'xai';
   return null;
 };
 
@@ -105,6 +107,8 @@ const deriveProviderFromModel = (model: unknown): ModelKeyProvider | null => {
   if (normalized.startsWith('google:') || normalized.startsWith('gemini')) return 'google';
   if (normalized.startsWith('cerebras:') || normalized.startsWith('llama') || normalized.startsWith('qwen') || normalized.startsWith('gpt-oss')) return 'cerebras';
   if (normalized.startsWith('together:') || normalized.includes('black-forest-labs/') || normalized.includes('flux')) return 'together';
+  if (normalized.startsWith('fal:') || normalized.startsWith('fal-ai/')) return 'fal';
+  if (normalized.startsWith('xai:') || normalized.startsWith('grok')) return 'xai';
   return null;
 };
 

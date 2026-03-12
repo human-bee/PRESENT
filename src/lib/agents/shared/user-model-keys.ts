@@ -8,6 +8,8 @@ export const modelKeyProviderSchema = z.enum([
   'google',
   'together',
   'cerebras',
+  'fal',
+  'xai',
 ] as const);
 
 export type ModelKeyProvider = z.infer<typeof modelKeyProviderSchema>;

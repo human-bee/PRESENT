@@ -9,11 +9,15 @@ import {
   validateSharedUnlockSession,
 } from '@/lib/agents/control-plane/shared-keys';
 import { requireAgentAdminActionUserId } from '@/lib/agents/admin/auth';
-import type { ModelProvider, ResolvedModelControl } from '@/lib/agents/control-plane/types';
+import {
+  MODEL_PROVIDERS,
+  type ModelProvider,
+  type ResolvedModelControl,
+} from '@/lib/agents/control-plane/types';
 
 export const runtime = 'nodejs';
 
-const PROVIDERS: ModelProvider[] = ['openai', 'anthropic', 'google', 'together', 'cerebras'];
+const PROVIDERS: ModelProvider[] = [...MODEL_PROVIDERS];
 
 const isMissingRelationError = (error: unknown): boolean => {
   if (!(error instanceof Error)) return false;

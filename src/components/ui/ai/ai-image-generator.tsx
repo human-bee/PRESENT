@@ -11,6 +11,7 @@ import {
   Palette,
   Pin,
   RefreshCw,
+  Settings2,
   Sparkles,
   Wand2,
 } from 'lucide-react';
@@ -18,6 +19,28 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/shared/button';
 import { WidgetFrame } from '@/components/ui/productivity/widget-frame';
 import { usePromotable } from '@/hooks/use-promotable';
+import {
+  IMAGE_ASPECT_RATIOS,
+  IMAGE_MODEL_IDS,
+  DEFAULT_IMAGE_ASPECT_RATIO,
+  DEFAULT_IMAGE_COUNT,
+  DEFAULT_IMAGE_MODEL_ID,
+  DEFAULT_IMAGE_QUALITY_PRESET,
+  DEFAULT_IMAGE_RESOLUTION_PRESET,
+  IMAGE_MODELS,
+  IMAGE_QUALITY_PRESETS,
+  IMAGE_RESOLUTION_PRESETS,
+  clampAspectRatio,
+  clampImageCount,
+  clampQualityPreset,
+  clampResolutionPreset,
+  getImageModelDefinition,
+  type ImageAspectRatio,
+  type ImageCountOption,
+  type ImageModelId,
+  type ImageQualityPreset,
+  type ImageResolutionPreset,
+} from '@/lib/ai/image-models';
 import { useAllTranscripts } from '@/lib/stores/transcript-store';
 import { cn } from '@/lib/utils';
 
@@ -123,11 +146,16 @@ const createSchema = z.object({
   title: z.string().optional(),
   prompt: z.string().optional(),
   style: z.enum(styleValues).optional(),
+  model: z.enum(IMAGE_MODEL_IDS).optional(),
+  aspectRatio: z.enum(IMAGE_ASPECT_RATIOS).optional(),
+  resolution: z.enum(IMAGE_RESOLUTION_PRESETS).optional(),
+  quality: z.enum(IMAGE_QUALITY_PRESETS).optional(),
+  imageCount: z.number().int().min(1).max(1).optional(),
+  useGrounding: z.boolean().optional(),
   iterativeMode: z
     .boolean()
     .optional()
     .describe('Reuse a stable seed for more consistent generations'),
-  userAPIKey: z.string().optional(),
   autoRegenerate: z
     .boolean()
     .optional()
@@ -155,6 +183,12 @@ const mutablePatchSchema = z
     title: z.string().optional(),
     prompt: z.string().optional(),
     style: z.enum(styleValues).optional(),
+    model: z.enum(IMAGE_MODEL_IDS).optional(),
+    aspectRatio: z.enum(IMAGE_ASPECT_RATIOS).optional(),
+    resolution: z.enum(IMAGE_RESOLUTION_PRESETS).optional(),
+    quality: z.enum(IMAGE_QUALITY_PRESETS).optional(),
+    imageCount: z.number().int().min(1).max(1).optional(),
+    useGrounding: z.boolean().optional(),
     iterativeMode: z.boolean().optional(),
     autoRegenerate: z.boolean().optional(),
     autoDropToCanvas: z.boolean().optional(),
@@ -196,12 +230,21 @@ type ImageResponse = {
   timings?: { inference?: number };
   providerUsed?: string | null;
   fallbackReason?: string | null;
+  modelId: string;
+  modelLabel: string;
+  width?: number;
+  height?: number;
 };
 
 type GeneratedImage = {
   id: string;
   prompt: string;
   style?: (typeof imageStyles)[number]['value'];
+  modelId: ImageModelId;
+  modelLabel: string;
+  aspectRatio: ImageAspectRatio;
+  resolution: ImageResolutionPreset;
+  quality: ImageQualityPreset;
   b64: string;
   url: string;
   width: number;
@@ -216,6 +259,8 @@ type GeneratedImageSummary = {
   id: string;
   prompt: string;
   style?: (typeof imageStyles)[number]['value'];
+  modelId: ImageModelId;
+  modelLabel: string;
   width: number;
   height: number;
   generatedAt: number;
@@ -252,6 +297,18 @@ function normalizePromptAppend(current: string, append: string) {
   return trimmedCurrent ? `${trimmedCurrent} ${trimmedAppend}` : trimmedAppend;
 }
 
+function formatImageGenerationError(message: string) {
+  if (message.startsWith('BYOK_MISSING_KEY:')) {
+    const provider = message.slice('BYOK_MISSING_KEY:'.length);
+    return `Add a ${provider} key in Settings to use this model.`;
+  }
+  if (message.startsWith('MISSING_PROVIDER_KEY:')) {
+    const provider = message.slice('MISSING_PROVIDER_KEY:'.length);
+    return `${provider} is not configured on this environment yet.`;
+  }
+  return message;
+}
+
 export function AIImageGenerator({
   __custom_message_id,
   messageId: propMessageId,
@@ -259,8 +316,13 @@ export function AIImageGenerator({
   title = 'Image Draft',
   prompt = '',
   style,
+  model = DEFAULT_IMAGE_MODEL_ID,
+  aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO,
+  resolution = DEFAULT_IMAGE_RESOLUTION_PRESET,
+  quality = DEFAULT_IMAGE_QUALITY_PRESET,
+  imageCount = DEFAULT_IMAGE_COUNT,
+  useGrounding = false,
   iterativeMode = false,
-  userAPIKey,
   autoRegenerate = false,
   autoDropToCanvas = true,
   canvasSize,
@@ -283,6 +345,12 @@ export function AIImageGenerator({
   const [promptText, setPromptText] = useState(prompt);
   const [widgetTitle, setWidgetTitle] = useState(title);
   const [selectedStyle, setSelectedStyle] = useState<typeof style>(style);
+  const [selectedModel, setSelectedModel] = useState<ImageModelId>(model);
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState<ImageAspectRatio>(aspectRatio);
+  const [selectedResolution, setSelectedResolution] = useState<ImageResolutionPreset>(resolution);
+  const [selectedQuality, setSelectedQuality] = useState<ImageQualityPreset>(quality);
+  const [selectedImageCount, setSelectedImageCount] = useState<ImageCountOption>(imageCount);
+  const [groundingEnabled, setGroundingEnabled] = useState(useGrounding);
   const [seedMode, setSeedMode] = useState(iterativeMode);
   const [autoRegenerateEnabled, setAutoRegenerateEnabled] = useState(autoRegenerate);
   const [autoDrop, setAutoDrop] = useState(autoDropToCanvas);
@@ -306,6 +374,12 @@ export function AIImageGenerator({
   const promptRef = useRef(promptText);
   const autoRegenerateRef = useRef(autoRegenerateEnabled);
   const styleRef = useRef(selectedStyle);
+  const modelRef = useRef(selectedModel);
+  const aspectRatioRef = useRef(selectedAspectRatio);
+  const resolutionRef = useRef(selectedResolution);
+  const qualityRef = useRef(selectedQuality);
+  const imageCountRef = useRef(selectedImageCount);
+  const groundingRef = useRef(groundingEnabled);
   const seedModeRef = useRef(seedMode);
   const autoDropRef = useRef(autoDrop);
 
@@ -320,6 +394,30 @@ export function AIImageGenerator({
   useEffect(() => {
     styleRef.current = selectedStyle;
   }, [selectedStyle]);
+
+  useEffect(() => {
+    modelRef.current = selectedModel;
+  }, [selectedModel]);
+
+  useEffect(() => {
+    aspectRatioRef.current = selectedAspectRatio;
+  }, [selectedAspectRatio]);
+
+  useEffect(() => {
+    resolutionRef.current = selectedResolution;
+  }, [selectedResolution]);
+
+  useEffect(() => {
+    qualityRef.current = selectedQuality;
+  }, [selectedQuality]);
+
+  useEffect(() => {
+    imageCountRef.current = selectedImageCount;
+  }, [selectedImageCount]);
+
+  useEffect(() => {
+    groundingRef.current = groundingEnabled;
+  }, [groundingEnabled]);
 
   useEffect(() => {
     seedModeRef.current = seedMode;
@@ -338,12 +436,16 @@ export function AIImageGenerator({
   }, [title]);
 
   useEffect(() => {
+    const definition = getImageModelDefinition(model);
     setSelectedStyle(style);
-  }, [style]);
-
-  useEffect(() => {
-    setSeedMode(iterativeMode);
-  }, [iterativeMode]);
+    setSelectedModel(model);
+    setSelectedAspectRatio(clampAspectRatio(model, aspectRatio));
+    setSelectedResolution(clampResolutionPreset(model, resolution));
+    setSelectedQuality(clampQualityPreset(model, quality));
+    setSelectedImageCount(clampImageCount(model, imageCount));
+    setGroundingEnabled(definition.supportsGrounding ? useGrounding : false);
+    setSeedMode(definition.supportsSeed ? iterativeMode : false);
+  }, [aspectRatio, imageCount, iterativeMode, model, quality, resolution, style, useGrounding]);
 
   useEffect(() => {
     setAutoRegenerateEnabled(autoRegenerate);
@@ -376,6 +478,23 @@ export function AIImageGenerator({
     () => imageStyles.find((option) => option.value === selectedStyle),
     [selectedStyle],
   );
+  const selectedModelDefinition = useMemo(
+    () => getImageModelDefinition(selectedModel),
+    [selectedModel],
+  );
+
+  useEffect(() => {
+    setSelectedAspectRatio((current) => clampAspectRatio(selectedModel, current));
+    setSelectedResolution((current) => clampResolutionPreset(selectedModel, current));
+    setSelectedQuality((current) => clampQualityPreset(selectedModel, current));
+    setSelectedImageCount((current) => clampImageCount(selectedModel, current));
+    if (!selectedModelDefinition.supportsGrounding) {
+      setGroundingEnabled(false);
+    }
+    if (!selectedModelDefinition.supportsSeed) {
+      setSeedMode(false);
+    }
+  }, [selectedModel, selectedModelDefinition.supportsGrounding, selectedModelDefinition.supportsSeed]);
 
   const getDropPlacement = useCallback(() => {
     if (typeof window === 'undefined') return null;
@@ -458,12 +577,26 @@ export function AIImageGenerator({
     async (overrides?: {
       prompt?: string;
       style?: typeof style;
+      model?: ImageModelId;
+      aspectRatio?: ImageAspectRatio;
+      resolution?: ImageResolutionPreset;
+      quality?: ImageQualityPreset;
+      imageCount?: ImageCountOption;
+      useGrounding?: boolean;
       iterativeMode?: boolean;
       dropToCanvas?: boolean;
       forceDrop?: boolean;
     }): Promise<GeneratedImage | null> => {
       const nextPrompt = (overrides?.prompt ?? promptRef.current ?? '').trim();
       const nextStyle = overrides?.style ?? styleRef.current;
+      const nextModel = overrides?.model ?? modelRef.current;
+      const nextAspectRatio = clampAspectRatio(nextModel, overrides?.aspectRatio ?? aspectRatioRef.current);
+      const nextResolution = clampResolutionPreset(nextModel, overrides?.resolution ?? resolutionRef.current);
+      const nextQuality = clampQualityPreset(nextModel, overrides?.quality ?? qualityRef.current);
+      const nextImageCount = clampImageCount(nextModel, overrides?.imageCount ?? imageCountRef.current);
+      const nextGrounding =
+        getImageModelDefinition(nextModel).supportsGrounding &&
+        (overrides?.useGrounding ?? groundingRef.current);
       const nextIterativeMode = overrides?.iterativeMode ?? seedModeRef.current;
 
       if (!nextPrompt) {
@@ -484,8 +617,13 @@ export function AIImageGenerator({
           body: JSON.stringify({
             prompt: nextPrompt,
             style: imageStyles.find((option) => option.value === nextStyle)?.prompt,
+            model: nextModel,
+            aspectRatio: nextAspectRatio,
+            resolution: nextResolution,
+            quality: nextQuality,
+            imageCount: nextImageCount,
+            useGrounding: nextGrounding,
             iterativeMode: nextIterativeMode,
-            userAPIKey,
           }),
         });
 
@@ -506,10 +644,15 @@ export function AIImageGenerator({
           id: `generated-image-${crypto.randomUUID()}`,
           prompt: nextPrompt,
           style: nextStyle,
+          modelId: nextModel,
+          modelLabel: data.modelLabel,
+          aspectRatio: nextAspectRatio,
+          resolution: nextResolution,
+          quality: nextQuality,
           b64: data.b64_json,
           url,
-          width: dimensions.width,
-          height: dimensions.height,
+          width: data.width ?? dimensions.width,
+          height: data.height ?? dimensions.height,
           generatedAt: Date.now(),
           inferenceMs: data.timings?.inference ?? 0,
           providerUsed: data.providerUsed,
@@ -535,7 +678,7 @@ export function AIImageGenerator({
         }
         setError(
           generationError instanceof Error
-            ? generationError.message
+            ? formatImageGenerationError(generationError.message)
             : 'Image generation failed',
         );
         return null;
@@ -545,7 +688,7 @@ export function AIImageGenerator({
         }
       }
     },
-    [promoteImage, userAPIKey],
+    [promoteImage],
   );
 
   useEffect(() => {
@@ -553,6 +696,12 @@ export function AIImageGenerator({
     const signature = JSON.stringify({
       prompt: promptText.trim(),
       style: selectedStyle,
+      model: selectedModel,
+      aspectRatio: selectedAspectRatio,
+      resolution: selectedResolution,
+      quality: selectedQuality,
+      imageCount: selectedImageCount,
+      useGrounding: groundingEnabled,
       iterativeMode: seedMode,
     });
 
@@ -565,7 +714,19 @@ export function AIImageGenerator({
     }, 450);
 
     return () => window.clearTimeout(handle);
-  }, [autoRegenerateEnabled, generateImage, promptText, selectedStyle, seedMode]);
+  }, [
+    autoRegenerateEnabled,
+    generateImage,
+    promptText,
+    selectedStyle,
+    selectedModel,
+    selectedAspectRatio,
+    selectedResolution,
+    selectedQuality,
+    selectedImageCount,
+    groundingEnabled,
+    seedMode,
+  ]);
 
   useEffect(() => {
     if (!prompt.trim() || autoRegenerateEnabled) return;
@@ -574,14 +735,43 @@ export function AIImageGenerator({
     const signature = JSON.stringify({
       prompt: prompt.trim(),
       style,
+      model,
+      aspectRatio,
+      resolution,
+      quality,
+      imageCount,
+      useGrounding,
       iterativeMode,
       mode: 'initial',
     });
 
     if (latestPromptSignatureRef.current === signature) return;
     latestPromptSignatureRef.current = signature;
-    void generateImage({ prompt, style, iterativeMode });
-  }, [autoRegenerateEnabled, generateImage, history.length, iterativeMode, prompt, style]);
+    void generateImage({
+      prompt,
+      style,
+      model,
+      aspectRatio,
+      resolution,
+      quality,
+      imageCount,
+      useGrounding,
+      iterativeMode,
+    });
+  }, [
+    autoRegenerateEnabled,
+    aspectRatio,
+    generateImage,
+    history.length,
+    imageCount,
+    iterativeMode,
+    model,
+    prompt,
+    quality,
+    resolution,
+    style,
+    useGrounding,
+  ]);
 
   useEffect(() => {
     if (!speechEnabled) return;
@@ -638,6 +828,26 @@ export function AIImageGenerator({
         }
 
         const nextStyle = next.style ?? styleRef.current;
+        const nextModel = next.model ?? modelRef.current;
+        const nextAspectRatio = clampAspectRatio(
+          nextModel,
+          typeof next.aspectRatio === 'string' ? next.aspectRatio : aspectRatioRef.current,
+        );
+        const nextResolution = clampResolutionPreset(
+          nextModel,
+          typeof next.resolution === 'string' ? next.resolution : resolutionRef.current,
+        );
+        const nextQuality = clampQualityPreset(
+          nextModel,
+          typeof next.quality === 'string' ? next.quality : qualityRef.current,
+        );
+        const nextImageCount = clampImageCount(
+          nextModel,
+          typeof next.imageCount === 'number' ? next.imageCount : imageCountRef.current,
+        );
+        const nextGrounding =
+          getImageModelDefinition(nextModel).supportsGrounding &&
+          (typeof next.useGrounding === 'boolean' ? next.useGrounding : groundingRef.current);
         const nextIterativeMode =
           typeof next.iterativeMode === 'boolean' ? next.iterativeMode : seedModeRef.current;
         const nextAutoRegenerate =
@@ -659,6 +869,24 @@ export function AIImageGenerator({
         }
         if (typeof next.style !== 'undefined') {
           setSelectedStyle(next.style);
+        }
+        if (typeof next.model !== 'undefined') {
+          setSelectedModel(next.model);
+        }
+        if (typeof next.aspectRatio !== 'undefined') {
+          setSelectedAspectRatio(nextAspectRatio);
+        }
+        if (typeof next.resolution !== 'undefined') {
+          setSelectedResolution(nextResolution);
+        }
+        if (typeof next.quality !== 'undefined') {
+          setSelectedQuality(nextQuality);
+        }
+        if (typeof next.imageCount === 'number') {
+          setSelectedImageCount(nextImageCount);
+        }
+        if (typeof next.useGrounding === 'boolean') {
+          setGroundingEnabled(nextGrounding);
         }
         if (typeof next.iterativeMode === 'boolean') {
           setSeedMode(next.iterativeMode);
@@ -696,6 +924,12 @@ export function AIImageGenerator({
           typeof commands.replacePrompt === 'string' ||
           typeof commands.appendPrompt === 'string' ||
           typeof next.style !== 'undefined' ||
+          typeof next.model !== 'undefined' ||
+          typeof next.aspectRatio !== 'undefined' ||
+          typeof next.resolution !== 'undefined' ||
+          typeof next.quality !== 'undefined' ||
+          typeof next.imageCount !== 'undefined' ||
+          typeof next.useGrounding !== 'undefined' ||
           typeof next.iterativeMode === 'boolean';
         const wantsGenerate = Boolean(commands.generate || commands.regenerate);
         const wantsDrop = Boolean(commands.promoteLatest || commands.dropLatest);
@@ -704,6 +938,12 @@ export function AIImageGenerator({
           const generated = await generateImage({
             prompt: nextPrompt,
             style: nextStyle,
+            model: nextModel,
+            aspectRatio: nextAspectRatio,
+            resolution: nextResolution,
+            quality: nextQuality,
+            imageCount: nextImageCount,
+            useGrounding: nextGrounding,
             iterativeMode: nextIterativeMode,
             dropToCanvas: wantsDrop || nextAutoDrop,
             forceDrop: wantsDrop,
@@ -748,6 +988,12 @@ export function AIImageGenerator({
       title: widgetTitle,
       prompt: promptText,
       style: selectedStyle,
+      model: selectedModel,
+      aspectRatio: selectedAspectRatio,
+      resolution: selectedResolution,
+      quality: selectedQuality,
+      imageCount: selectedImageCount,
+      useGrounding: groundingEnabled,
       iterativeMode: seedMode,
       autoRegenerate: autoRegenerateEnabled,
       autoDropToCanvas: autoDrop,
@@ -761,11 +1007,15 @@ export function AIImageGenerator({
           width: currentImage.width,
           height: currentImage.height,
           prompt: currentImage.prompt,
+          modelId: currentImage.modelId,
+          modelLabel: currentImage.modelLabel,
         },
       history: history.map<GeneratedImageSummary>((image) => ({
         id: image.id,
         prompt: image.prompt,
         style: image.style,
+        modelId: image.modelId,
+        modelLabel: image.modelLabel,
         width: image.width,
         height: image.height,
         generatedAt: image.generatedAt,
@@ -789,8 +1039,14 @@ export function AIImageGenerator({
       lastInferenceMs,
       placeholderText,
       promptText,
+      selectedAspectRatio,
+      selectedImageCount,
+      selectedModel,
+      selectedQuality,
+      selectedResolution,
       seedMode,
       selectedStyle,
+      groundingEnabled,
       controlsVisible,
       speechEnabled,
       promptMode,
@@ -838,8 +1094,8 @@ export function AIImageGenerator({
         subtitle="Type a prompt. Make the image. Pin it to the board."
         meta={
           currentImage
-            ? `${currentImage.providerUsed === 'gemini_ai_studio' ? 'Gemini' : currentImage.providerUsed === 'vertex_ai' ? 'Vertex' : currentImage.providerUsed === 'together_flux' ? 'Flux' : 'Generator'}${lastInferenceMs ? ` · ${(lastInferenceMs / 1000).toFixed(1)}s` : ''}`
-            : 'Canvas-native image generation'
+            ? `${currentImage.modelLabel}${lastInferenceMs ? ` · ${(lastInferenceMs / 1000).toFixed(1)}s` : ''}`
+            : `${selectedModelDefinition.label} selected`
         }
         actions={
           controlsVisible ? (
@@ -890,8 +1146,123 @@ export function AIImageGenerator({
                       One decisive subject beats ten vague adjectives.
                     </p>
                   </div>
-                  <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.24em] text-white/70">
-                    Cmd+Enter
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.24em] text-white/70">
+                      Cmd+Enter
+                    </div>
+                    <details className="group relative">
+                      <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full border border-white/15 bg-white/10 text-white/78 transition hover:bg-white/16">
+                        <Settings2 className="h-4 w-4" />
+                      </summary>
+                      <div className="absolute right-0 top-12 z-20 w-[320px] rounded-[24px] border border-white/15 bg-[#160f09]/96 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur">
+                        <div className="space-y-4">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.24em] text-white/55">
+                              Behind The Scenes
+                            </p>
+                            <p className="mt-1 text-xs text-white/68">
+                              Keep the front surface decisive. Tune the engine here.
+                            </p>
+                          </div>
+
+                          <label className="grid gap-1 text-xs text-white/74">
+                            <span>Aspect ratio</span>
+                            <select
+                              value={selectedAspectRatio}
+                              onChange={(event) =>
+                                setSelectedAspectRatio(
+                                  clampAspectRatio(selectedModel, event.target.value),
+                                )
+                              }
+                              className="rounded-2xl border border-white/12 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                            >
+                              {selectedModelDefinition.supportedAspectRatios.map((ratio) => (
+                                <option key={ratio} value={ratio} className="text-black">
+                                  {ratio}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <div className="grid gap-3">
+                            <label className="grid gap-1 text-xs text-white/74">
+                              <span>Resolution</span>
+                              <select
+                                value={selectedResolution}
+                                onChange={(event) =>
+                                  setSelectedResolution(
+                                    clampResolutionPreset(selectedModel, event.target.value),
+                                  )
+                                }
+                                className="rounded-2xl border border-white/12 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                              >
+                                {selectedModelDefinition.supportedResolutionPresets.map((preset) => (
+                                  <option key={preset} value={preset} className="text-black">
+                                    {preset.toUpperCase()}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+
+                          {selectedModelDefinition.supportedQualities.length > 1 ? (
+                            <label className="grid gap-1 text-xs text-white/74">
+                              <span>Quality</span>
+                              <select
+                                value={selectedQuality}
+                                onChange={(event) =>
+                                  setSelectedQuality(
+                                    clampQualityPreset(selectedModel, event.target.value),
+                                  )
+                                }
+                                className="rounded-2xl border border-white/12 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                              >
+                                {selectedModelDefinition.supportedQualities.map((preset) => (
+                                  <option key={preset} value={preset} className="text-black">
+                                    {preset === 'auto'
+                                      ? 'Auto'
+                                      : preset.charAt(0).toUpperCase() + preset.slice(1)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : null}
+
+                          <div className="grid gap-2">
+                            {selectedModelDefinition.supportsSeed ? (
+                              <button
+                                type="button"
+                                onClick={() => setSeedMode((value) => !value)}
+                                className={cn(
+                                  'inline-flex items-center justify-between rounded-2xl border px-3 py-2 text-xs transition',
+                                  seedMode
+                                    ? 'border-amber-200/60 bg-amber-100 text-amber-950'
+                                    : 'border-white/12 bg-black/20 text-white/74 hover:bg-black/30',
+                                )}
+                              >
+                                <span>Consistent seed</span>
+                                <span>{seedMode ? 'On' : 'Off'}</span>
+                              </button>
+                            ) : null}
+                            {selectedModelDefinition.supportsGrounding ? (
+                              <button
+                                type="button"
+                                onClick={() => setGroundingEnabled((value) => !value)}
+                                className={cn(
+                                  'inline-flex items-center justify-between rounded-2xl border px-3 py-2 text-xs transition',
+                                  groundingEnabled
+                                    ? 'border-sky-200/60 bg-sky-100 text-sky-950'
+                                    : 'border-white/12 bg-black/20 text-white/74 hover:bg-black/30',
+                                )}
+                              >
+                                <span>Search grounding</span>
+                                <span>{groundingEnabled ? 'On' : 'Off'}</span>
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </details>
                   </div>
                 </div>
 
@@ -926,6 +1297,38 @@ export function AIImageGenerator({
                   </div>
                 ) : null}
 
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  {IMAGE_MODELS.map((option) => {
+                    const active = selectedModel === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setSelectedModel(option.id)}
+                        className={cn(
+                          'rounded-[22px] border px-3 py-3 text-left transition',
+                          active
+                            ? 'border-amber-200/60 bg-white text-stone-950 shadow-[0_12px_30px_rgba(0,0,0,0.12)]'
+                            : 'border-white/12 bg-white/8 text-white/78 hover:bg-white/12',
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs uppercase tracking-[0.22em] opacity-70">
+                            {option.shortLabel}
+                          </span>
+                          <span className="rounded-full border border-current/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]">
+                            {option.tier}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm font-semibold">{option.label}</p>
+                        <p className={cn('mt-1 text-xs', active ? 'text-stone-700' : 'text-white/60')}>
+                          {option.blurb}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <div className="flex flex-wrap gap-2">
                   {imageStyles.map((option) => (
                     <button
@@ -955,19 +1358,39 @@ export function AIImageGenerator({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSeedMode((value) => !value)}
-                    className={cn(
-                      'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs transition',
-                      seedMode
-                        ? 'border-amber-200/60 bg-amber-100 text-amber-950'
-                        : 'border-white/15 bg-white/8 text-white/78 hover:bg-white/14',
-                    )}
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Consistent seed
-                  </button>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/8 px-3 py-2 text-xs text-white/78">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {selectedModelDefinition.label}
+                  </div>
+                  {selectedModelDefinition.supportsSeed ? (
+                    <button
+                      type="button"
+                      onClick={() => setSeedMode((value) => !value)}
+                      className={cn(
+                        'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs transition',
+                        seedMode
+                          ? 'border-amber-200/60 bg-amber-100 text-amber-950'
+                          : 'border-white/15 bg-white/8 text-white/78 hover:bg-white/14',
+                      )}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Consistent seed
+                    </button>
+                  ) : null}
+                  {selectedModelDefinition.supportsGrounding ? (
+                    <button
+                      type="button"
+                      onClick={() => setGroundingEnabled((value) => !value)}
+                      className={cn(
+                        'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs transition',
+                        groundingEnabled
+                          ? 'border-sky-200/60 bg-sky-100 text-sky-950'
+                          : 'border-white/15 bg-white/8 text-white/78 hover:bg-white/14',
+                      )}
+                    >
+                      Search grounding
+                    </button>
+                  ) : null}
                   {speechEnabled && liveTranscription ? (
                     <div className="max-w-full rounded-full border border-sky-200/30 bg-sky-100/15 px-3 py-2 text-xs text-sky-50">
                       Listening: “{liveTranscription}”
@@ -1001,12 +1424,17 @@ export function AIImageGenerator({
                               {currentImage.prompt}
                             </p>
                           </div>
-                          {currentImage.style ? (
-                            <div className="shrink-0 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/70">
-                              {imageStyles.find((option) => option.value === currentImage.style)?.label ||
-                                currentImage.style}
+                          <div className="flex shrink-0 flex-col items-end gap-2">
+                            <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/70">
+                              {currentImage.modelLabel}
                             </div>
-                          ) : null}
+                            {currentImage.style ? (
+                              <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/70">
+                                {imageStyles.find((option) => option.value === currentImage.style)?.label ||
+                                  currentImage.style}
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     </>
@@ -1097,9 +1525,15 @@ export function AIImageGenerator({
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-secondary">
+          <span className="rounded-full border border-default bg-surface px-3 py-1">
+            {selectedModelDefinition.label}
+          </span>
           <span className="inline-flex items-center gap-1 rounded-full border border-default bg-surface px-3 py-1">
             <Palette className="h-3.5 w-3.5" />
             {selectedStyleData?.label || 'No style'}
+          </span>
+          <span className="rounded-full border border-default bg-surface px-3 py-1">
+            {selectedAspectRatio} · {selectedResolution.toUpperCase()}
           </span>
           <span className="rounded-full border border-default bg-surface px-3 py-1">
             {history.length} {history.length === 1 ? 'image' : 'images'}

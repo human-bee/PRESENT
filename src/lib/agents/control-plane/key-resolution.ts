@@ -13,7 +13,9 @@ const toModelKeyProvider = (provider: ModelProvider): ModelKeyProvider =>
   provider === 'anthropic' ||
   provider === 'google' ||
   provider === 'together' ||
-  provider === 'cerebras'
+  provider === 'cerebras' ||
+  provider === 'fal' ||
+  provider === 'xai'
     ? provider
     : 'openai';
 
@@ -35,6 +37,16 @@ export async function resolveProviderKeyWithFallback(params: {
   const byokKey = await getDecryptedUserModelKey({
     userId: ownerUserId,
     provider: toModelKeyProvider(params.provider),
+  }).catch((error) => {
+    if (
+      error instanceof Error &&
+      (error.message.includes('42P01') ||
+        (error.message.toLowerCase().includes('relation') &&
+          error.message.toLowerCase().includes('does not exist')))
+    ) {
+      return null;
+    }
+    throw error;
   });
   if (byokKey) {
     return {

@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import { getBooleanFlag } from '@/lib/feature-flags';
 
-type ProviderId = 'openai' | 'anthropic' | 'google' | 'together' | 'cerebras';
+type ProviderId = 'openai' | 'anthropic' | 'google' | 'together' | 'cerebras' | 'fal' | 'xai';
 
 type ProviderStatus = {
   provider: ProviderId;
@@ -31,6 +31,9 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && error.message.trim()) return error.message;
   return fallback;
 };
+
+const formatProviderLinkState = (state: ProviderLinkState['state']): string =>
+  state.replaceAll('_', ' ');
 
 const PROVIDERS: Array<{
   id: ProviderId;
@@ -65,7 +68,21 @@ const PROVIDERS: Array<{
     label: 'Together AI',
     required: false,
     helpUrl: 'https://api.together.ai/settings/api-keys',
-    note: 'Optional (Flux fallback image generation).',
+    note: 'Optional legacy provider for older routing paths. Not used by the current image widget.',
+  },
+  {
+    id: 'fal',
+    label: 'fal',
+    required: false,
+    helpUrl: 'https://fal.ai/dashboard/keys',
+    note: 'Optional (FLUX.2 Flash image generation).',
+  },
+  {
+    id: 'xai',
+    label: 'xAI',
+    required: false,
+    helpUrl: 'https://console.x.ai/',
+    note: 'Optional (Grok image generation).',
   },
   {
     id: 'cerebras',
@@ -87,6 +104,8 @@ export default function ModelKeysPage() {
     google: '',
     together: '',
     cerebras: '',
+    fal: '',
+    xai: '',
   });
   const [busy, setBusy] = useState<Record<ProviderId, boolean>>({
     openai: false,
@@ -94,6 +113,8 @@ export default function ModelKeysPage() {
     google: false,
     together: false,
     cerebras: false,
+    fal: false,
+    xai: false,
   });
   const [error, setError] = useState<string | null>(null);
   const [providerLinks, setProviderLinks] = useState<Record<ProviderId, ProviderLinkState | undefined>>({
@@ -102,6 +123,8 @@ export default function ModelKeysPage() {
     google: undefined,
     together: undefined,
     cerebras: undefined,
+    fal: undefined,
+    xai: undefined,
   });
 
   const statusByProvider = useMemo(() => {
@@ -141,6 +164,8 @@ export default function ModelKeysPage() {
             google: undefined,
             together: undefined,
             cerebras: undefined,
+            fal: undefined,
+            xai: undefined,
           };
           for (const link of links) {
             if (link?.provider && link.provider in linkMap) {
@@ -312,7 +337,7 @@ export default function ModelKeysPage() {
                         )}
                         {linkState && (
                           <span className="ml-2 inline-flex items-center rounded border border-slate-200 px-1.5 py-0.5 text-[10px] uppercase text-slate-600">
-                            {linkState.state.replace('_', ' ')}
+                            {formatProviderLinkState(linkState.state)}
                           </span>
                         )}
                         <span className="ml-2">
