@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRoomContext } from '@livekit/components-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { useMaybeRoomContext } from '@livekit/components-react';
+import { nanoid } from 'nanoid';
 import {
   Check,
   Download,
@@ -41,7 +42,7 @@ import {
   type ImageQualityPreset,
   type ImageResolutionPreset,
 } from '@/lib/ai/image-models';
-import { useAllTranscripts } from '@/lib/stores/transcript-store';
+import { type Transcript, useAllTranscripts } from '@/lib/stores/transcript-store';
 import { cn } from '@/lib/utils';
 
 const imageStyles = [
@@ -219,6 +220,29 @@ export const aiImageGeneratorSchema = createSchema.extend({
     .describe('Image prompt. Leave blank to open an empty composer on the canvas.'),
 });
 
+function useSafeTranscripts(warnedRef: MutableRefObject<boolean>) {
+  try {
+    return useAllTranscripts();
+  } catch (error) {
+    if (!warnedRef.current) {
+      warnedRef.current = true;
+      console.warn(
+        '[AIImageGenerator] TranscriptProvider missing; speech sync disabled for this widget.',
+        error,
+      );
+    }
+    return [] as Transcript[];
+  }
+}
+
+function createSafeId(prefix: string) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${nanoid()}`;
+}
+
 export type AIImageGeneratorProps = z.infer<typeof aiImageGeneratorSchema> & {
   __custom_message_id?: string;
   messageId?: string;
@@ -350,13 +374,14 @@ export function AIImageGenerator({
 }: AIImageGeneratorProps) {
   const fallbackIdRef = useRef<string | null>(null);
   if (!fallbackIdRef.current) {
-    fallbackIdRef.current = `ai-image-generator-${crypto.randomUUID()}`;
+    fallbackIdRef.current = createSafeId('ai-image-generator');
   }
 
   const messageId = (__custom_message_id || propMessageId || fallbackIdRef.current)!;
   const registryContext = contextKey || 'canvas';
-  const room = useRoomContext();
-  const transcripts = useAllTranscripts();
+  const room = useMaybeRoomContext();
+  const transcriptWarningRef = useRef(false);
+  const transcripts = useSafeTranscripts(transcriptWarningRef);
 
   const [promptText, setPromptText] = useState(prompt);
   const [widgetTitle, setWidgetTitle] = useState(title);
@@ -631,7 +656,7 @@ export function AIImageGenerator({
         }
 
         const generated: GeneratedImage = {
-          id: `generated-image-${crypto.randomUUID()}`,
+          id: createSafeId('generated-image'),
           prompt: nextPrompt,
           style: nextStyle,
           modelId: nextModel,
@@ -771,6 +796,10 @@ export function AIImageGenerator({
     setLiveTranscription(latest?.text || '');
 
     for (const transcript of transcripts) {
+      if (!transcript.id) {
+        continue;
+      }
+
       if (
         !transcript?.isFinal ||
         !transcript?.text?.trim() ||
