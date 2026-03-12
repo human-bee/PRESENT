@@ -1,0 +1,64 @@
+{
+  "roomId": "canvas-b8217eee-ddf0-4805-bc23-5a0ce0ecd5fd",
+  "canvasId": "b8217eee-ddf0-4805-bc23-5a0ce0ecd5fd",
+  "canvasName": "call-ready-hero-board-cerebras-gpt-oss-120b-call-ready-hero-board-cerebras-gpt-oss-120b-mmmo90xt",
+  "source": "viewer",
+  "shapeCount": 5,
+  "shapes": [
+    {
+      "id": "shape:board-frame",
+      "type": "geo",
+      "x": 280,
+      "y": 220,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:hero-note",
+      "type": "note",
+      "x": 340,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-1",
+      "type": "note",
+      "x": 920,
+      "y": 300,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-2",
+      "type": "note",
+      "x": 920,
+      "y": 400,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-3",
+      "type": "note",
+      "x": 920,
+      "y": 500,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271885660
+  }
+}

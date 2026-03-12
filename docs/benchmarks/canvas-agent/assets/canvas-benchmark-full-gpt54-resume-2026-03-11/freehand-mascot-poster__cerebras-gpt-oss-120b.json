@@ -1,0 +1,59 @@
+{
+  "runId": "freehand-mascot-poster-cerebras-gpt-oss-120b-mmmlin8b",
+  "scenarioId": "freehand-mascot-poster",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Freehand Mascot Poster",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "freehand",
+  "startedAt": "2026-03-11T22:13:39.411Z",
+  "completedAt": "2026-03-11T22:13:39.413Z",
+  "status": "failed",
+  "roomId": "canvas-a139d2cb-556e-4592-a525-cbe44685ff76",
+  "canvasId": "a139d2cb-556e-4592-a525-cbe44685ff76",
+  "canvasName": "freehand-mascot-poster-cerebras-gpt-oss-120b-freehand-mascot-poster-cerebras-gpt-oss-120b-mmmlin8b",
+  "viewerPath": "/canvas?room=canvas-a139d2cb-556e-4592-a525-cbe44685ff76&id=a139d2cb-556e-4592-a525-cbe44685ff76&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/freehand-mascot-poster__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/freehand-mascot-poster__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/freehand-mascot-poster__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

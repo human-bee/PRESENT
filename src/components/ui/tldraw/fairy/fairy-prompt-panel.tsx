@@ -10,11 +10,24 @@ import {
   getFairyContextSpectrum,
 } from '@/lib/fairy-context/profiles';
 import { useCanvasContext } from '@/lib/hooks/use-canvas-context';
+import {
+  buildFairyCanvasModelRequest,
+  resetFairyCanvasModelSelectionIfUnavailable,
+  type FairyCanvasModelId,
+} from '@/lib/fairy-canvas-model-selection';
+import { useFairyCanvasModelSelection } from '@/lib/hooks/use-fairy-canvas-model-selection';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 
 export function FairyPromptPanel() {
   const editor = useEditor();
   const { roomName, widgets } = useCanvasContext();
   const buildPromptData = useFairyPromptData();
+  const {
+    options: modelOptions,
+    selectedModel,
+    selectedOption,
+    setSelectedModel,
+  } = useFairyCanvasModelSelection();
 
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -26,6 +39,7 @@ export function FairyPromptPanel() {
   const handleSend = useCallback(async () => {
     const trimmed = message.trim();
     if (!trimmed) return;
+    let selectionReset = false;
 
     try {
       setIsSending(true);
@@ -36,6 +50,7 @@ export function FairyPromptPanel() {
 
       const bundle = buildPromptData({ selectionIds, profile: contextProfile });
       const spectrum = getFairyContextSpectrum(contextProfile).value;
+      const runtimeSelection = buildFairyCanvasModelRequest(selectedModel);
 
       const counts: Record<string, number> = {};
       widgets.forEach((widget) => {
@@ -46,6 +61,7 @@ export function FairyPromptPanel() {
       const payload = {
         room: roomName,
         task: 'fairy.intent',
+        ...(runtimeSelection ? runtimeSelection : {}),
         params: {
           id:
             typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -68,10 +84,11 @@ export function FairyPromptPanel() {
               componentCounts: counts,
             },
           },
+          ...(runtimeSelection ? runtimeSelection : {}),
         },
       };
 
-      const response = await fetch('/api/steward/runCanvas', {
+      const response = await fetchWithSupabaseAuth('/api/steward/runCanvas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -79,17 +96,31 @@ export function FairyPromptPanel() {
 
       if (!response.ok) {
         const text = await response.text().catch(() => '');
-        throw new Error(text || `request_failed_${response.status}`);
+        selectionReset = resetFairyCanvasModelSelectionIfUnavailable(text);
+        if (selectionReset) {
+          setSelectedModel(null);
+        }
+        throw new Error(
+          selectionReset
+            ? 'Selected fairy canvas model was unavailable here and has been reset to Auto.'
+            : text || `request_failed_${response.status}`,
+        );
       }
 
       setMessage('');
     } catch (sendError) {
       console.error('[FairyPromptPanel] dispatch failed', sendError);
-      setError('Unable to dispatch fairy intent. Check steward/queue logs.');
+      setError(
+        sendError instanceof Error && sendError.message
+          ? sendError.message
+          : selectionReset
+            ? 'Selected fairy canvas model was unavailable here and has been reset to Auto.'
+            : 'Unable to dispatch fairy intent. Check steward/queue logs.',
+      );
     } finally {
       setIsSending(false);
     }
-  }, [buildPromptData, contextProfile, editor, message, roomName, widgets]);
+  }, [buildPromptData, contextProfile, editor, message, roomName, selectedModel, setSelectedModel, widgets]);
 
   return (
     <div
@@ -141,6 +172,30 @@ export function FairyPromptPanel() {
             </option>
           ))}
         </select>
+      </div>
+      <div className="flex items-center justify-between text-[11px] text-slate-500">
+        <span>Canvas model</span>
+        <select
+          className="rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-700"
+          value={selectedModel ?? 'auto'}
+          onChange={(event) =>
+            setSelectedModel(
+              event.target.value === 'auto' ? null : (event.target.value as FairyCanvasModelId),
+            )
+          }
+        >
+          <option value="auto">Auto</option>
+          {modelOptions.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.shortLabel} - {option.label} ({option.providerLabel})
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="text-[11px] leading-5 text-slate-500">
+        {selectedOption
+          ? `${selectedOption.description} ${selectedOption.availabilityHint}`
+          : 'Auto follows the default server-first lane for this workspace.'}
       </div>
     </div>
   );

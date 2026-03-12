@@ -1,0 +1,163 @@
+{
+  "runId": "collaborative-drawing-mural-haiku-4-5-mmlzxbi4",
+  "scenarioId": "collaborative-drawing-mural",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Collaborative Drawing Mural",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "collaborative-drawing",
+  "startedAt": "2026-03-11T12:09:12.588Z",
+  "completedAt": "2026-03-11T12:10:10.536Z",
+  "status": "completed",
+  "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+  "canvasId": "dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+  "canvasName": "collaborative-drawing-mural-haiku-4-5-collaborative-drawing-mural-haiku-4-5-mmlzxbi4",
+  "viewerPath": "/canvas?room=canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56&id=dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__haiku-4-5-doc.json",
+  "finalShapeCount": 12,
+  "actionSummary": {
+    "total": 15,
+    "byName": {
+      "create_shape": 12,
+      "reorder": 1,
+      "align": 1,
+      "distribute": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 46394,
+    "initialTtfbMs": 11675,
+    "totalActionCount": 15,
+    "totalMutatingActionCount": 15,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 15,
+    "avgFirstAckMs": 17308,
+    "avgScreenshotRttMs": 25
+  },
+  "steps": [
+    {
+      "stepId": "draw-mural",
+      "label": "Draw mural",
+      "sessionId": "1773230962583-mur6de",
+      "status": "completed",
+      "actionSummary": {
+        "total": 15,
+        "byName": {
+          "create_shape": 12,
+          "reorder": 1,
+          "align": 1,
+          "distribute": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 46394,
+        "ttfbMs": 11675,
+        "actionCount": 15,
+        "mutatingActionCount": 15,
+        "followupCount": 0,
+        "retryCount": 15,
+        "firstAckMs": 17308,
+        "screenshotRttMs": 25,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773230962583-mur6de",
+          "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+          "ts": 1773230962584,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773230962583-mur6de",
+          "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+          "ts": 1773230962616,
+          "preset": "creative",
+          "request_id": "a37f144e-a06d-4c90-864a-19fc36006d10",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 25,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773230962583-mur6de",
+          "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+          "ts": 1773230962700,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773230962583-mur6de",
+          "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+          "ts": 1773230974259,
+          "preset": "creative",
+          "ttfb": 11675,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773230962583-mur6de",
+          "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+          "ts": 1773231008977,
+          "preset": "creative",
+          "duration": 46393,
+          "chunkCount": 16,
+          "actionCount": 15,
+          "mutatingActionCount": 15,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 15,
+          "first_ack_ms": 17308,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 90,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 5,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 15 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 12,
+    "byType": {
+      "box": 2,
+      "draw": 5,
+      "note": 5
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows a collaborative mural with 12 colorful labeled shapes and connecting lines, earning a high score for shape count and verb usage.",
+    "scoreRationale": "High shape creation and use of required verbs with good visual organization resulted in a 90 score.",
+    "strengths": [
+      "Well-labeled, colorful shapes representing key concepts",
+      "Effective use of alignment and connecting lines"
+    ],
+    "issues": [
+      "Realtime sync health is degraded, possibly affecting collaboration",
+      "Minimal use of reorder, align, and distribute actions"
+    ]
+  }
+}

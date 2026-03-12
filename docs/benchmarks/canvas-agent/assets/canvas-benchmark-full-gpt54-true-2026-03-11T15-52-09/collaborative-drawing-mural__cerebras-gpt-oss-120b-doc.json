@@ -1,0 +1,74 @@
+{
+  "roomId": "canvas-eb813bbc-7a83-452a-9ea3-4ae647760119",
+  "canvasId": "eb813bbc-7a83-452a-9ea3-4ae647760119",
+  "canvasName": "collaborative-drawing-mural-cerebras-gpt-oss-120b-collaborative-drawing-mural-cerebras-gpt-oss-120b-mmmnp088",
+  "source": "viewer",
+  "shapeCount": 6,
+  "shapes": [
+    {
+      "id": "shape:preset-mmmnp9qe-597",
+      "type": "note",
+      "x": 720,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnp9qe-169",
+      "type": "note",
+      "x": 380,
+      "y": 300,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnp9qe-114",
+      "type": "note",
+      "x": 1060,
+      "y": 300,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnp9qe-910",
+      "type": "note",
+      "x": 380,
+      "y": 680,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnp9qe-669",
+      "type": "note",
+      "x": 1060,
+      "y": 680,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:energy-1",
+      "type": "draw",
+      "x": 690,
+      "y": 470,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773270892591
+  }
+}

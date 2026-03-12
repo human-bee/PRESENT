@@ -1,0 +1,74 @@
+{
+  "roomId": "canvas-ff52a6e2-60ce-4e96-9d0f-9eb42f7077cc",
+  "canvasId": "ff52a6e2-60ce-4e96-9d0f-9eb42f7077cc",
+  "canvasName": "call-ready-hero-board-haiku-4-5-call-ready-hero-board-haiku-4-5-mmmo7bb6",
+  "source": "viewer",
+  "shapeCount": 6,
+  "shapes": [
+    {
+      "id": "shape:hero-bg",
+      "type": "geo",
+      "x": 80,
+      "y": 120,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo7qk9-57",
+      "type": "note",
+      "x": 120,
+      "y": 200,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-driver",
+      "type": "note",
+      "x": 800,
+      "y": 200,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-tactic",
+      "type": "note",
+      "x": 800,
+      "y": 232,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-outcome",
+      "type": "note",
+      "x": 800,
+      "y": 264,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-next",
+      "type": "note",
+      "x": 800,
+      "y": 296,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271764791
+  }
+}

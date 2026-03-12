@@ -1,0 +1,174 @@
+{
+  "roomId": "canvas-cf89c222-6b90-49d5-8526-8f8032be4814",
+  "canvasId": "cf89c222-6b90-49d5-8526-8f8032be4814",
+  "canvasName": "business-operating-plan-haiku-4-5-business-operating-plan-haiku-4-5-mmmmw7wi",
+  "source": "viewer",
+  "shapeCount": 16,
+  "shapes": [
+    {
+      "id": "shape:swimlane-bg-objectives",
+      "type": "geo",
+      "x": 360,
+      "y": 200,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:swimlane-bg-owners",
+      "type": "geo",
+      "x": 360,
+      "y": 440,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:swimlane-bg-risks",
+      "type": "geo",
+      "x": 360,
+      "y": 680,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmmwoxm-877",
+      "type": "note",
+      "x": 360,
+      "y": 80,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmmwwoi-842",
+      "type": "note",
+      "x": 380,
+      "y": 220,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmmwyde-942",
+      "type": "note",
+      "x": 380,
+      "y": 460,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmmx04v-844",
+      "type": "note",
+      "x": 380,
+      "y": 700,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-card-1",
+      "type": "note",
+      "x": 440,
+      "y": 260,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-card-2",
+      "type": "note",
+      "x": 488,
+      "y": 260,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-card-3",
+      "type": "note",
+      "x": 536,
+      "y": 260,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:own-card-1",
+      "type": "note",
+      "x": 440,
+      "y": 500,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:own-card-2",
+      "type": "note",
+      "x": 488,
+      "y": 500,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:own-card-3",
+      "type": "note",
+      "x": 536,
+      "y": 500,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-card-1",
+      "type": "note",
+      "x": 440,
+      "y": 740,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-card-2",
+      "type": "note",
+      "x": 488,
+      "y": 740,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-card-3",
+      "type": "note",
+      "x": 536,
+      "y": 740,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773269607900
+  }
+}

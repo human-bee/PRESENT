@@ -1,0 +1,86 @@
+{
+  "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+  "canvasId": "a0d71405-ecda-4eb8-8264-6e48210418a5",
+  "canvasName": "multi-fairy-zones-gpt5-4-low-multi-fairy-zones-gpt5-4-low-mmm03vxz",
+  "source": "viewer",
+  "shapeCount": 8,
+  "shapes": [
+    {
+      "id": "shape:fairy-discovery-bg",
+      "type": "geo",
+      "x": 80,
+      "y": 224,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-craft-bg",
+      "type": "geo",
+      "x": 560,
+      "y": 0,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-critique-bg",
+      "type": "geo",
+      "x": 1040,
+      "y": 224,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:synthesis-hub",
+      "type": "geo",
+      "x": 560,
+      "y": 368,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm06uo9-733",
+      "type": "note",
+      "x": 112,
+      "y": 240,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm06wd9-554",
+      "type": "note",
+      "x": 576,
+      "y": 16,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm06y59-205",
+      "type": "note",
+      "x": 1056,
+      "y": 240,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm06zue-617",
+      "type": "note",
+      "x": 580,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773231412101
+  }
+}

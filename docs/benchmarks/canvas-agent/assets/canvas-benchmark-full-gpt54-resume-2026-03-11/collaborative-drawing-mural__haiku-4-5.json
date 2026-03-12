@@ -1,0 +1,59 @@
+{
+  "runId": "collaborative-drawing-mural-haiku-4-5-mmmldhq2",
+  "scenarioId": "collaborative-drawing-mural",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Collaborative Drawing Mural",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "collaborative-drawing",
+  "startedAt": "2026-03-11T22:09:39.137Z",
+  "completedAt": "2026-03-11T22:11:36.696Z",
+  "status": "failed",
+  "roomId": "canvas-e7407d6b-a223-4bcb-9969-b997de89782c",
+  "canvasId": "e7407d6b-a223-4bcb-9969-b997de89782c",
+  "canvasName": "collaborative-drawing-mural-haiku-4-5-collaborative-drawing-mural-haiku-4-5-mmmldhq2",
+  "viewerPath": "/canvas?room=canvas-e7407d6b-a223-4bcb-9969-b997de89782c&id=e7407d6b-a223-4bcb-9969-b997de89782c&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/collaborative-drawing-mural__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/collaborative-drawing-mural__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/collaborative-drawing-mural__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "page.waitForFunction: Timeout 30000ms exceeded."
+    ]
+  },
+  "error": "page.waitForFunction: Timeout 30000ms exceeded."
+}

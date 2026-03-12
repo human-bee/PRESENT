@@ -1,0 +1,134 @@
+{
+  "roomId": "canvas-4273eca1-5023-4f3c-b4f4-13b6f4b658ed",
+  "canvasId": "4273eca1-5023-4f3c-b4f4-13b6f4b658ed",
+  "canvasName": "multi-fairy-zones-haiku-4-5-multi-fairy-zones-haiku-4-5-mmmo029z",
+  "source": "viewer",
+  "shapeCount": 12,
+  "shapes": [
+    {
+      "id": "shape:zone-left-bg",
+      "type": "geo",
+      "x": 140,
+      "y": 120,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:zone-center-bg",
+      "type": "geo",
+      "x": 520,
+      "y": 120,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:zone-right-bg",
+      "type": "geo",
+      "x": 820,
+      "y": 120,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo0n96-114",
+      "type": "note",
+      "x": 160,
+      "y": 180,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo0oya-726",
+      "type": "note",
+      "x": 540,
+      "y": 180,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo0qna-255",
+      "type": "note",
+      "x": 840,
+      "y": 180,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:work-area-a",
+      "type": "geo",
+      "x": 160,
+      "y": 280,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:work-area-center",
+      "type": "geo",
+      "x": 560,
+      "y": 280,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:work-area-c",
+      "type": "geo",
+      "x": 860,
+      "y": 280,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo0x4b-286",
+      "type": "note",
+      "x": 160,
+      "y": 600,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo0ytb-947",
+      "type": "note",
+      "x": 560,
+      "y": 600,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo10i9-300",
+      "type": "note",
+      "x": 860,
+      "y": 600,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271442242
+  }
+}

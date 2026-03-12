@@ -1,0 +1,86 @@
+{
+  "roomId": "canvas-47907f41-c56c-4333-bc49-5a7f671d1a7f",
+  "canvasId": "47907f41-c56c-4333-bc49-5a7f671d1a7f",
+  "canvasName": "multi-fairy-zones-cerebras-gpt-oss-120b-multi-fairy-zones-cerebras-gpt-oss-120b-mmm076a2",
+  "source": "viewer",
+  "shapeCount": 8,
+  "shapes": [
+    {
+      "id": "shape:zone-1",
+      "type": "geo",
+      "x": 100,
+      "y": 240,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:zone-2",
+      "type": "geo",
+      "x": 520,
+      "y": 240,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:zone-3",
+      "type": "geo",
+      "x": 940,
+      "y": 240,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm07gwc-577",
+      "type": "note",
+      "x": 140,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm07gwc-591",
+      "type": "note",
+      "x": 540,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm07gwc-980",
+      "type": "note",
+      "x": 940,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:synthesis-hub",
+      "type": "geo",
+      "x": 620,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm07gwc-98",
+      "type": "note",
+      "x": 640,
+      "y": 400,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773231430923
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "roomId": "canvas-4a721d83-c814-4c49-b495-93ccb7200d16",
+  "canvasId": "4a721d83-c814-4c49-b495-93ccb7200d16",
+  "canvasName": "collaborative-drawing-mural-haiku-4-5-collaborative-drawing-mural-haiku-4-5-mmmnmr0i",
+  "source": "viewer",
+  "shapeCount": 10,
+  "shapes": [
+    {
+      "id": "shape:mural-bg",
+      "type": "geo",
+      "x": 360,
+      "y": 240,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:focal-center",
+      "type": "geo",
+      "x": 600,
+      "y": 400,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:freehand-swoosh-1",
+      "type": "draw",
+      "x": 620,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:freehand-swoosh-2",
+      "type": "draw",
+      "x": 640,
+      "y": 520,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:mark-accent-1",
+      "type": "geo",
+      "x": 440,
+      "y": 340,
+      "props": {
+        "geo": "ellipse",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mark-accent-2",
+      "type": "geo",
+      "x": 860,
+      "y": 320,
+      "props": {
+        "geo": "ellipse",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mark-accent-3",
+      "type": "geo",
+      "x": 400,
+      "y": 580,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mark-accent-4",
+      "type": "geo",
+      "x": 900,
+      "y": 560,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:detail-text-1",
+      "type": "text",
+      "x": 440,
+      "y": 620,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:detail-text-2",
+      "type": "text",
+      "x": 880,
+      "y": 660,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773270818038
+  }
+}

@@ -1,0 +1,163 @@
+{
+  "runId": "collaborative-drawing-mural-gpt5-4-low-mmlzykfe",
+  "scenarioId": "collaborative-drawing-mural",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Collaborative Drawing Mural",
+  "variantLabel": "GPT-5 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "collaborative-drawing",
+  "startedAt": "2026-03-11T12:10:10.802Z",
+  "completedAt": "2026-03-11T12:13:11.510Z",
+  "status": "completed",
+  "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+  "canvasId": "a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+  "canvasName": "collaborative-drawing-mural-gpt5-4-low-collaborative-drawing-mural-gpt5-4-low-mmlzykfe",
+  "viewerPath": "/canvas?room=canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07&id=a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__gpt5-4-low-doc.json",
+  "finalShapeCount": 15,
+  "actionSummary": {
+    "total": 26,
+    "byName": {
+      "create_shape": 15,
+      "update_shape": 5,
+      "align": 3,
+      "stack": 3
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 169476,
+    "initialTtfbMs": 114670,
+    "totalActionCount": 26,
+    "totalMutatingActionCount": 26,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 24,
+    "avgFirstAckMs": 120257,
+    "avgScreenshotRttMs": 31
+  },
+  "steps": [
+    {
+      "stepId": "draw-mural",
+      "label": "Draw mural",
+      "sessionId": "1773231020455-tlzz9e",
+      "status": "completed",
+      "actionSummary": {
+        "total": 26,
+        "byName": {
+          "create_shape": 15,
+          "update_shape": 5,
+          "align": 3,
+          "stack": 3
+        }
+      },
+      "metrics": {
+        "durationMs": 169476,
+        "ttfbMs": 114670,
+        "actionCount": 26,
+        "mutatingActionCount": 26,
+        "followupCount": 0,
+        "retryCount": 24,
+        "firstAckMs": 120257,
+        "screenshotRttMs": 31,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773231020455-tlzz9e",
+          "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+          "ts": 1773231020456,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773231020455-tlzz9e",
+          "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+          "ts": 1773231020494,
+          "preset": "creative",
+          "request_id": "00e20028-8ed2-4ab6-b361-1719898c3e4b",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 31,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773231020455-tlzz9e",
+          "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+          "ts": 1773231020608,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773231020455-tlzz9e",
+          "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+          "ts": 1773231135126,
+          "preset": "creative",
+          "ttfb": 114670,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773231020455-tlzz9e",
+          "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+          "ts": 1773231189930,
+          "preset": "creative",
+          "duration": 169474,
+          "chunkCount": 24,
+          "actionCount": 26,
+          "mutatingActionCount": 26,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 24,
+          "first_ack_ms": 120257,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 85,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 0,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 24 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 15,
+    "byType": {
+      "box": 5,
+      "note": 5,
+      "draw": 5
+    }
+  },
+  "visualAnalysis": {
+    "summary": "Canvas shows a basic collaborative mural setup with shapes and labeled sections.",
+    "scoreRationale": "The score reflects solid shape creation and updates with minor alignment and stacking actions, but limited complexity or preferred verbs.",
+    "strengths": [
+      "Clear labeling of sections like 'COLLAB WALL' and 'Next steps'",
+      "Use of multiple shapes including rectangles and connectors"
+    ],
+    "issues": [
+      "Limited variety in shape types and drawing actions",
+      "Some lines appear disconnected or misplaced affecting clarity"
+    ]
+  }
+}

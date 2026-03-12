@@ -2,12 +2,15 @@ import type { GuidedField, GuidedSection, ResolvedFieldSource } from './types';
 
 const MODEL_SUGGESTIONS = {
   openai: [
+    'gpt-5.4',
     'gpt-realtime-1.5',
     'gpt-realtime-mini',
+    'gpt-realtime',
     'gpt-audio-1.5',
     'gpt-audio-mini',
     'gpt-5-mini',
     'gpt-4o-mini-transcription',
+    'gpt-4o-mini-transcribe',
     'whisper-1',
   ],
   anthropic: ['claude-haiku-4-5', 'claude-sonnet-4-5'],
@@ -27,7 +30,7 @@ export const GUIDED_SECTIONS: GuidedSection[] = [
         label: 'Canvas Steward Model',
         kind: 'string',
         help: 'Used by canvas steward tasks and canvas tool execution.',
-        suggestions: [...MODEL_SUGGESTIONS.anthropic, ...MODEL_SUGGESTIONS.openai],
+        suggestions: [...MODEL_SUGGESTIONS.anthropic, ...MODEL_SUGGESTIONS.openai, 'gpt-oss-120b'],
       },
       {
         path: 'models.voiceRealtime',

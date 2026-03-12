@@ -1,0 +1,173 @@
+{
+  "runId": "remote-board-game-night-haiku-4-5-mmml4kmu",
+  "scenarioId": "remote-board-game-night",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Remote Board Game Night",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "play",
+  "startedAt": "2026-03-11T22:02:43.325Z",
+  "completedAt": "2026-03-11T22:05:42.365Z",
+  "status": "failed",
+  "roomId": "canvas-fd582884-db5d-4547-8e41-2b0d96b07302",
+  "canvasId": "fd582884-db5d-4547-8e41-2b0d96b07302",
+  "canvasName": "remote-board-game-night-haiku-4-5-remote-board-game-night-haiku-4-5-mmml4kmu",
+  "viewerPath": "/canvas?room=canvas-fd582884-db5d-4547-8e41-2b0d96b07302&id=fd582884-db5d-4547-8e41-2b0d96b07302&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/remote-board-game-night__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/remote-board-game-night__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/remote-board-game-night__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 28,
+    "byName": {
+      "create_shape": 19,
+      "stack": 3,
+      "align": 4,
+      "distribute": 1,
+      "reorder": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 142947,
+    "initialTtfbMs": 47778,
+    "totalActionCount": 28,
+    "totalMutatingActionCount": 28,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 28,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "game-state",
+      "label": "Game state board",
+      "sessionId": "1773266597667-x1ovyl",
+      "status": "completed",
+      "actionSummary": {
+        "total": 28,
+        "byName": {
+          "create_shape": 19,
+          "stack": 3,
+          "align": 4,
+          "distribute": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 142947,
+        "ttfbMs": 47778,
+        "actionCount": 28,
+        "mutatingActionCount": 28,
+        "followupCount": 0,
+        "retryCount": 28,
+        "firstAckMs": null,
+        "screenshotResult": null,
+        "usage": null,
+        "estimatedCostUsd": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773266597667-x1ovyl",
+          "roomId": "canvas-fd582884-db5d-4547-8e41-2b0d96b07302",
+          "ts": 1773266597727,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773266597667-x1ovyl",
+          "roomId": "canvas-fd582884-db5d-4547-8e41-2b0d96b07302",
+          "ts": 1773266609816,
+          "preset": "creative",
+          "request_id": "08373a1c-f32c-4805-92fb-fed8d87cec19",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773266597667-x1ovyl",
+          "roomId": "canvas-fd582884-db5d-4547-8e41-2b0d96b07302",
+          "ts": 1773266622119,
+          "preset": "creative",
+          "request_id": "e1c3aea6-cb5d-44ff-8d7e-8cba6609f117",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773266597667-x1ovyl",
+          "roomId": "canvas-fd582884-db5d-4547-8e41-2b0d96b07302",
+          "ts": 1773266634428,
+          "preset": "creative",
+          "request_id": "de0fed16-32f5-4bfc-997f-460cd4eef05d",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773266597667-x1ovyl",
+          "roomId": "canvas-fd582884-db5d-4547-8e41-2b0d96b07302",
+          "ts": 1773266634535,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773266597667-x1ovyl",
+          "roomId": "canvas-fd582884-db5d-4547-8e41-2b0d96b07302",
+          "ts": 1773266645505,
+          "preset": "creative",
+          "ttfb": 47778,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773266597667-x1ovyl",
+          "roomId": "canvas-fd582884-db5d-4547-8e41-2b0d96b07302",
+          "ts": 1773266740609,
+          "preset": "creative",
+          "duration": 142882,
+          "chunkCount": 28,
+          "actionCount": 28,
+          "mutatingActionCount": 28,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 28,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "status is not defined"
+    ]
+  },
+  "error": "status is not defined"
+}

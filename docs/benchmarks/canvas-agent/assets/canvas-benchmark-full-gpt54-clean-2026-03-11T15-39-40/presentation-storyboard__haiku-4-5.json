@@ -1,0 +1,59 @@
+{
+  "runId": "presentation-storyboard-haiku-4-5-mmmmnlyt",
+  "scenarioId": "presentation-storyboard",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Presentation Storyboard",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "presentation",
+  "startedAt": "2026-03-11T22:45:30.699Z",
+  "completedAt": "2026-03-11T22:45:30.704Z",
+  "status": "failed",
+  "roomId": "canvas-074ce9b9-0ea0-4519-9a37-09bb1592b1ca",
+  "canvasId": "074ce9b9-0ea0-4519-9a37-09bb1592b1ca",
+  "canvasName": "presentation-storyboard-haiku-4-5-presentation-storyboard-haiku-4-5-mmmmnlyt",
+  "viewerPath": "/canvas?room=canvas-074ce9b9-0ea0-4519-9a37-09bb1592b1ca&id=074ce9b9-0ea0-4519-9a37-09bb1592b1ca&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/presentation-storyboard__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/presentation-storyboard__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/presentation-storyboard__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "browser.newPage: Target page, context or browser has been closed"
+    ]
+  },
+  "error": "browser.newPage: Target page, context or browser has been closed"
+}

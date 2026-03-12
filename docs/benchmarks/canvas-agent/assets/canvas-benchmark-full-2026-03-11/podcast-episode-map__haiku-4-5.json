@@ -1,0 +1,165 @@
+{
+  "runId": "podcast-episode-map-haiku-4-5-mmlz3cht",
+  "scenarioId": "podcast-episode-map",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Podcast Episode Map",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "podcast",
+  "startedAt": "2026-03-11T11:45:54.212Z",
+  "completedAt": "2026-03-11T11:47:08.497Z",
+  "status": "completed",
+  "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+  "canvasId": "9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+  "canvasName": "podcast-episode-map-haiku-4-5-podcast-episode-map-haiku-4-5-mmlz3cht",
+  "viewerPath": "/canvas?room=canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733&id=9bcd3fb1-9a07-4d82-9c22-64772c2a1733&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__haiku-4-5-doc.json",
+  "finalShapeCount": 18,
+  "actionSummary": {
+    "total": 22,
+    "byName": {
+      "create_shape": 18,
+      "distribute": 1,
+      "align": 1,
+      "stack": 1,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 63068,
+    "initialTtfbMs": 12862,
+    "totalActionCount": 22,
+    "totalMutatingActionCount": 22,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 22,
+    "avgFirstAckMs": 18519,
+    "avgScreenshotRttMs": 25
+  },
+  "steps": [
+    {
+      "stepId": "episode-outline",
+      "label": "Episode outline",
+      "sessionId": "1773229563772-fiue9g",
+      "status": "completed",
+      "actionSummary": {
+        "total": 22,
+        "byName": {
+          "create_shape": 18,
+          "distribute": 1,
+          "align": 1,
+          "stack": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 63068,
+        "ttfbMs": 12862,
+        "actionCount": 22,
+        "mutatingActionCount": 22,
+        "followupCount": 0,
+        "retryCount": 22,
+        "firstAckMs": 18519,
+        "screenshotRttMs": 25,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773229563772-fiue9g",
+          "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+          "ts": 1773229563772,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773229563772-fiue9g",
+          "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+          "ts": 1773229563803,
+          "preset": "creative",
+          "request_id": "2e3aeacf-87d1-4123-b6fc-77b1f055b28e",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 25,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773229563772-fiue9g",
+          "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+          "ts": 1773229563903,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773229563772-fiue9g",
+          "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+          "ts": 1773229576634,
+          "preset": "creative",
+          "ttfb": 12862,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773229563772-fiue9g",
+          "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+          "ts": 1773229626839,
+          "preset": "creative",
+          "duration": 63067,
+          "chunkCount": 23,
+          "actionCount": 22,
+          "mutatingActionCount": 22,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 22,
+          "first_ack_ms": 18519,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 95,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 10,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 22 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 18,
+    "byType": {
+      "box": 7,
+      "note": 6,
+      "text": 5
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas displays a clear podcast episode plan with organized sections and labeled shapes, earning a high score for structure and verb usage.",
+    "scoreRationale": "High score due to complete shape creation, inclusion of required and preferred verbs, and a clear screenshot demonstrating stable layout.",
+    "strengths": [
+      "Well-organized section layout",
+      "Correct and varied use of required and preferred verbs"
+    ],
+    "issues": [
+      "Minor sync health message noted",
+      "One overlapping text area in bottom section"
+    ]
+  }
+}

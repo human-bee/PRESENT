@@ -1,0 +1,156 @@
+{
+  "runId": "collaborative-drawing-mural-cerebras-gpt-oss-120b-mmm02g2j",
+  "scenarioId": "collaborative-drawing-mural",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Collaborative Drawing Mural",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "collaborative-drawing",
+  "startedAt": "2026-03-11T12:13:11.866Z",
+  "completedAt": "2026-03-11T12:13:30.239Z",
+  "status": "completed",
+  "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+  "canvasId": "69fa590e-6f9b-41a8-818d-a42e17550324",
+  "canvasName": "collaborative-drawing-mural-cerebras-gpt-oss-120b-collaborative-drawing-mural-cerebras-gpt-oss-120b-mmm02g2j",
+  "viewerPath": "/canvas?room=canvas-69fa590e-6f9b-41a8-818d-a42e17550324&id=69fa590e-6f9b-41a8-818d-a42e17550324&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 10,
+  "actionSummary": {
+    "total": 10,
+    "byName": {
+      "create_shape": 10
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 7014,
+    "initialTtfbMs": 3613,
+    "totalActionCount": 10,
+    "totalMutatingActionCount": 10,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 1,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": 32
+  },
+  "steps": [
+    {
+      "stepId": "draw-mural",
+      "label": "Draw mural",
+      "sessionId": "1773231201575-4mnhbb",
+      "status": "completed",
+      "actionSummary": {
+        "total": 10,
+        "byName": {
+          "create_shape": 10
+        }
+      },
+      "metrics": {
+        "durationMs": 7014,
+        "ttfbMs": 3613,
+        "actionCount": 10,
+        "mutatingActionCount": 10,
+        "followupCount": 0,
+        "retryCount": 1,
+        "firstAckMs": null,
+        "screenshotRttMs": 32,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773231201575-4mnhbb",
+          "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+          "ts": 1773231201577,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773231201575-4mnhbb",
+          "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+          "ts": 1773231201617,
+          "preset": "creative",
+          "request_id": "1a332c1f-4ef3-4757-8fc4-70e3a2f9803e",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 32,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773231201575-4mnhbb",
+          "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+          "ts": 1773231201738,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773231201575-4mnhbb",
+          "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+          "ts": 1773231205190,
+          "preset": "creative",
+          "ttfb": 3613,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773231201575-4mnhbb",
+          "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+          "ts": 1773231208588,
+          "preset": "creative",
+          "duration": 7011,
+          "chunkCount": 1,
+          "actionCount": 10,
+          "mutatingActionCount": 10,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 1,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 89,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 0,
+      "screenshot": 10,
+      "stability": 9
+    },
+    "notes": [
+      "Retries recorded 1 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 10,
+    "byType": {
+      "box": 1,
+      "note": 7,
+      "draw": 2
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows a central red box labeled 'Mural Center' connected by red lines to three orange boxes labeled 'Idea A,' 'Idea B,' and 'Idea C,' with a system status panel on the left.",
+    "scoreRationale": "The score reflects successful creation and connection of all required shapes with clear labeling and some visual stability despite a degraded sync status.",
+    "strengths": [
+      "All required shapes and connections are present and clearly labeled",
+      "Layout is organized with a central theme and linked ideas"
+    ],
+    "issues": [
+      "Realtime sync health shows degraded status which may impact stability",
+      "Visual design is functional but could be more polished or visually balanced"
+    ]
+  }
+}

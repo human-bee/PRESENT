@@ -1,0 +1,104 @@
+{
+  "roomId": "canvas-fafc285b-cce4-4df7-86fd-5515c5e0d05f",
+  "canvasId": "fafc285b-cce4-4df7-86fd-5515c5e0d05f",
+  "canvasName": "freehand-journey-map-cerebras-gpt-oss-120b-freehand-journey-map-cerebras-gpt-oss-120b-mmmnznon",
+  "source": "viewer",
+  "shapeCount": 9,
+  "shapes": [
+    {
+      "id": "shape:journey-step-1",
+      "type": "note",
+      "x": 420,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:journey-step-2",
+      "type": "note",
+      "x": 620,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:journey-step-3",
+      "type": "note",
+      "x": 820,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:journey-step-4",
+      "type": "note",
+      "x": 1020,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:journey-step-5",
+      "type": "note",
+      "x": 1220,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:arrow-1-2",
+      "type": "draw",
+      "x": 470,
+      "y": 410,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-2-3",
+      "type": "draw",
+      "x": 670,
+      "y": 410,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-3-4",
+      "type": "draw",
+      "x": 870,
+      "y": 410,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-4-5",
+      "type": "draw",
+      "x": 1070,
+      "y": 410,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271391107
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "runId": "remote-board-game-night-cerebras-gpt-oss-120b-mmlzwy85",
+  "scenarioId": "remote-board-game-night",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Remote Board Game Night",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "play",
+  "startedAt": "2026-03-11T12:08:55.427Z",
+  "completedAt": "2026-03-11T12:09:12.311Z",
+  "status": "completed",
+  "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+  "canvasId": "7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+  "canvasName": "remote-board-game-night-cerebras-gpt-oss-120b-remote-board-game-night-cerebras-gpt-oss-120b-mmlzwy85",
+  "viewerPath": "/canvas?room=canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e&id=7e555b8c-fc12-4a3c-a537-6117eb360c6e&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 16,
+  "actionSummary": {
+    "total": 17,
+    "byName": {
+      "create_shape": 16,
+      "distribute": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 5400,
+    "initialTtfbMs": 2003,
+    "totalActionCount": 17,
+    "totalMutatingActionCount": 17,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 1,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": 31
+  },
+  "steps": [
+    {
+      "stepId": "game-state",
+      "label": "Game state board",
+      "sessionId": "1773230945255-p1c415",
+      "status": "completed",
+      "actionSummary": {
+        "total": 17,
+        "byName": {
+          "create_shape": 16,
+          "distribute": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 5400,
+        "ttfbMs": 2003,
+        "actionCount": 17,
+        "mutatingActionCount": 17,
+        "followupCount": 0,
+        "retryCount": 1,
+        "firstAckMs": null,
+        "screenshotRttMs": 31,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773230945255-p1c415",
+          "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+          "ts": 1773230945256,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773230945255-p1c415",
+          "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+          "ts": 1773230945296,
+          "preset": "creative",
+          "request_id": "95047800-a051-4fef-a2bd-ea0e4a572883",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 31,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773230945255-p1c415",
+          "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+          "ts": 1773230945383,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773230945255-p1c415",
+          "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+          "ts": 1773230947259,
+          "preset": "creative",
+          "ttfb": 2003,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773230945255-p1c415",
+          "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+          "ts": 1773230950655,
+          "preset": "creative",
+          "duration": 5399,
+          "chunkCount": 1,
+          "actionCount": 17,
+          "mutatingActionCount": 17,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 1,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 89,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 0,
+      "screenshot": 10,
+      "stability": 9
+    },
+    "notes": [
+      "Retries recorded 1 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 16,
+    "byType": {
+      "note": 13,
+      "box": 3
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas depicts a simple board game setup with labeled components and player scores.",
+    "scoreRationale": "The design includes all required elements with clear labels and a neat layout, earning a high score of 89.",
+    "strengths": [
+      "Clear labeling of game components and players",
+      "Balanced and organized layout"
+    ],
+    "issues": [
+      "Minimal use of verbs beyond creation and distribution",
+      "Some UI elements overlap content causing slight clutter"
+    ]
+  }
+}

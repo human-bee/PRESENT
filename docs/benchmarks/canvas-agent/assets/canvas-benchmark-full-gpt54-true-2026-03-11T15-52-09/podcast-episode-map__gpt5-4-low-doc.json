@@ -1,0 +1,224 @@
+{
+  "roomId": "canvas-8b7bd9c4-88e3-4578-b95d-679a6bea7c8c",
+  "canvasId": "8b7bd9c4-88e3-4578-b95d-679a6bea7c8c",
+  "canvasName": "podcast-episode-map-gpt5-4-low-podcast-episode-map-gpt5-4-low-mmmn2vtj",
+  "source": "viewer",
+  "shapeCount": 21,
+  "shapes": [
+    {
+      "id": "shape:board-frame",
+      "type": "geo",
+      "x": 112,
+      "y": 224,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmn3ayy-827",
+      "type": "note",
+      "x": 144,
+      "y": 256,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:board-subtitle",
+      "type": "text",
+      "x": 144,
+      "y": 368,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-rule",
+      "type": "geo",
+      "x": 112,
+      "y": 440,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:seg-1",
+      "type": "note",
+      "x": 160,
+      "y": 496,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:seg-2",
+      "type": "note",
+      "x": 208,
+      "y": 496,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:seg-3",
+      "type": "note",
+      "x": 256,
+      "y": 496,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:seg-4",
+      "type": "note",
+      "x": 304,
+      "y": 496,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:seg-5",
+      "type": "note",
+      "x": 352,
+      "y": 496,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:seg-6",
+      "type": "note",
+      "x": 400,
+      "y": 496,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmn3vo0-710",
+      "type": "note",
+      "x": 160,
+      "y": 472,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-hosts",
+      "type": "text",
+      "x": 160,
+      "y": 704,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-hosts-box",
+      "type": "geo",
+      "x": 160,
+      "y": 736,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-sponsor",
+      "type": "text",
+      "x": 432,
+      "y": 704,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-sponsor-box",
+      "type": "geo",
+      "x": 432,
+      "y": 736,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-questions",
+      "type": "text",
+      "x": 704,
+      "y": 704,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-questions-box",
+      "type": "geo",
+      "x": 704,
+      "y": 736,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-decisions",
+      "type": "text",
+      "x": 976,
+      "y": 704,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-decisions-box",
+      "type": "geo",
+      "x": 976,
+      "y": 736,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-parking",
+      "type": "text",
+      "x": 1248,
+      "y": 704,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-parking-box",
+      "type": "geo",
+      "x": 1248,
+      "y": 736,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773269922737
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "roomId": "canvas-dc2c2d19-3646-4967-81a6-5e743c318917",
+  "canvasId": "dc2c2d19-3646-4967-81a6-5e743c318917",
+  "canvasName": "collaborative-brainstorm-haiku-4-5-collaborative-brainstorm-haiku-4-5-mmmn6i6y",
+  "source": "viewer",
+  "shapeCount": 12,
+  "shapes": [
+    {
+      "id": "shape:cluster-1-frame",
+      "type": "geo",
+      "x": 80,
+      "y": 180,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:cluster-2-frame",
+      "type": "geo",
+      "x": 540,
+      "y": 180,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:cluster-3-frame",
+      "type": "geo",
+      "x": 1000,
+      "y": 180,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:cluster-1-label",
+      "type": "text",
+      "x": 100,
+      "y": 200,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:cluster-2-label",
+      "type": "text",
+      "x": 560,
+      "y": 200,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:cluster-3-label",
+      "type": "text",
+      "x": 1020,
+      "y": 200,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-1-a",
+      "type": "note",
+      "x": 110,
+      "y": 300,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-1-b",
+      "type": "note",
+      "x": 110,
+      "y": 332,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-2-a",
+      "type": "note",
+      "x": 570,
+      "y": 300,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-2-b",
+      "type": "note",
+      "x": 570,
+      "y": 332,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-3-a",
+      "type": "note",
+      "x": 1030,
+      "y": 300,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-3-b",
+      "type": "note",
+      "x": 1030,
+      "y": 332,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773270076501
+  }
+}

@@ -1,0 +1,153 @@
+{
+  "runId": "business-operating-plan-haiku-4-5-mmlykvc5",
+  "scenarioId": "business-operating-plan",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Business Operating Plan",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "business",
+  "startedAt": "2026-03-11T11:31:32.500Z",
+  "completedAt": "2026-03-11T11:33:15.142Z",
+  "status": "completed",
+  "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+  "canvasId": "7cb518b3-2581-4285-b98f-6412441fa3e8",
+  "canvasName": "business-operating-plan-haiku-4-5-business-operating-plan-haiku-4-5-mmlykvc5",
+  "viewerPath": "/canvas?room=canvas-7cb518b3-2581-4285-b98f-6412441fa3e8&id=7cb518b3-2581-4285-b98f-6412441fa3e8&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__haiku-4-5-doc.json",
+  "finalShapeCount": 19,
+  "actionSummary": {
+    "total": 28,
+    "byName": {
+      "create_shape": 19,
+      "align": 4,
+      "stack": 4,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 90759,
+    "initialTtfbMs": 27045,
+    "totalActionCount": 28,
+    "totalMutatingActionCount": 28,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 28,
+    "avgFirstAckMs": 32774,
+    "avgScreenshotRttMs": 49
+  },
+  "steps": [
+    {
+      "stepId": "plan-board",
+      "label": "Plan board",
+      "sessionId": "1773228702708-jie6ho",
+      "status": "completed",
+      "actionSummary": {
+        "total": 28,
+        "byName": {
+          "create_shape": 19,
+          "align": 4,
+          "stack": 4,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 90759,
+        "ttfbMs": 27045,
+        "actionCount": 28,
+        "mutatingActionCount": 28,
+        "followupCount": 0,
+        "retryCount": 28,
+        "firstAckMs": 32774,
+        "screenshotRttMs": 49,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773228702708-jie6ho",
+          "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+          "ts": 1773228702722,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773228702708-jie6ho",
+          "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+          "ts": 1773228714736,
+          "preset": "creative",
+          "request_id": "8ff4c3b9-6a4d-4094-9589-f02453e236ce",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773228702708-jie6ho",
+          "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+          "ts": 1773228715086,
+          "preset": "creative",
+          "request_id": "62210ca9-a062-4e76-bb73-a00f96d69702",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 49,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773228702708-jie6ho",
+          "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+          "ts": 1773228715175,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773228702708-jie6ho",
+          "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+          "ts": 1773228729767,
+          "preset": "creative",
+          "ttfb": 27045,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773228702708-jie6ho",
+          "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+          "ts": 1773228793464,
+          "preset": "creative",
+          "duration": 90742,
+          "chunkCount": 29,
+          "actionCount": 28,
+          "mutatingActionCount": 28,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 28,
+          "first_ack_ms": 32774,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 92,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 7,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 28 time(s)."
+    ]
+  }
+}

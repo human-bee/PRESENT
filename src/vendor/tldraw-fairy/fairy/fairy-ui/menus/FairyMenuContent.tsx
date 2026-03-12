@@ -14,6 +14,7 @@ import { FairyAgent } from '../../fairy-agent/FairyAgent'
 import { useFairyApp } from '../../fairy-app/FairyAppProvider'
 import { fairyMessages } from '../../fairy-messages'
 import { FairyConfigurationDialog } from '../configuration/FairyConfigurationDialog'
+import { useFairyCanvasModelSelection } from '@/lib/hooks/use-fairy-canvas-model-selection'
 
 export type FairyMenuSource = 'canvas' | 'sidebar' | 'chat'
 
@@ -121,6 +122,12 @@ export function FairyMenuContent({
 	const deselectFairyLabel = useMsg(fairyMessages.deselectFairy)
 	const closeChatPanelLabel = useMsg(fairyMessages.closeChatPanel)
 	const selectFairyLabel = useMsg(fairyMessages.selectFairy)
+	const {
+		options: canvasModelOptions,
+		selectedModel,
+		selectedOption,
+		setSelectedModel,
+	} = useFairyCanvasModelSelection()
 
 	const projects = useValue(
 		'fairy-projects',
@@ -289,6 +296,28 @@ export function FairyMenuContent({
 			</TldrawUiMenuGroup>
 			<TldrawUiMenuGroup id="fairy-management-menu">
 				<TldrawUiMenuSubmenu id="fairy-management-submenu" label={fairyManagementLabel}>
+					<TldrawUiMenuGroup id="fairy-canvas-model-menu">
+						<TldrawUiMenuSubmenu
+							id="fairy-canvas-model-submenu"
+							label={`Canvas model: ${selectedOption?.shortLabel ?? 'Auto'}`}
+						>
+							<TldrawUiMenuGroup id="fairy-canvas-model-options">
+								<TldrawUiMenuItem
+									id="fairy-canvas-model-auto"
+									onSelect={() => setSelectedModel(null)}
+									label={`${selectedModel === null ? '[Current] ' : ''}Auto`}
+								/>
+								{canvasModelOptions.map((option) => (
+									<TldrawUiMenuItem
+										key={option.id}
+										id={`fairy-canvas-model-${option.id}`}
+										onSelect={() => setSelectedModel(option.id)}
+										label={`${selectedModel === option.id ? '[Current] ' : ''}${option.shortLabel} - ${option.label} (${option.providerLabel})`}
+									/>
+								))}
+							</TldrawUiMenuGroup>
+						</TldrawUiMenuSubmenu>
+					</TldrawUiMenuGroup>
 					<TldrawUiMenuGroup id="fairy-management-group">
 						{!hasSelectedProjectFairy && (
 							<TldrawUiMenuItem

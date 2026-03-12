@@ -1,0 +1,151 @@
+{
+  "runId": "scratchpad-systems-haiku-4-5-mmmkxxaf",
+  "scenarioId": "scratchpad-systems",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Scratchpad Systems Sketch",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "scratchpad",
+  "startedAt": "2026-03-11T21:57:32.881Z",
+  "completedAt": "2026-03-11T21:58:42.189Z",
+  "status": "failed",
+  "roomId": "canvas-0b403b0e-b826-4c11-95d3-bdf196c78659",
+  "canvasId": "0b403b0e-b826-4c11-95d3-bdf196c78659",
+  "canvasName": "scratchpad-systems-haiku-4-5-scratchpad-systems-haiku-4-5-mmmkxxaf",
+  "viewerPath": "/canvas?room=canvas-0b403b0e-b826-4c11-95d3-bdf196c78659&id=0b403b0e-b826-4c11-95d3-bdf196c78659&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/scratchpad-systems__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/scratchpad-systems__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/scratchpad-systems__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 20,
+    "byName": {
+      "create_shape": 19,
+      "reorder": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 57397,
+    "initialTtfbMs": 11398,
+    "totalActionCount": 20,
+    "totalMutatingActionCount": 20,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 20,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "latency-sketch",
+      "label": "Latency sketch",
+      "sessionId": "1773266262991-xzrghc",
+      "status": "completed",
+      "actionSummary": {
+        "total": 20,
+        "byName": {
+          "create_shape": 19,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 57397,
+        "ttfbMs": 11398,
+        "actionCount": 20,
+        "mutatingActionCount": 20,
+        "followupCount": 0,
+        "retryCount": 20,
+        "firstAckMs": 16985,
+        "screenshotRttMs": 84,
+        "screenshotResult": null,
+        "usage": null,
+        "estimatedCostUsd": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773266262991-xzrghc",
+          "roomId": "canvas-0b403b0e-b826-4c11-95d3-bdf196c78659",
+          "ts": 1773266262994,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773266262991-xzrghc",
+          "roomId": "canvas-0b403b0e-b826-4c11-95d3-bdf196c78659",
+          "ts": 1773266263104,
+          "preset": "creative",
+          "request_id": "a52d5c3e-70e4-4649-a182-f43574629348",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 84,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773266262991-xzrghc",
+          "roomId": "canvas-0b403b0e-b826-4c11-95d3-bdf196c78659",
+          "ts": 1773266263318,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773266262991-xzrghc",
+          "roomId": "canvas-0b403b0e-b826-4c11-95d3-bdf196c78659",
+          "ts": 1773266274392,
+          "preset": "creative",
+          "ttfb": 11398,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773266262991-xzrghc",
+          "roomId": "canvas-0b403b0e-b826-4c11-95d3-bdf196c78659",
+          "ts": 1773266320387,
+          "preset": "creative",
+          "duration": 57393,
+          "chunkCount": 20,
+          "actionCount": 20,
+          "mutatingActionCount": 20,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 20,
+          "first_ack_ms": 16985,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "status is not defined"
+    ]
+  },
+  "error": "status is not defined"
+}

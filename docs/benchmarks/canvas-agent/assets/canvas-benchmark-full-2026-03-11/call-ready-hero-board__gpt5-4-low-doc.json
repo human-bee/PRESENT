@@ -1,0 +1,86 @@
+{
+  "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+  "canvasId": "3f55f027-2815-4036-aeac-7be1a2786f29",
+  "canvasName": "call-ready-hero-board-gpt5-4-low-call-ready-hero-board-gpt5-4-low-mmm0e04l",
+  "source": "viewer",
+  "shapeCount": 8,
+  "shapes": [
+    {
+      "id": "shape:review_bg",
+      "type": "geo",
+      "x": 160,
+      "y": 200,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:hero_panel",
+      "type": "geo",
+      "x": 200,
+      "y": 320,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:hero_title",
+      "type": "text",
+      "x": 224,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:column_divider",
+      "type": "geo",
+      "x": 776,
+      "y": 320,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-1",
+      "type": "note",
+      "x": 816,
+      "y": 384,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-2",
+      "type": "note",
+      "x": 816,
+      "y": 416,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-3",
+      "type": "note",
+      "x": 816,
+      "y": 448,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:hero_underline",
+      "type": "draw",
+      "x": 224,
+      "y": 440,
+      "props": {
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773231896963
+  }
+}

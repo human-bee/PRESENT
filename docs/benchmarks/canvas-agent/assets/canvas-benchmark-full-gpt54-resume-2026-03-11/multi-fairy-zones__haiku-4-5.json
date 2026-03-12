@@ -1,0 +1,59 @@
+{
+  "runId": "multi-fairy-zones-haiku-4-5-mmmlinuc",
+  "scenarioId": "multi-fairy-zones",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Multi-Fairy Zones",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "multi-fairy",
+  "startedAt": "2026-03-11T22:13:40.220Z",
+  "completedAt": "2026-03-11T22:13:40.226Z",
+  "status": "failed",
+  "roomId": "canvas-a9b0e112-f3a4-41f4-968f-7a8aa50d5ba3",
+  "canvasId": "a9b0e112-f3a4-41f4-968f-7a8aa50d5ba3",
+  "canvasName": "multi-fairy-zones-haiku-4-5-multi-fairy-zones-haiku-4-5-mmmlinuc",
+  "viewerPath": "/canvas?room=canvas-a9b0e112-f3a4-41f4-968f-7a8aa50d5ba3&id=a9b0e112-f3a4-41f4-968f-7a8aa50d5ba3&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/multi-fairy-zones__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/multi-fairy-zones__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/multi-fairy-zones__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

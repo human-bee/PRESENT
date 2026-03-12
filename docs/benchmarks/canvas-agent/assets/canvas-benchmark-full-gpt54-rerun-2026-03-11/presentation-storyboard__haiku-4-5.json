@@ -1,0 +1,137 @@
+{
+  "runId": "presentation-storyboard-haiku-4-5-mmml1bfi",
+  "scenarioId": "presentation-storyboard",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Presentation Storyboard",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "presentation",
+  "startedAt": "2026-03-11T22:00:11.047Z",
+  "completedAt": "2026-03-11T22:01:25.787Z",
+  "status": "failed",
+  "roomId": "canvas-7ed2c4b4-01d8-4c6c-aa9c-17afbaab9fd2",
+  "canvasId": "7ed2c4b4-01d8-4c6c-aa9c-17afbaab9fd2",
+  "canvasName": "presentation-storyboard-haiku-4-5-presentation-storyboard-haiku-4-5-mmml1bfi",
+  "viewerPath": "/canvas?room=canvas-7ed2c4b4-01d8-4c6c-aa9c-17afbaab9fd2&id=7ed2c4b4-01d8-4c6c-aa9c-17afbaab9fd2&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/presentation-storyboard__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/presentation-storyboard__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/presentation-storyboard__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 11,
+    "byName": {
+      "create_shape": 9,
+      "reorder": 1,
+      "distribute": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 63281,
+    "initialTtfbMs": 6676,
+    "totalActionCount": 11,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "opening-slide",
+      "label": "Opening slide",
+      "sessionId": "1773266420824-mycp8v",
+      "status": "failed",
+      "actionSummary": {
+        "total": 11,
+        "byName": {
+          "create_shape": 9,
+          "reorder": 1,
+          "distribute": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 63281,
+        "ttfbMs": 6676,
+        "usage": null,
+        "estimatedCostUsd": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773266420824-mycp8v",
+          "roomId": "canvas-7ed2c4b4-01d8-4c6c-aa9c-17afbaab9fd2",
+          "ts": 1773266420825,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773266420824-mycp8v",
+          "roomId": "canvas-7ed2c4b4-01d8-4c6c-aa9c-17afbaab9fd2",
+          "ts": 1773266420852,
+          "preset": "creative",
+          "request_id": "fb644088-cd9e-4e4b-a7da-eff94e6a3ea1",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 23,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773266420824-mycp8v",
+          "roomId": "canvas-7ed2c4b4-01d8-4c6c-aa9c-17afbaab9fd2",
+          "ts": 1773266420945,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773266420824-mycp8v",
+          "roomId": "canvas-7ed2c4b4-01d8-4c6c-aa9c-17afbaab9fd2",
+          "ts": 1773266427500,
+          "preset": "creative",
+          "ttfb": 6676,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "error",
+          "sessionId": "1773266420824-mycp8v",
+          "roomId": "canvas-7ed2c4b4-01d8-4c6c-aa9c-17afbaab9fd2",
+          "ts": 1773266468604,
+          "preset": "creative",
+          "error": "Error: LiveKit sendData failed for canvas-7ed2c4b4-01d8-4c6c-aa9c-17afbaab9fd2: fetch failed"
+        }
+      ],
+      "error": "LiveKit sendData failed for canvas-7ed2c4b4-01d8-4c6c-aa9c-17afbaab9fd2: fetch failed"
+    }
+  ],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "status is not defined"
+    ]
+  },
+  "error": "status is not defined"
+}

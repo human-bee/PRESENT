@@ -1,0 +1,281 @@
+{
+  "runId": "presentation-storyboard-haiku-4-5-mmmncyt8",
+  "scenarioId": "presentation-storyboard",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Presentation Storyboard",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "presentation",
+  "startedAt": "2026-03-11T23:05:14.026Z",
+  "completedAt": "2026-03-11T23:07:05.010Z",
+  "status": "completed",
+  "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+  "canvasId": "e0288b23-411a-4760-9f53-e42943130d84",
+  "canvasName": "presentation-storyboard-haiku-4-5-presentation-storyboard-haiku-4-5-mmmncyt8",
+  "viewerPath": "/canvas?room=canvas-e0288b23-411a-4760-9f53-e42943130d84&id=e0288b23-411a-4760-9f53-e42943130d84&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/presentation-storyboard__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/presentation-storyboard__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/presentation-storyboard__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 20,
+    "byName": {
+      "create_shape": 17,
+      "align": 2,
+      "stack": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 98321,
+    "initialTtfbMs": 8097,
+    "totalActionCount": 20,
+    "totalMutatingActionCount": 20,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 20,
+    "avgFirstAckMs": 31355,
+    "avgScreenshotRttMs": 34
+  },
+  "usage": {
+    "inputTokens": 32768,
+    "outputTokens": 2331,
+    "reasoningTokens": null,
+    "cachedInputTokens": 0,
+    "totalTokens": 35099
+  },
+  "estimatedCost": {
+    "inputUsd": 0.032768,
+    "outputUsd": 0.011655,
+    "totalUsd": 0.044423,
+    "notes": "Anthropic Claude Platform list pricing for Haiku 4.5.",
+    "sourceUrl": "https://www.anthropic.com/claude/haiku"
+  },
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "opening-slide",
+      "label": "Opening slide",
+      "sessionId": "1773270323597-3z7ngz",
+      "status": "completed",
+      "actionSummary": {
+        "total": 14,
+        "byName": {
+          "create_shape": 11,
+          "align": 2,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 40397,
+        "ttfbMs": 8097,
+        "actionCount": 14,
+        "mutatingActionCount": 14,
+        "followupCount": 0,
+        "retryCount": 14,
+        "firstAckMs": 13747,
+        "screenshotRttMs": 34,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 24523,
+          "outputTokens": 1360,
+          "reasoningTokens": null,
+          "cachedInputTokens": 0,
+          "totalTokens": 25883
+        },
+        "estimatedCostUsd": 0.031323000000000004
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773270323597-3z7ngz",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270323598,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773270323597-3z7ngz",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270323640,
+          "preset": "creative",
+          "request_id": "3cde5f37-3b45-4a71-9eea-7930be2ecab1",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 34,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773270323597-3z7ngz",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270323757,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773270323597-3z7ngz",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270331695,
+          "preset": "creative",
+          "ttfb": 8097,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773270323597-3z7ngz",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270363994,
+          "preset": "creative",
+          "duration": 40396,
+          "chunkCount": 15,
+          "actionCount": 14,
+          "mutatingActionCount": 14,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 14,
+          "first_ack_ms": 13747,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    },
+    {
+      "stepId": "continue-storyboard",
+      "label": "Continue storyboard",
+      "sessionId": "1773270365495-1mppsd",
+      "status": "completed",
+      "actionSummary": {
+        "total": 6,
+        "byName": {
+          "create_shape": 6
+        }
+      },
+      "metrics": {
+        "durationMs": 57924,
+        "ttfbMs": 43384,
+        "actionCount": 6,
+        "mutatingActionCount": 6,
+        "followupCount": 0,
+        "retryCount": 6,
+        "firstAckMs": 48963,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 8245,
+          "outputTokens": 971,
+          "reasoningTokens": null,
+          "cachedInputTokens": 0,
+          "totalTokens": 9216
+        },
+        "estimatedCostUsd": 0.0131
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773270365495-1mppsd",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270365496,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773270365495-1mppsd",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270377506,
+          "preset": "creative",
+          "request_id": "d60f4564-2eb0-4422-982b-b40231588961",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773270365495-1mppsd",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270389821,
+          "preset": "creative",
+          "request_id": "d3c5e275-2681-475f-856b-46a0360b665b",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773270365495-1mppsd",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270402134,
+          "preset": "creative",
+          "request_id": "789e38a2-239c-4e6e-870d-2f5eb1c220e7",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773270365495-1mppsd",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270402224,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773270365495-1mppsd",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270408880,
+          "preset": "creative",
+          "ttfb": 43384,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773270365495-1mppsd",
+          "roomId": "canvas-e0288b23-411a-4760-9f53-e42943130d84",
+          "ts": 1773270423419,
+          "preset": "creative",
+          "duration": 57923,
+          "chunkCount": 7,
+          "actionCount": 6,
+          "mutatingActionCount": 6,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 6,
+          "first_ack_ms": 48963,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 53,
+    "grade": "partial",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 35,
+      "preferredVerbs": 3,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Shape count below target (0/8).",
+      "Retries recorded 20 time(s)."
+    ]
+  }
+}

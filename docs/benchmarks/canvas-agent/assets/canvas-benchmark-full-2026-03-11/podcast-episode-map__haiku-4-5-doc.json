@@ -1,0 +1,176 @@
+{
+  "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+  "canvasId": "9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+  "canvasName": "podcast-episode-map-haiku-4-5-podcast-episode-map-haiku-4-5-mmlz3cht",
+  "source": "viewer",
+  "shapeCount": 18,
+  "shapes": [
+    {
+      "id": "shape:timeline-bg",
+      "type": "geo",
+      "x": 400,
+      "y": 320,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:details-frame",
+      "type": "geo",
+      "x": 400,
+      "y": 640,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlz3u2m-513",
+      "type": "note",
+      "x": 400,
+      "y": 100,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:segment-cold-open",
+      "type": "geo",
+      "x": 420,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:segment-beats",
+      "type": "geo",
+      "x": 560,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:segment-sponsor",
+      "type": "geo",
+      "x": 700,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:segment-qa",
+      "type": "geo",
+      "x": 840,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:segment-closing",
+      "type": "geo",
+      "x": 980,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-cold-open",
+      "type": "text",
+      "x": 420,
+      "y": 470,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-beats",
+      "type": "text",
+      "x": 560,
+      "y": 470,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-sponsor",
+      "type": "text",
+      "x": 700,
+      "y": 470,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-qa",
+      "type": "text",
+      "x": 840,
+      "y": 470,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-closing",
+      "type": "text",
+      "x": 980,
+      "y": 470,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:detail-cold-open",
+      "type": "note",
+      "x": 420,
+      "y": 660,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:detail-beats",
+      "type": "note",
+      "x": 452,
+      "y": 660,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:detail-sponsor",
+      "type": "note",
+      "x": 484,
+      "y": 660,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:detail-qa",
+      "type": "note",
+      "x": 516,
+      "y": 660,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:detail-closing",
+      "type": "note",
+      "x": 548,
+      "y": 660,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773229628496
+  }
+}

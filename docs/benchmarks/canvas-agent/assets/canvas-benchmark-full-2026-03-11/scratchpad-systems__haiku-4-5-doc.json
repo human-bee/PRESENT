@@ -1,0 +1,185 @@
+{
+  "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+  "canvasId": "734b6ed1-8517-4b6f-a251-b746c757bf42",
+  "canvasName": "scratchpad-systems-haiku-4-5-scratchpad-systems-haiku-4-5-mmlzdihm",
+  "source": "viewer",
+  "shapeCount": 19,
+  "shapes": [
+    {
+      "id": "shape:pipeline-title",
+      "type": "text",
+      "x": 420,
+      "y": 80,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:voice-box",
+      "type": "geo",
+      "x": 400,
+      "y": 200,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:voice-label",
+      "type": "text",
+      "x": 410,
+      "y": 230,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:queue-box",
+      "type": "geo",
+      "x": 600,
+      "y": 200,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:queue-label",
+      "type": "text",
+      "x": 610,
+      "y": 230,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:steward-box",
+      "type": "geo",
+      "x": 800,
+      "y": 200,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:steward-label",
+      "type": "text",
+      "x": 810,
+      "y": 230,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:screenshot-box",
+      "type": "geo",
+      "x": 1000,
+      "y": 200,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:screenshot-label",
+      "type": "text",
+      "x": 1010,
+      "y": 230,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:arrow-voice-queue",
+      "type": "draw",
+      "x": 540,
+      "y": 240,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-queue-steward",
+      "type": "draw",
+      "x": 740,
+      "y": 240,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-steward-screenshot",
+      "type": "draw",
+      "x": 940,
+      "y": 240,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:action-stream-box",
+      "type": "geo",
+      "x": 400,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:action-stream-label",
+      "type": "text",
+      "x": 410,
+      "y": 405,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:arrow-screenshot-stream",
+      "type": "draw",
+      "x": 1070,
+      "y": 280,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:ack-loop-box",
+      "type": "geo",
+      "x": 600,
+      "y": 520,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:ack-loop-label",
+      "type": "text",
+      "x": 610,
+      "y": 550,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:arrow-stream-ack",
+      "type": "draw",
+      "x": 600,
+      "y": 440,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:arrow-ack-voice",
+      "type": "draw",
+      "x": 480,
+      "y": 520,
+      "props": {
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773230091863
+  }
+}

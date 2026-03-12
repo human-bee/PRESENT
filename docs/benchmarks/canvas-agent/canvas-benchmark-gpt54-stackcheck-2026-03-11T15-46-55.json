@@ -1,0 +1,254 @@
+{
+  "benchmark": "canvas-agent-benchmark-suite",
+  "suiteId": "canvas-benchmark-gpt54-stackcheck-2026-03-11T15-46-55",
+  "generatedAt": "2026-03-11T22:48:22.784Z",
+  "baseUrl": "http://127.0.0.1:3000",
+  "executionMode": "livekit-viewer-direct-runner",
+  "assumptions": [
+    "Each run uses a fresh room and canvas to avoid queue and document contention.",
+    "The benchmark uses the live viewer plus direct canvas runner path for deterministic screenshot capture.",
+    "The GPT-5.4 Low comparison label uses the official OpenAI GPT-5.4 runtime with a lean preset.",
+    "Token usage and estimated cost are recorded when the provider returns usage metadata."
+  ],
+  "variants": [
+    {
+      "id": "gpt5-4-low",
+      "label": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "assumptions": [
+        "This comparison slot uses the official OpenAI GPT-5.4 runtime with a lean benchmark preset.",
+        "Low-latency behavior is approximated through the precise preset and lean followup budget."
+      ],
+      "pricing": {
+        "inputPer1MUsd": 2.5,
+        "outputPer1MUsd": 15,
+        "notes": "OpenAI GPT-5.4 text-token pricing.",
+        "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4"
+      },
+      "execution": {
+        "preset": "precise",
+        "contextProfile": "standard",
+        "configOverrides": {
+          "followups": {
+            "maxDepth": 1
+          },
+          "prompt": {
+            "maxChars": 160000
+          }
+        }
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "business-operating-plan",
+      "label": "Business Operating Plan",
+      "category": "business",
+      "description": "A structured planning board with objectives, owners, and risks.",
+      "tags": [
+        "business",
+        "planning",
+        "layout"
+      ],
+      "steps": [
+        {
+          "id": "plan-board",
+          "label": "Plan board",
+          "message": "Build a quarterly operating plan canvas for a startup launch. Use a clear title, three swimlanes for objectives, owners, and risks, and enough notes or cards that an operator could talk through it on a call."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 8,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "distribute",
+          "stack"
+        ]
+      }
+    }
+  ],
+  "runs": [
+    {
+      "runId": "business-operating-plan-gpt5-4-low-mmmmphhd",
+      "scenarioId": "business-operating-plan",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Business Operating Plan",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "business",
+      "startedAt": "2026-03-11T22:46:58.314Z",
+      "completedAt": "2026-03-11T22:48:22.680Z",
+      "status": "completed",
+      "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+      "canvasId": "22b6a8ae-107f-49be-920e-b295fefb61e1",
+      "canvasName": "business-operating-plan-gpt5-4-low-business-operating-plan-gpt5-4-low-mmmmphhd",
+      "viewerPath": "/canvas?room=canvas-22b6a8ae-107f-49be-920e-b295fefb61e1&id=22b6a8ae-107f-49be-920e-b295fefb61e1&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-gpt54-stackcheck-2026-03-11T15-46-55/business-operating-plan__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-gpt54-stackcheck-2026-03-11T15-46-55/business-operating-plan__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-gpt54-stackcheck-2026-03-11T15-46-55/business-operating-plan__gpt5-4-low-doc.json",
+      "finalShapeCount": 19,
+      "actionSummary": {
+        "total": 27,
+        "byName": {
+          "create_shape": 19,
+          "align": 4,
+          "stack": 4
+        }
+      },
+      "shapeSummary": {
+        "total": 19,
+        "byType": {
+          "rectangle": 4,
+          "text": 6,
+          "note": 9
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 66036,
+        "initialTtfbMs": 2841,
+        "totalActionCount": 27,
+        "totalMutatingActionCount": 27,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 27,
+        "avgFirstAckMs": 9802,
+        "avgScreenshotRttMs": 703
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": null,
+      "steps": [
+        {
+          "stepId": "plan-board",
+          "label": "Plan board",
+          "sessionId": "1773269234893-wpgl9w",
+          "status": "completed",
+          "actionSummary": {
+            "total": 27,
+            "byName": {
+              "create_shape": 19,
+              "align": 4,
+              "stack": 4
+            }
+          },
+          "metrics": {
+            "durationMs": 66036,
+            "ttfbMs": 2841,
+            "actionCount": 27,
+            "mutatingActionCount": 27,
+            "followupCount": 0,
+            "retryCount": 27,
+            "firstAckMs": 9802,
+            "screenshotRttMs": 703,
+            "screenshotResult": null,
+            "usage": null,
+            "estimatedCostUsd": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773269234893-wpgl9w",
+              "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+              "ts": 1773269234977,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773269234893-wpgl9w",
+              "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+              "ts": 1773269235697,
+              "preset": "creative",
+              "request_id": "184e3e84-44ac-4dd8-8a62-fc2874477e1a",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 703,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773269234893-wpgl9w",
+              "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+              "ts": 1773269235826,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773269234893-wpgl9w",
+              "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+              "ts": 1773269237818,
+              "preset": "creative",
+              "ttfb": 2841,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773269234893-wpgl9w",
+              "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+              "ts": 1773269300921,
+              "preset": "creative",
+              "duration": 65945,
+              "chunkCount": 28,
+              "actionCount": 27,
+              "mutatingActionCount": 27,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 27,
+              "first_ack_ms": 9802,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 92,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 7,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 27 time(s)."
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "totalRuns": 1,
+    "completedRuns": 1,
+    "successRatePct": 100,
+    "byVariant": [
+      {
+        "variantId": "gpt5-4-low",
+        "label": "GPT-5.4 Low",
+        "avgScore": 92,
+        "avgDurationMs": 66036,
+        "avgTtfbMs": 2841,
+        "successRatePct": 100
+      }
+    ]
+  },
+  "paths": {
+    "rootDir": "docs/benchmarks/canvas-agent",
+    "assetDir": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-gpt54-stackcheck-2026-03-11T15-46-55",
+    "latestJson": "docs/benchmarks/canvas-agent/latest.json",
+    "latestHtml": "docs/benchmarks/canvas-agent/latest.html"
+  }
+}

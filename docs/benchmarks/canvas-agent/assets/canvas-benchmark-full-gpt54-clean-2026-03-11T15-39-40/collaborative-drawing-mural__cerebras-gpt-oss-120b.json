@@ -1,0 +1,59 @@
+{
+  "runId": "collaborative-drawing-mural-cerebras-gpt-oss-120b-mmmmnndn",
+  "scenarioId": "collaborative-drawing-mural",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Collaborative Drawing Mural",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "collaborative-drawing",
+  "startedAt": "2026-03-11T22:45:32.571Z",
+  "completedAt": "2026-03-11T22:45:32.574Z",
+  "status": "failed",
+  "roomId": "canvas-35cd0a05-5523-40e2-a6a0-d51e91709b2f",
+  "canvasId": "35cd0a05-5523-40e2-a6a0-d51e91709b2f",
+  "canvasName": "collaborative-drawing-mural-cerebras-gpt-oss-120b-collaborative-drawing-mural-cerebras-gpt-oss-120b-mmmmnndn",
+  "viewerPath": "/canvas?room=canvas-35cd0a05-5523-40e2-a6a0-d51e91709b2f&id=35cd0a05-5523-40e2-a6a0-d51e91709b2f&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/collaborative-drawing-mural__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/collaborative-drawing-mural__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/collaborative-drawing-mural__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "browser.newPage: Target page, context or browser has been closed"
+    ]
+  },
+  "error": "browser.newPage: Target page, context or browser has been closed"
+}

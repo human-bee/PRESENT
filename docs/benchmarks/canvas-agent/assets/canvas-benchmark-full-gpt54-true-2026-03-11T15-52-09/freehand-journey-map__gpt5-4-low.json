@@ -1,0 +1,189 @@
+{
+  "runId": "freehand-journey-map-gpt5-4-low-mmmnxf9j",
+  "scenarioId": "freehand-journey-map",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Freehand Journey Map",
+  "variantLabel": "GPT-5.4 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "freehand",
+  "startedAt": "2026-03-11T23:21:08.594Z",
+  "completedAt": "2026-03-11T23:22:52.180Z",
+  "status": "completed",
+  "roomId": "canvas-891d91d4-de3f-40ea-926a-c242222e817f",
+  "canvasId": "891d91d4-de3f-40ea-926a-c242222e817f",
+  "canvasName": "freehand-journey-map-gpt5-4-low-freehand-journey-map-gpt5-4-low-mmmnxf9j",
+  "viewerPath": "/canvas?room=canvas-891d91d4-de3f-40ea-926a-c242222e817f&id=891d91d4-de3f-40ea-926a-c242222e817f&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-journey-map__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-journey-map__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-journey-map__gpt5-4-low-doc.json",
+  "finalShapeCount": 23,
+  "actionSummary": {
+    "total": 23,
+    "byName": {
+      "create_shape": 23
+    }
+  },
+  "shapeSummary": {
+    "total": 23,
+    "byType": {
+      "draw": 11,
+      "text": 12
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 92774,
+    "initialTtfbMs": 27242,
+    "totalActionCount": 23,
+    "totalMutatingActionCount": 23,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 23,
+    "avgFirstAckMs": 37305,
+    "avgScreenshotRttMs": 25
+  },
+  "usage": {
+    "inputTokens": 18856,
+    "outputTokens": 3571,
+    "reasoningTokens": 0,
+    "cachedInputTokens": 0,
+    "totalTokens": 22427
+  },
+  "estimatedCost": {
+    "inputUsd": 0.04714,
+    "outputUsd": 0.053565,
+    "totalUsd": 0.100705,
+    "notes": "OpenAI GPT-5.4 text-token pricing.",
+    "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4"
+  },
+  "provider": "openai",
+  "model": "openai:gpt-5.4",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "journey-map",
+      "label": "Journey map",
+      "sessionId": "1773271277724-k819ds",
+      "status": "completed",
+      "actionSummary": {
+        "total": 23,
+        "byName": {
+          "create_shape": 23
+        }
+      },
+      "metrics": {
+        "durationMs": 92774,
+        "ttfbMs": 27242,
+        "actionCount": 23,
+        "mutatingActionCount": 23,
+        "followupCount": 0,
+        "retryCount": 23,
+        "firstAckMs": 37305,
+        "screenshotRttMs": 25,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 18856,
+          "outputTokens": 3571,
+          "reasoningTokens": 0,
+          "cachedInputTokens": 0,
+          "totalTokens": 22427
+        },
+        "estimatedCostUsd": 0.100705
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773271277724-k819ds",
+          "roomId": "canvas-891d91d4-de3f-40ea-926a-c242222e817f",
+          "ts": 1773271277726,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773271277724-k819ds",
+          "roomId": "canvas-891d91d4-de3f-40ea-926a-c242222e817f",
+          "ts": 1773271289749,
+          "preset": "creative",
+          "request_id": "86cd85e7-85ef-436c-8923-2460b560c478",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773271277724-k819ds",
+          "roomId": "canvas-891d91d4-de3f-40ea-926a-c242222e817f",
+          "ts": 1773271302064,
+          "preset": "creative",
+          "request_id": "be504de6-c3ab-4d1d-8689-1751822a1f89",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773271277724-k819ds",
+          "roomId": "canvas-891d91d4-de3f-40ea-926a-c242222e817f",
+          "ts": 1773271302390,
+          "preset": "creative",
+          "request_id": "5d69742d-29e2-4942-ab54-19e3bf8106e7",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 25,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773271277724-k819ds",
+          "roomId": "canvas-891d91d4-de3f-40ea-926a-c242222e817f",
+          "ts": 1773271302472,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773271277724-k819ds",
+          "roomId": "canvas-891d91d4-de3f-40ea-926a-c242222e817f",
+          "ts": 1773271304968,
+          "preset": "creative",
+          "ttfb": 27242,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773271277724-k819ds",
+          "roomId": "canvas-891d91d4-de3f-40ea-926a-c242222e817f",
+          "ts": 1773271370498,
+          "preset": "creative",
+          "duration": 92772,
+          "chunkCount": 26,
+          "actionCount": 23,
+          "mutatingActionCount": 23,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 23,
+          "first_ack_ms": 37305,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 85,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 0,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 23 time(s)."
+    ]
+  }
+}

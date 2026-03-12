@@ -1,0 +1,59 @@
+{
+  "runId": "collaborative-drawing-mural-haiku-4-5-mmmmnn06",
+  "scenarioId": "collaborative-drawing-mural",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Collaborative Drawing Mural",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "collaborative-drawing",
+  "startedAt": "2026-03-11T22:45:32.031Z",
+  "completedAt": "2026-03-11T22:45:32.035Z",
+  "status": "failed",
+  "roomId": "canvas-052e9fde-33ed-43cf-aebe-d743b3414811",
+  "canvasId": "052e9fde-33ed-43cf-aebe-d743b3414811",
+  "canvasName": "collaborative-drawing-mural-haiku-4-5-collaborative-drawing-mural-haiku-4-5-mmmmnn06",
+  "viewerPath": "/canvas?room=canvas-052e9fde-33ed-43cf-aebe-d743b3414811&id=052e9fde-33ed-43cf-aebe-d743b3414811&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/collaborative-drawing-mural__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/collaborative-drawing-mural__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/collaborative-drawing-mural__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "browser.newPage: Target page, context or browser has been closed"
+    ]
+  },
+  "error": "browser.newPage: Target page, context or browser has been closed"
+}

@@ -102,10 +102,17 @@ const deriveProviderFromModel = (model: unknown): ModelKeyProvider | null => {
   if (typeof model !== 'string') return null;
   const normalized = model.trim().toLowerCase();
   if (!normalized) return null;
+  if (
+    normalized.startsWith('cerebras:') ||
+    normalized.startsWith('gpt-oss') ||
+    normalized.startsWith('llama') ||
+    normalized.startsWith('qwen')
+  ) {
+    return 'cerebras';
+  }
   if (normalized.startsWith('openai:') || normalized.startsWith('gpt')) return 'openai';
   if (normalized.startsWith('anthropic:') || normalized.startsWith('claude')) return 'anthropic';
   if (normalized.startsWith('google:') || normalized.startsWith('gemini')) return 'google';
-  if (normalized.startsWith('cerebras:') || normalized.startsWith('llama') || normalized.startsWith('qwen') || normalized.startsWith('gpt-oss')) return 'cerebras';
   if (normalized.startsWith('together:') || normalized.includes('black-forest-labs/') || normalized.includes('flux')) return 'together';
   if (normalized.startsWith('fal:') || normalized.startsWith('fal-ai/')) return 'fal';
   if (normalized.startsWith('xai:') || normalized.startsWith('grok')) return 'xai';

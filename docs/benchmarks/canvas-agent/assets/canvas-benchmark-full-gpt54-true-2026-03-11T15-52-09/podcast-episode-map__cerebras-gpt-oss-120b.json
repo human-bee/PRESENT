@@ -1,0 +1,192 @@
+{
+  "runId": "podcast-episode-map-cerebras-gpt-oss-120b-mmmn4la4",
+  "scenarioId": "podcast-episode-map",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Podcast Episode Map",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "podcast",
+  "startedAt": "2026-03-11T22:58:43.043Z",
+  "completedAt": "2026-03-11T23:00:12.019Z",
+  "status": "completed",
+  "roomId": "canvas-a1321939-39ac-4919-b37d-6d72b56ab11c",
+  "canvasId": "a1321939-39ac-4919-b37d-6d72b56ab11c",
+  "canvasName": "podcast-episode-map-cerebras-gpt-oss-120b-podcast-episode-map-cerebras-gpt-oss-120b-mmmn4la4",
+  "viewerPath": "/canvas?room=canvas-a1321939-39ac-4919-b37d-6d72b56ab11c&id=a1321939-39ac-4919-b37d-6d72b56ab11c&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/podcast-episode-map__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/podcast-episode-map__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/podcast-episode-map__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 2,
+  "actionSummary": {
+    "total": 14,
+    "byName": {
+      "create_shape": 7,
+      "update_shape": 5,
+      "align": 1,
+      "stack": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 2,
+    "byType": {
+      "rectangle": 1,
+      "note": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 40711,
+    "initialTtfbMs": 38278,
+    "totalActionCount": 14,
+    "totalMutatingActionCount": 14,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 1,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": {
+    "inputTokens": 6651,
+    "outputTokens": 2281,
+    "reasoningTokens": null,
+    "cachedInputTokens": null,
+    "totalTokens": 8932
+  },
+  "estimatedCost": {
+    "inputUsd": 0.00166275,
+    "outputUsd": 0.0015738899999999999,
+    "totalUsd": 0.00323664,
+    "notes": "Cerebras Cloud gpt-oss-120b list pricing.",
+    "sourceUrl": "https://www.cerebras.ai/blog/cerebras-launches-openai-s-gpt-oss-120b-at-a-blistering-3-000-tokens-sec"
+  },
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "episode-outline",
+      "label": "Episode outline",
+      "sessionId": "1773269969338-zqdxv8",
+      "status": "completed",
+      "actionSummary": {
+        "total": 14,
+        "byName": {
+          "create_shape": 7,
+          "update_shape": 5,
+          "align": 1,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 40711,
+        "ttfbMs": 38278,
+        "actionCount": 14,
+        "mutatingActionCount": 14,
+        "followupCount": 0,
+        "retryCount": 1,
+        "firstAckMs": null,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 6651,
+          "outputTokens": 2281,
+          "reasoningTokens": null,
+          "cachedInputTokens": null,
+          "totalTokens": 8932
+        },
+        "estimatedCostUsd": 0.00323664
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773269969338-zqdxv8",
+          "roomId": "canvas-a1321939-39ac-4919-b37d-6d72b56ab11c",
+          "ts": 1773269969342,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773269969338-zqdxv8",
+          "roomId": "canvas-a1321939-39ac-4919-b37d-6d72b56ab11c",
+          "ts": 1773269981447,
+          "preset": "creative",
+          "request_id": "46d4cc2b-0f9a-4ab2-af22-c5bc003b77c9",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773269969338-zqdxv8",
+          "roomId": "canvas-a1321939-39ac-4919-b37d-6d72b56ab11c",
+          "ts": 1773269993765,
+          "preset": "creative",
+          "request_id": "a33262f4-a0c0-4bdc-8209-4ad287811582",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773269969338-zqdxv8",
+          "roomId": "canvas-a1321939-39ac-4919-b37d-6d72b56ab11c",
+          "ts": 1773270006084,
+          "preset": "creative",
+          "request_id": "c896612b-eb38-4942-b35d-cf1652aea1c7",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773269969338-zqdxv8",
+          "roomId": "canvas-a1321939-39ac-4919-b37d-6d72b56ab11c",
+          "ts": 1773270006240,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773269969338-zqdxv8",
+          "roomId": "canvas-a1321939-39ac-4919-b37d-6d72b56ab11c",
+          "ts": 1773270007620,
+          "preset": "creative",
+          "ttfb": 38278,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773269969338-zqdxv8",
+          "roomId": "canvas-a1321939-39ac-4919-b37d-6d72b56ab11c",
+          "ts": 1773270010048,
+          "preset": "creative",
+          "duration": 40706,
+          "chunkCount": 1,
+          "actionCount": 14,
+          "mutatingActionCount": 14,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 1,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 74,
+    "grade": "strong",
+    "rubric": {
+      "shapes": 10,
+      "requiredVerbs": 35,
+      "preferredVerbs": 10,
+      "screenshot": 10,
+      "stability": 9
+    },
+    "notes": [
+      "Shape count below target (2/7).",
+      "Retries recorded 1 time(s)."
+    ]
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "runId": "business-operating-plan-gpt5-4-low-mmmmphhd",
+  "scenarioId": "business-operating-plan",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Business Operating Plan",
+  "variantLabel": "GPT-5.4 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "business",
+  "startedAt": "2026-03-11T22:46:58.314Z",
+  "completedAt": "2026-03-11T22:48:22.680Z",
+  "status": "completed",
+  "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+  "canvasId": "22b6a8ae-107f-49be-920e-b295fefb61e1",
+  "canvasName": "business-operating-plan-gpt5-4-low-business-operating-plan-gpt5-4-low-mmmmphhd",
+  "viewerPath": "/canvas?room=canvas-22b6a8ae-107f-49be-920e-b295fefb61e1&id=22b6a8ae-107f-49be-920e-b295fefb61e1&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-gpt54-stackcheck-2026-03-11T15-46-55/business-operating-plan__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-gpt54-stackcheck-2026-03-11T15-46-55/business-operating-plan__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-gpt54-stackcheck-2026-03-11T15-46-55/business-operating-plan__gpt5-4-low-doc.json",
+  "finalShapeCount": 19,
+  "actionSummary": {
+    "total": 27,
+    "byName": {
+      "create_shape": 19,
+      "align": 4,
+      "stack": 4
+    }
+  },
+  "shapeSummary": {
+    "total": 19,
+    "byType": {
+      "rectangle": 4,
+      "text": 6,
+      "note": 9
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 66036,
+    "initialTtfbMs": 2841,
+    "totalActionCount": 27,
+    "totalMutatingActionCount": 27,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 27,
+    "avgFirstAckMs": 9802,
+    "avgScreenshotRttMs": 703
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "openai",
+  "model": "openai:gpt-5.4",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "plan-board",
+      "label": "Plan board",
+      "sessionId": "1773269234893-wpgl9w",
+      "status": "completed",
+      "actionSummary": {
+        "total": 27,
+        "byName": {
+          "create_shape": 19,
+          "align": 4,
+          "stack": 4
+        }
+      },
+      "metrics": {
+        "durationMs": 66036,
+        "ttfbMs": 2841,
+        "actionCount": 27,
+        "mutatingActionCount": 27,
+        "followupCount": 0,
+        "retryCount": 27,
+        "firstAckMs": 9802,
+        "screenshotRttMs": 703,
+        "screenshotResult": null,
+        "usage": null,
+        "estimatedCostUsd": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773269234893-wpgl9w",
+          "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+          "ts": 1773269234977,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773269234893-wpgl9w",
+          "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+          "ts": 1773269235697,
+          "preset": "creative",
+          "request_id": "184e3e84-44ac-4dd8-8a62-fc2874477e1a",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 703,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773269234893-wpgl9w",
+          "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+          "ts": 1773269235826,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773269234893-wpgl9w",
+          "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+          "ts": 1773269237818,
+          "preset": "creative",
+          "ttfb": 2841,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773269234893-wpgl9w",
+          "roomId": "canvas-22b6a8ae-107f-49be-920e-b295fefb61e1",
+          "ts": 1773269300921,
+          "preset": "creative",
+          "duration": 65945,
+          "chunkCount": 28,
+          "actionCount": 27,
+          "mutatingActionCount": 27,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 27,
+          "first_ack_ms": 9802,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 92,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 7,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 27 time(s)."
+    ]
+  }
+}

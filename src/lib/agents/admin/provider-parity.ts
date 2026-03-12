@@ -157,18 +157,18 @@ export const inferProviderFromModel = (value: unknown): AgentProvider | null => 
   const normalized = normalizeString(value)?.toLowerCase();
   if (!normalized) return null;
   const withoutPrefix = normalized.replace(/^(openai|anthropic|google|cerebras|together)[:/]/, '');
+  if (
+    withoutPrefix.startsWith('gpt-oss') ||
+    withoutPrefix.startsWith('llama') ||
+    withoutPrefix.startsWith('qwen')
+  ) {
+    return 'cerebras';
+  }
   if (withoutPrefix.startsWith('gpt') || withoutPrefix.startsWith('o1') || withoutPrefix.startsWith('o3') || withoutPrefix.startsWith('o4')) {
     return 'openai';
   }
   if (withoutPrefix.startsWith('claude')) return 'anthropic';
   if (withoutPrefix.startsWith('gemini')) return 'google';
-  if (
-    withoutPrefix.startsWith('llama') ||
-    withoutPrefix.startsWith('qwen') ||
-    withoutPrefix.startsWith('gpt-oss')
-  ) {
-    return 'cerebras';
-  }
   if (withoutPrefix.includes('flux') || withoutPrefix.includes('black-forest-labs/')) return 'together';
   if (withoutPrefix.startsWith('debug/') || withoutPrefix === 'fake') return 'debug';
   return normalizeProviderInternal(normalized);

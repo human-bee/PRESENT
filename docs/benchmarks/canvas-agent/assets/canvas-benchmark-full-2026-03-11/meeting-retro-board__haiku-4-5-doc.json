@@ -1,0 +1,149 @@
+{
+  "roomId": "canvas-3769cabd-8eb3-40f2-a78a-5b0d6e819ccd",
+  "canvasId": "3769cabd-8eb3-40f2-a78a-5b0d6e819ccd",
+  "canvasName": "meeting-retro-board-haiku-4-5-meeting-retro-board-haiku-4-5-mmm07ksv",
+  "source": "viewer",
+  "shapeCount": 15,
+  "shapes": [
+    {
+      "id": "shape:retro-bg",
+      "type": "geo",
+      "x": 360,
+      "y": 240,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm085gs-619",
+      "type": "note",
+      "x": 380,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-header",
+      "type": "text",
+      "x": 440,
+      "y": 420,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-note-1",
+      "type": "note",
+      "x": 420,
+      "y": 500,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-note-2",
+      "type": "note",
+      "x": 420,
+      "y": 532,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-note-3",
+      "type": "note",
+      "x": 420,
+      "y": 564,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-header",
+      "type": "text",
+      "x": 700,
+      "y": 420,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-note-1",
+      "type": "note",
+      "x": 680,
+      "y": 500,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-note-2",
+      "type": "note",
+      "x": 680,
+      "y": 532,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-note-3",
+      "type": "note",
+      "x": 680,
+      "y": 564,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:experiments-header",
+      "type": "text",
+      "x": 960,
+      "y": 420,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:exp-note-1",
+      "type": "note",
+      "x": 940,
+      "y": 500,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:exp-note-2",
+      "type": "note",
+      "x": 940,
+      "y": 532,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:exp-note-3",
+      "type": "note",
+      "x": 940,
+      "y": 564,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:exp-note-4",
+      "type": "note",
+      "x": 940,
+      "y": 596,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773231508369
+  }
+}

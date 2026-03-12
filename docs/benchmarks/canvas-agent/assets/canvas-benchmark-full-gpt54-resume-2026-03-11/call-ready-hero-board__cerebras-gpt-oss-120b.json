@@ -1,0 +1,59 @@
+{
+  "runId": "call-ready-hero-board-cerebras-gpt-oss-120b-mmmlip8m",
+  "scenarioId": "call-ready-hero-board",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Call-Ready Hero Board",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "realtime",
+  "startedAt": "2026-03-11T22:13:42.011Z",
+  "completedAt": "2026-03-11T22:13:42.012Z",
+  "status": "failed",
+  "roomId": "canvas-3812c23a-0556-4802-b37c-2b40bfcccb8c",
+  "canvasId": "3812c23a-0556-4802-b37c-2b40bfcccb8c",
+  "canvasName": "call-ready-hero-board-cerebras-gpt-oss-120b-call-ready-hero-board-cerebras-gpt-oss-120b-mmmlip8m",
+  "viewerPath": "/canvas?room=canvas-3812c23a-0556-4802-b37c-2b40bfcccb8c&id=3812c23a-0556-4802-b37c-2b40bfcccb8c&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/call-ready-hero-board__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/call-ready-hero-board__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/call-ready-hero-board__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

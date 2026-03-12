@@ -1,0 +1,66 @@
+{
+  "runId": "remote-board-game-night-haiku-4-5-mmmll9yl",
+  "scenarioId": "remote-board-game-night",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Remote Board Game Night",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "play",
+  "startedAt": "2026-03-11T22:15:42.193Z",
+  "completedAt": "2026-03-11T22:15:42.194Z",
+  "status": "failed",
+  "roomId": "canvas-32b1eb71-ff14-4abf-9dc7-4614c2b80eac",
+  "canvasId": "32b1eb71-ff14-4abf-9dc7-4614c2b80eac",
+  "canvasName": "remote-board-game-night-haiku-4-5-remote-board-game-night-haiku-4-5-mmmll9yl",
+  "viewerPath": "/canvas?room=canvas-32b1eb71-ff14-4abf-9dc7-4614c2b80eac&id=32b1eb71-ff14-4abf-9dc7-4614c2b80eac&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": {
+    "summary": "Visual analysis failed.",
+    "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__haiku-4-5.png'",
+    "strengths": [],
+    "issues": [
+      "Analysis pass failed for this artifact."
+    ]
+  },
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

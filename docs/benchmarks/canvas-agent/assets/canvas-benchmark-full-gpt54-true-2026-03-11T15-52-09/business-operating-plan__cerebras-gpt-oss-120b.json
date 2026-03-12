@@ -1,0 +1,120 @@
+{
+  "runId": "business-operating-plan-cerebras-gpt-oss-120b-mmmn01dh",
+  "scenarioId": "business-operating-plan",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Business Operating Plan",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "business",
+  "startedAt": "2026-03-11T22:55:10.609Z",
+  "completedAt": "2026-03-11T22:55:26.182Z",
+  "status": "failed",
+  "roomId": "canvas-a0013092-1c6d-4fb1-8ce9-ce8a41974150",
+  "canvasId": "a0013092-1c6d-4fb1-8ce9-ce8a41974150",
+  "canvasName": "business-operating-plan-cerebras-gpt-oss-120b-business-operating-plan-cerebras-gpt-oss-120b-mmmn01dh",
+  "viewerPath": "/canvas?room=canvas-a0013092-1c6d-4fb1-8ce9-ce8a41974150&id=a0013092-1c6d-4fb1-8ce9-ce8a41974150&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/business-operating-plan__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/business-operating-plan__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/business-operating-plan__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 2260,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "plan-board",
+      "label": "Plan board",
+      "sessionId": "1773269722212-k9um8l",
+      "status": "failed",
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "metrics": {
+        "durationMs": 2260,
+        "ttfbMs": null,
+        "usage": null,
+        "estimatedCostUsd": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773269722212-k9um8l",
+          "roomId": "canvas-a0013092-1c6d-4fb1-8ce9-ce8a41974150",
+          "ts": 1773269722214,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773269722212-k9um8l",
+          "roomId": "canvas-a0013092-1c6d-4fb1-8ce9-ce8a41974150",
+          "ts": 1773269722314,
+          "preset": "creative",
+          "request_id": "2c814c69-4030-41fe-84a8-99958bb166fb",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 77,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773269722212-k9um8l",
+          "roomId": "canvas-a0013092-1c6d-4fb1-8ce9-ce8a41974150",
+          "ts": 1773269722420,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "error",
+          "sessionId": "1773269722212-k9um8l",
+          "roomId": "canvas-a0013092-1c6d-4fb1-8ce9-ce8a41974150",
+          "ts": 1773269724433,
+          "preset": "creative",
+          "error": "Error: Cerebras canvas response was not valid JSON for gpt-oss-120b"
+        }
+      ],
+      "error": "Cerebras canvas response was not valid JSON for gpt-oss-120b"
+    }
+  ],
+  "score": {
+    "overall": 10,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 10,
+      "stability": 0
+    },
+    "notes": [
+      "Shape count below target (0/8).",
+      "Missing required verbs: create_shape."
+    ]
+  },
+  "error": "Cerebras canvas response was not valid JSON for gpt-oss-120b"
+}

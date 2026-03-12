@@ -1,0 +1,163 @@
+{
+  "runId": "collaborative-brainstorm-gpt5-4-low-mmlzb2tw",
+  "scenarioId": "collaborative-brainstorm",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Collaborative Brainstorm",
+  "variantLabel": "GPT-5 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "brainstorm",
+  "startedAt": "2026-03-11T11:51:54.946Z",
+  "completedAt": "2026-03-11T11:53:31.417Z",
+  "status": "completed",
+  "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+  "canvasId": "ef811143-885c-4f28-8f46-c7cecc629b1a",
+  "canvasName": "collaborative-brainstorm-gpt5-4-low-collaborative-brainstorm-gpt5-4-low-mmlzb2tw",
+  "viewerPath": "/canvas?room=canvas-ef811143-885c-4f28-8f46-c7cecc629b1a&id=ef811143-885c-4f28-8f46-c7cecc629b1a&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__gpt5-4-low-doc.json",
+  "finalShapeCount": 8,
+  "actionSummary": {
+    "total": 11,
+    "byName": {
+      "create_shape": 8,
+      "align": 1,
+      "stack": 1,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 85034,
+    "initialTtfbMs": 59354,
+    "totalActionCount": 11,
+    "totalMutatingActionCount": 11,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 11,
+    "avgFirstAckMs": 64934,
+    "avgScreenshotRttMs": 25
+  },
+  "steps": [
+    {
+      "stepId": "theme-clusters",
+      "label": "Theme clusters",
+      "sessionId": "1773229924730-zangvc",
+      "status": "completed",
+      "actionSummary": {
+        "total": 11,
+        "byName": {
+          "create_shape": 8,
+          "align": 1,
+          "stack": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 85034,
+        "ttfbMs": 59354,
+        "actionCount": 11,
+        "mutatingActionCount": 11,
+        "followupCount": 0,
+        "retryCount": 11,
+        "firstAckMs": 64934,
+        "screenshotRttMs": 25,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773229924730-zangvc",
+          "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+          "ts": 1773229924731,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773229924730-zangvc",
+          "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+          "ts": 1773229924761,
+          "preset": "creative",
+          "request_id": "ed2e18a1-7804-4e80-8c6a-341c323d9d76",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 25,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773229924730-zangvc",
+          "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+          "ts": 1773229924854,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773229924730-zangvc",
+          "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+          "ts": 1773229984085,
+          "preset": "creative",
+          "ttfb": 59354,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773229924730-zangvc",
+          "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+          "ts": 1773230009764,
+          "preset": "creative",
+          "duration": 85033,
+          "chunkCount": 11,
+          "actionCount": 11,
+          "mutatingActionCount": 11,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 11,
+          "first_ack_ms": 64934,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 86,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 31,
+      "requiredVerbs": 35,
+      "preferredVerbs": 5,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Shape count below target (8/9).",
+      "Retries recorded 11 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 8,
+    "byType": {
+      "box": 4,
+      "note": 4
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows three groups each containing pink sticky notes with text, with some overlap in the left group and a sync health panel visible.",
+    "scoreRationale": "Good use of shapes and grouping, but some overlap and minor UI clutter likely reduced the score.",
+    "strengths": [
+      "Clear grouping of related notes",
+      "Use of different container shapes for organization"
+    ],
+    "issues": [
+      "Overlap of sticky notes in the left group",
+      "Presence of diagnostic panel cluttering workspace"
+    ]
+  }
+}

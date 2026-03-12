@@ -1,0 +1,164 @@
+{
+  "runId": "meeting-retro-board-gpt5-4-low-mmm098k5",
+  "scenarioId": "meeting-retro-board",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Meeting Retro Board",
+  "variantLabel": "GPT-5 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "collaboration",
+  "startedAt": "2026-03-11T12:18:28.663Z",
+  "completedAt": "2026-03-11T12:21:16.315Z",
+  "status": "completed",
+  "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+  "canvasId": "30a9c7a0-c866-429c-9618-bd536a5cba64",
+  "canvasName": "meeting-retro-board-gpt5-4-low-meeting-retro-board-gpt5-4-low-mmm098k5",
+  "viewerPath": "/canvas?room=canvas-30a9c7a0-c866-429c-9618-bd536a5cba64&id=30a9c7a0-c866-429c-9618-bd536a5cba64&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__gpt5-4-low-doc.json",
+  "finalShapeCount": 23,
+  "actionSummary": {
+    "total": 32,
+    "byName": {
+      "create_shape": 23,
+      "align": 4,
+      "distribute": 1,
+      "stack": 3,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 155986,
+    "initialTtfbMs": 83342,
+    "totalActionCount": 32,
+    "totalMutatingActionCount": 32,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 32,
+    "avgFirstAckMs": 88925,
+    "avgScreenshotRttMs": 31
+  },
+  "steps": [
+    {
+      "stepId": "retro-columns",
+      "label": "Retro columns",
+      "sessionId": "1773231518671-zs2s0e",
+      "status": "completed",
+      "actionSummary": {
+        "total": 32,
+        "byName": {
+          "create_shape": 23,
+          "align": 4,
+          "distribute": 1,
+          "stack": 3,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 155986,
+        "ttfbMs": 83342,
+        "actionCount": 32,
+        "mutatingActionCount": 32,
+        "followupCount": 0,
+        "retryCount": 32,
+        "firstAckMs": 88925,
+        "screenshotRttMs": 31,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773231518671-zs2s0e",
+          "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+          "ts": 1773231518672,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773231518671-zs2s0e",
+          "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+          "ts": 1773231518707,
+          "preset": "creative",
+          "request_id": "85f8f694-a6ce-475c-ac91-37ab49e8c453",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 31,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773231518671-zs2s0e",
+          "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+          "ts": 1773231518805,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773231518671-zs2s0e",
+          "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+          "ts": 1773231602014,
+          "preset": "creative",
+          "ttfb": 83342,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773231518671-zs2s0e",
+          "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+          "ts": 1773231674657,
+          "preset": "creative",
+          "duration": 155985,
+          "chunkCount": 32,
+          "actionCount": 32,
+          "mutatingActionCount": 32,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 32,
+          "first_ack_ms": 88925,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 95,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 10,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 32 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 23,
+    "byType": {
+      "box": 4,
+      "note": 19
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows a well-organized retro board with three columns, each having 3 sticky notes stacked neatly and labeled with relevant text.",
+    "scoreRationale": "High score due to correct shape count, clear use of required verbs, and good layout stability with minor issues in screenshot clarity.",
+    "strengths": [
+      "Good alignment and stacking of sticky notes",
+      "Clear labeling of retro points"
+    ],
+    "issues": [
+      "Screenshot shows degraded realtime sync health panel overlapping content",
+      "Some sticky notes have overlapping text making it harder to read"
+    ]
+  }
+}

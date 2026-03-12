@@ -1,0 +1,547 @@
+{
+  "benchmark": "canvas-agent-benchmark-suite",
+  "suiteId": "canvas-benchmark-smoke-2026-03-11b",
+  "generatedAt": "2026-03-11T11:35:49.214Z",
+  "baseUrl": "http://127.0.0.1:3000",
+  "executionMode": "livekit-viewer-direct-runner",
+  "assumptions": [
+    "Each run uses a fresh room and canvas to avoid queue and document contention.",
+    "The benchmark uses the live viewer plus direct canvas runner path for deterministic screenshot capture.",
+    "The GPT-5 Low comparison label maps to the OpenAI GPT-5 canvas path with a lean preset."
+  ],
+  "variants": [
+    {
+      "id": "haiku-4-5",
+      "label": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "execution": {
+        "preset": "creative",
+        "contextProfile": "standard",
+        "configOverrides": {
+          "followups": {
+            "maxDepth": 2
+          }
+        }
+      }
+    },
+    {
+      "id": "gpt5-4-low",
+      "label": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "provider": "openai",
+      "model": "openai:gpt-5",
+      "assumptions": [
+        "Runtime maps the requested label to the OpenAI GPT-5 canvas path.",
+        "Low-latency behavior is approximated through the precise preset and lean followup budget."
+      ],
+      "execution": {
+        "preset": "precise",
+        "contextProfile": "standard",
+        "configOverrides": {
+          "followups": {
+            "maxDepth": 1
+          },
+          "prompt": {
+            "maxChars": 160000
+          }
+        }
+      }
+    },
+    {
+      "id": "cerebras-gpt-oss-120b",
+      "label": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "execution": {
+        "preset": "precise",
+        "contextProfile": "standard",
+        "configOverrides": {
+          "followups": {
+            "maxDepth": 1
+          },
+          "prompt": {
+            "maxChars": 160000
+          }
+        }
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "business-operating-plan",
+      "label": "Business Operating Plan",
+      "category": "business",
+      "description": "A structured planning board with objectives, owners, and risks.",
+      "tags": [
+        "business",
+        "planning",
+        "layout"
+      ],
+      "steps": [
+        {
+          "id": "plan-board",
+          "label": "Plan board",
+          "message": "Build a quarterly operating plan canvas for a startup launch. Use a clear title, three swimlanes for objectives, owners, and risks, and enough notes or cards that an operator could talk through it on a call."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 8,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "distribute",
+          "stack"
+        ]
+      }
+    }
+  ],
+  "runs": [
+    {
+      "runId": "business-operating-plan-haiku-4-5-mmlykvc5",
+      "scenarioId": "business-operating-plan",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Business Operating Plan",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "business",
+      "startedAt": "2026-03-11T11:31:32.500Z",
+      "completedAt": "2026-03-11T11:33:15.142Z",
+      "status": "completed",
+      "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+      "canvasId": "7cb518b3-2581-4285-b98f-6412441fa3e8",
+      "canvasName": "business-operating-plan-haiku-4-5-business-operating-plan-haiku-4-5-mmlykvc5",
+      "viewerPath": "/canvas?room=canvas-7cb518b3-2581-4285-b98f-6412441fa3e8&id=7cb518b3-2581-4285-b98f-6412441fa3e8&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__haiku-4-5-doc.json",
+      "finalShapeCount": 19,
+      "actionSummary": {
+        "total": 28,
+        "byName": {
+          "create_shape": 19,
+          "align": 4,
+          "stack": 4,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 90759,
+        "initialTtfbMs": 27045,
+        "totalActionCount": 28,
+        "totalMutatingActionCount": 28,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 28,
+        "avgFirstAckMs": 32774,
+        "avgScreenshotRttMs": 49
+      },
+      "steps": [
+        {
+          "stepId": "plan-board",
+          "label": "Plan board",
+          "sessionId": "1773228702708-jie6ho",
+          "status": "completed",
+          "actionSummary": {
+            "total": 28,
+            "byName": {
+              "create_shape": 19,
+              "align": 4,
+              "stack": 4,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 90759,
+            "ttfbMs": 27045,
+            "actionCount": 28,
+            "mutatingActionCount": 28,
+            "followupCount": 0,
+            "retryCount": 28,
+            "firstAckMs": 32774,
+            "screenshotRttMs": 49,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773228702708-jie6ho",
+              "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+              "ts": 1773228702722,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773228702708-jie6ho",
+              "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+              "ts": 1773228714736,
+              "preset": "creative",
+              "request_id": "8ff4c3b9-6a4d-4094-9589-f02453e236ce",
+              "timeout_ms": 12000,
+              "result": "timeout"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773228702708-jie6ho",
+              "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+              "ts": 1773228715086,
+              "preset": "creative",
+              "request_id": "62210ca9-a062-4e76-bb73-a00f96d69702",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 49,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773228702708-jie6ho",
+              "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+              "ts": 1773228715175,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773228702708-jie6ho",
+              "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+              "ts": 1773228729767,
+              "preset": "creative",
+              "ttfb": 27045,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773228702708-jie6ho",
+              "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+              "ts": 1773228793464,
+              "preset": "creative",
+              "duration": 90742,
+              "chunkCount": 29,
+              "actionCount": 28,
+              "mutatingActionCount": 28,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 28,
+              "first_ack_ms": 32774,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 92,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 7,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 28 time(s)."
+        ]
+      }
+    },
+    {
+      "runId": "business-operating-plan-gpt5-4-low-mmlyn30w",
+      "scenarioId": "business-operating-plan",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Business Operating Plan",
+      "variantLabel": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "business",
+      "startedAt": "2026-03-11T11:33:15.719Z",
+      "completedAt": "2026-03-11T11:35:34.761Z",
+      "status": "completed",
+      "roomId": "canvas-e25d226e-581d-4deb-9a6d-341ee877fdc7",
+      "canvasId": "e25d226e-581d-4deb-9a6d-341ee877fdc7",
+      "canvasName": "business-operating-plan-gpt5-4-low-business-operating-plan-gpt5-4-low-mmlyn30w",
+      "viewerPath": "/canvas?room=canvas-e25d226e-581d-4deb-9a6d-341ee877fdc7&id=e25d226e-581d-4deb-9a6d-341ee877fdc7&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__gpt5-4-low-doc.json",
+      "finalShapeCount": 19,
+      "actionSummary": {
+        "total": 26,
+        "byName": {
+          "create_shape": 19,
+          "align": 3,
+          "stack": 3,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 127946,
+        "initialTtfbMs": 68739,
+        "totalActionCount": 26,
+        "totalMutatingActionCount": 26,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 26,
+        "avgFirstAckMs": 74318,
+        "avgScreenshotRttMs": 25
+      },
+      "steps": [
+        {
+          "stepId": "plan-board",
+          "label": "Plan board",
+          "sessionId": "1773228805151-w9yv3z",
+          "status": "completed",
+          "actionSummary": {
+            "total": 26,
+            "byName": {
+              "create_shape": 19,
+              "align": 3,
+              "stack": 3,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 127946,
+            "ttfbMs": 68739,
+            "actionCount": 26,
+            "mutatingActionCount": 26,
+            "followupCount": 0,
+            "retryCount": 26,
+            "firstAckMs": 74318,
+            "screenshotRttMs": 25,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773228805151-w9yv3z",
+              "roomId": "canvas-e25d226e-581d-4deb-9a6d-341ee877fdc7",
+              "ts": 1773228805152,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773228805151-w9yv3z",
+              "roomId": "canvas-e25d226e-581d-4deb-9a6d-341ee877fdc7",
+              "ts": 1773228805182,
+              "preset": "creative",
+              "request_id": "73fece79-66d6-492b-9ad5-3dcc72356d19",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 25,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773228805151-w9yv3z",
+              "roomId": "canvas-e25d226e-581d-4deb-9a6d-341ee877fdc7",
+              "ts": 1773228805322,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773228805151-w9yv3z",
+              "roomId": "canvas-e25d226e-581d-4deb-9a6d-341ee877fdc7",
+              "ts": 1773228873891,
+              "preset": "creative",
+              "ttfb": 68739,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773228805151-w9yv3z",
+              "roomId": "canvas-e25d226e-581d-4deb-9a6d-341ee877fdc7",
+              "ts": 1773228933097,
+              "preset": "creative",
+              "duration": 127945,
+              "chunkCount": 26,
+              "actionCount": 26,
+              "mutatingActionCount": 26,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 26,
+              "first_ack_ms": 74318,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 92,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 7,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 26 time(s)."
+        ]
+      }
+    },
+    {
+      "runId": "business-operating-plan-cerebras-gpt-oss-120b-mmlyq2r1",
+      "scenarioId": "business-operating-plan",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Business Operating Plan",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "business",
+      "startedAt": "2026-03-11T11:35:35.164Z",
+      "completedAt": "2026-03-11T11:35:49.170Z",
+      "status": "failed",
+      "roomId": "canvas-780578dd-7ac4-465f-8e85-f012007a7816",
+      "canvasId": "780578dd-7ac4-465f-8e85-f012007a7816",
+      "canvasName": "business-operating-plan-cerebras-gpt-oss-120b-business-operating-plan-cerebras-gpt-oss-120b-mmlyq2r1",
+      "viewerPath": "/canvas?room=canvas-780578dd-7ac4-465f-8e85-f012007a7816&id=780578dd-7ac4-465f-8e85-f012007a7816&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b/business-operating-plan__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "metrics": {
+        "totalDurationMs": 2375,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "steps": [
+        {
+          "stepId": "plan-board",
+          "label": "Plan board",
+          "sessionId": "1773228945224-yev6ni",
+          "status": "failed",
+          "actionSummary": {
+            "total": 0,
+            "byName": {}
+          },
+          "metrics": {
+            "durationMs": 2375,
+            "ttfbMs": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773228945224-yev6ni",
+              "roomId": "canvas-780578dd-7ac4-465f-8e85-f012007a7816",
+              "ts": 1773228945225,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773228945224-yev6ni",
+              "roomId": "canvas-780578dd-7ac4-465f-8e85-f012007a7816",
+              "ts": 1773228945256,
+              "preset": "creative",
+              "request_id": "82ceee83-4cad-4f8a-9f18-d2becdfbe250",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 25,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773228945224-yev6ni",
+              "roomId": "canvas-780578dd-7ac4-465f-8e85-f012007a7816",
+              "ts": 1773228945359,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "error",
+              "sessionId": "1773228945224-yev6ni",
+              "roomId": "canvas-780578dd-7ac4-465f-8e85-f012007a7816",
+              "ts": 1773228947594,
+              "preset": "creative",
+              "error": "Error: Cerebras canvas response was not valid JSON for gpt-oss-120b"
+            }
+          ],
+          "error": "Cerebras canvas response was not valid JSON for gpt-oss-120b"
+        }
+      ],
+      "score": {
+        "overall": 10,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 10,
+          "stability": 0
+        },
+        "notes": [
+          "Shape count below target (0/8).",
+          "Missing required verbs: create_shape."
+        ]
+      },
+      "error": "Cerebras canvas response was not valid JSON for gpt-oss-120b"
+    }
+  ],
+  "summary": {
+    "totalRuns": 3,
+    "completedRuns": 2,
+    "successRatePct": 67,
+    "byVariant": [
+      {
+        "variantId": "haiku-4-5",
+        "label": "Claude Haiku 4.5",
+        "avgScore": 92,
+        "avgDurationMs": 90759,
+        "avgTtfbMs": 27045,
+        "successRatePct": 100
+      },
+      {
+        "variantId": "gpt5-4-low",
+        "label": "GPT-5 Low",
+        "avgScore": 92,
+        "avgDurationMs": 127946,
+        "avgTtfbMs": 68739,
+        "successRatePct": 100
+      },
+      {
+        "variantId": "cerebras-gpt-oss-120b",
+        "label": "Cerebras GPT OSS 120B",
+        "avgScore": 0,
+        "avgDurationMs": 0,
+        "avgTtfbMs": null,
+        "successRatePct": 0
+      }
+    ]
+  },
+  "paths": {
+    "rootDir": "docs/benchmarks/canvas-agent",
+    "assetDir": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-smoke-2026-03-11b",
+    "latestJson": "docs/benchmarks/canvas-agent/latest.json",
+    "latestHtml": "docs/benchmarks/canvas-agent/latest.html"
+  }
+}

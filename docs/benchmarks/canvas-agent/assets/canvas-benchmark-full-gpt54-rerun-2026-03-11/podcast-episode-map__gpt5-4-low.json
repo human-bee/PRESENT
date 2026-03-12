@@ -1,0 +1,172 @@
+{
+  "runId": "podcast-episode-map-gpt5-4-low-mmmkriql",
+  "scenarioId": "podcast-episode-map",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Podcast Episode Map",
+  "variantLabel": "GPT-5.4 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "podcast",
+  "startedAt": "2026-03-11T21:52:34.055Z",
+  "completedAt": "2026-03-11T21:54:20.626Z",
+  "status": "failed",
+  "roomId": "canvas-570a7329-c26f-4758-a5d0-983aa3fac3d9",
+  "canvasId": "570a7329-c26f-4758-a5d0-983aa3fac3d9",
+  "canvasName": "podcast-episode-map-gpt5-4-low-podcast-episode-map-gpt5-4-low-mmmkriql",
+  "viewerPath": "/canvas?room=canvas-570a7329-c26f-4758-a5d0-983aa3fac3d9&id=570a7329-c26f-4758-a5d0-983aa3fac3d9&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/podcast-episode-map__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/podcast-episode-map__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-rerun-2026-03-11/podcast-episode-map__gpt5-4-low-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 24,
+    "byName": {
+      "create_shape": 20,
+      "align": 2,
+      "stack": 1,
+      "distribute": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 93839,
+    "initialTtfbMs": 38366,
+    "totalActionCount": 24,
+    "totalMutatingActionCount": 24,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 24,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "openai",
+  "model": "openai:gpt-5.4",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "episode-outline",
+      "label": "Episode outline",
+      "sessionId": "1773265965082-vkdogi",
+      "status": "completed",
+      "actionSummary": {
+        "total": 24,
+        "byName": {
+          "create_shape": 20,
+          "align": 2,
+          "stack": 1,
+          "distribute": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 93839,
+        "ttfbMs": 38366,
+        "actionCount": 24,
+        "mutatingActionCount": 24,
+        "followupCount": 0,
+        "retryCount": 24,
+        "firstAckMs": 44696,
+        "screenshotResult": null,
+        "usage": null,
+        "estimatedCostUsd": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773265965082-vkdogi",
+          "roomId": "canvas-570a7329-c26f-4758-a5d0-983aa3fac3d9",
+          "ts": 1773265965083,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773265965082-vkdogi",
+          "roomId": "canvas-570a7329-c26f-4758-a5d0-983aa3fac3d9",
+          "ts": 1773265977126,
+          "preset": "creative",
+          "request_id": "07a13feb-7b87-4efd-92e5-bd05ef6a92d6",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773265965082-vkdogi",
+          "roomId": "canvas-570a7329-c26f-4758-a5d0-983aa3fac3d9",
+          "ts": 1773265989437,
+          "preset": "creative",
+          "request_id": "b84b2653-311e-440f-9ef1-ab9d369d431f",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773265965082-vkdogi",
+          "roomId": "canvas-570a7329-c26f-4758-a5d0-983aa3fac3d9",
+          "ts": 1773266001740,
+          "preset": "creative",
+          "request_id": "6a1fbb87-c948-47be-9aed-77995f6272e9",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773265965082-vkdogi",
+          "roomId": "canvas-570a7329-c26f-4758-a5d0-983aa3fac3d9",
+          "ts": 1773266001840,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773265965082-vkdogi",
+          "roomId": "canvas-570a7329-c26f-4758-a5d0-983aa3fac3d9",
+          "ts": 1773266003449,
+          "preset": "creative",
+          "ttfb": 38366,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773265965082-vkdogi",
+          "roomId": "canvas-570a7329-c26f-4758-a5d0-983aa3fac3d9",
+          "ts": 1773266058921,
+          "preset": "creative",
+          "duration": 93838,
+          "chunkCount": 25,
+          "actionCount": 24,
+          "mutatingActionCount": 24,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 24,
+          "first_ack_ms": 44696,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "status is not defined"
+    ]
+  },
+  "error": "status is not defined"
+}

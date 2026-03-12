@@ -1,0 +1,3081 @@
+{
+  "benchmark": "canvas-agent-benchmark-suite",
+  "suiteId": "canvas-benchmark-full-gpt54-fixed-2026-03-11",
+  "generatedAt": "2026-03-11T22:15:46.904Z",
+  "baseUrl": "http://127.0.0.1:3000",
+  "executionMode": "livekit-viewer-direct-runner",
+  "assumptions": [
+    "Each run uses a fresh room and canvas to avoid queue and document contention.",
+    "The benchmark uses the live viewer plus direct canvas runner path for deterministic screenshot capture.",
+    "The GPT-5.4 Low comparison label uses the official OpenAI GPT-5.4 runtime with a lean preset.",
+    "Token usage and estimated cost are recorded when the provider returns usage metadata."
+  ],
+  "variants": [
+    {
+      "id": "haiku-4-5",
+      "label": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "pricing": {
+        "inputPer1MUsd": 1,
+        "outputPer1MUsd": 5,
+        "notes": "Anthropic Claude Platform list pricing for Haiku 4.5.",
+        "sourceUrl": "https://www.anthropic.com/claude/haiku"
+      },
+      "execution": {
+        "preset": "creative",
+        "contextProfile": "standard",
+        "configOverrides": {
+          "followups": {
+            "maxDepth": 2
+          }
+        }
+      }
+    },
+    {
+      "id": "gpt5-4-low",
+      "label": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "assumptions": [
+        "This comparison slot uses the official OpenAI GPT-5.4 runtime with a lean benchmark preset.",
+        "Low-latency behavior is approximated through the precise preset and lean followup budget."
+      ],
+      "pricing": {
+        "inputPer1MUsd": 2.5,
+        "outputPer1MUsd": 15,
+        "notes": "OpenAI GPT-5.4 text-token pricing.",
+        "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4"
+      },
+      "execution": {
+        "preset": "precise",
+        "contextProfile": "standard",
+        "configOverrides": {
+          "followups": {
+            "maxDepth": 1
+          },
+          "prompt": {
+            "maxChars": 160000
+          }
+        }
+      }
+    },
+    {
+      "id": "cerebras-gpt-oss-120b",
+      "label": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "pricing": {
+        "inputPer1MUsd": 0.25,
+        "outputPer1MUsd": 0.69,
+        "notes": "Cerebras Cloud gpt-oss-120b list pricing.",
+        "sourceUrl": "https://www.cerebras.ai/blog/cerebras-launches-openai-s-gpt-oss-120b-at-a-blistering-3-000-tokens-sec"
+      },
+      "execution": {
+        "preset": "precise",
+        "contextProfile": "standard",
+        "configOverrides": {
+          "followups": {
+            "maxDepth": 1
+          },
+          "prompt": {
+            "maxChars": 160000
+          }
+        }
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "business-operating-plan",
+      "label": "Business Operating Plan",
+      "category": "business",
+      "description": "A structured planning board with objectives, owners, and risks.",
+      "tags": [
+        "business",
+        "planning",
+        "layout"
+      ],
+      "steps": [
+        {
+          "id": "plan-board",
+          "label": "Plan board",
+          "message": "Build a quarterly operating plan canvas for a startup launch. Use a clear title, three swimlanes for objectives, owners, and risks, and enough notes or cards that an operator could talk through it on a call."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 8,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "distribute",
+          "stack"
+        ]
+      }
+    },
+    {
+      "id": "podcast-episode-map",
+      "label": "Podcast Episode Map",
+      "category": "podcast",
+      "description": "An episode board with segment sequencing and sponsor placement.",
+      "tags": [
+        "podcast",
+        "storytelling",
+        "sequence"
+      ],
+      "steps": [
+        {
+          "id": "episode-outline",
+          "label": "Episode outline",
+          "message": "Design a podcast episode planning board for a design-and-technology show. Map the cold open, segment beats, sponsor slot, listener questions, and closing. Make it readable for collaborators in a live canvas review."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 7,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "stack",
+          "align"
+        ]
+      }
+    },
+    {
+      "id": "collaborative-brainstorm",
+      "label": "Collaborative Brainstorm",
+      "category": "brainstorm",
+      "description": "A cluster-based ideation board with grouped themes.",
+      "tags": [
+        "brainstorm",
+        "collaboration",
+        "sticky-notes"
+      ],
+      "steps": [
+        {
+          "id": "theme-clusters",
+          "label": "Theme clusters",
+          "message": "Create a collaborative brainstorm board for new realtime-canvas features. Show three thematic clusters, leave room for new notes, and label the clusters with short, memorable names."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 9,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "group"
+        ]
+      }
+    },
+    {
+      "id": "scratchpad-systems",
+      "label": "Scratchpad Systems Sketch",
+      "category": "scratchpad",
+      "description": "An informal but legible systems sketch with arrows and annotations.",
+      "tags": [
+        "scratchpad",
+        "systems",
+        "diagram"
+      ],
+      "steps": [
+        {
+          "id": "latency-sketch",
+          "label": "Latency sketch",
+          "message": "On a blank board, sketch the low-latency canvas pipeline as a rough scratchpad: voice input, queue, steward, screenshot, action stream, and ack loop. Keep it legible but informal, like something a staff engineer would draw live."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 6,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "reorder",
+          "align"
+        ]
+      }
+    },
+    {
+      "id": "presentation-storyboard",
+      "label": "Presentation Storyboard",
+      "category": "presentation",
+      "description": "A visually strong presentation board that continues over two turns.",
+      "tags": [
+        "presentation",
+        "storyboard",
+        "continuation"
+      ],
+      "steps": [
+        {
+          "id": "opening-slide",
+          "label": "Opening slide",
+          "message": "Draft a presentation storyboard for a product kickoff. Create a strong opening panel, two supporting panels, and concise visual hierarchy for a live walkthrough."
+        },
+        {
+          "id": "continue-storyboard",
+          "label": "Continue storyboard",
+          "message": "Continue the existing storyboard without recreating the opening panel. Add a proof or evidence area and a final next-steps panel that fits the composition."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 8,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "update_shape",
+          "align",
+          "distribute"
+        ]
+      }
+    },
+    {
+      "id": "remote-board-game-night",
+      "label": "Remote Board Game Night",
+      "category": "play",
+      "description": "A playful board for turn order, score, and shared game state.",
+      "tags": [
+        "play",
+        "game-night",
+        "scoreboard"
+      ],
+      "steps": [
+        {
+          "id": "game-state",
+          "label": "Game state board",
+          "message": "Design a remote board game night canvas with a title, turn order area, score track, shared resource pool, and a playful mascot or flourish. It should feel useful, not childish."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 8,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "stack",
+          "reorder"
+        ]
+      }
+    },
+    {
+      "id": "collaborative-drawing-mural",
+      "label": "Collaborative Drawing Mural",
+      "category": "collaborative-drawing",
+      "description": "A freer canvas that pressures the pen and spatial-composition path.",
+      "tags": [
+        "drawing",
+        "pen",
+        "mural"
+      ],
+      "steps": [
+        {
+          "id": "draw-mural",
+          "label": "Draw mural",
+          "message": "Use the canvas like a collaborative drawing wall. Create a lively mural with at least some freehand energy, a central focal area, and supporting marks around it. Keep it tasteful and presentation-ready."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 5,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "draw",
+          "reorder"
+        ]
+      }
+    },
+    {
+      "id": "freehand-sketchnote-recap",
+      "label": "Freehand Sketchnote Recap",
+      "category": "freehand",
+      "description": "A live sketchnote board with handwriting energy, arrows, and loose grouping.",
+      "tags": [
+        "drawing",
+        "freehand",
+        "sketchnote"
+      ],
+      "steps": [
+        {
+          "id": "sketchnote-recap",
+          "label": "Sketchnote recap",
+          "message": "Create a freehand sketchnote recap of a product strategy meeting. Use pen energy, arrows, boxed callouts, and short handwritten-feeling labels. It should look intentional, not sloppy."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 8,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "draw",
+          "reorder",
+          "align"
+        ]
+      }
+    },
+    {
+      "id": "freehand-mascot-poster",
+      "label": "Freehand Mascot Poster",
+      "category": "freehand",
+      "description": "A poster-like scene that pressures composition and expressive pen strokes.",
+      "tags": [
+        "drawing",
+        "poster",
+        "freehand"
+      ],
+      "steps": [
+        {
+          "id": "mascot-poster",
+          "label": "Mascot poster",
+          "message": "Use the canvas to create a freehand poster for a remote team offsite, with a mascot, headline, supporting notes, and hand-drawn accents. Favor expressive pen marks over rigid box layout."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 6,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "draw",
+          "reorder"
+        ]
+      }
+    },
+    {
+      "id": "freehand-journey-map",
+      "label": "Freehand Journey Map",
+      "category": "freehand",
+      "description": "A journey map that mixes looser drawing with structured storytelling.",
+      "tags": [
+        "drawing",
+        "journey-map",
+        "freehand"
+      ],
+      "steps": [
+        {
+          "id": "journey-map",
+          "label": "Journey map",
+          "message": "Draw a freehand customer journey map for onboarding into a realtime collaboration product. Use a left-to-right flow, handwritten-feeling labels, emotional highs and lows, and lightweight visual flourishes."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 7,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "draw",
+          "align",
+          "distribute"
+        ]
+      }
+    },
+    {
+      "id": "multi-fairy-zones",
+      "label": "Multi-Fairy Zones",
+      "category": "multi-fairy",
+      "description": "A board divided into clearly separated work zones to mimic swarm collaboration.",
+      "tags": [
+        "multi-fairy",
+        "zones",
+        "parallelism"
+      ],
+      "steps": [
+        {
+          "id": "zone-layout",
+          "label": "Zone layout",
+          "message": "Lay out a canvas as if three fairies were collaborating in parallel. Create three clearly separated zones with distinct visual purposes and leave a shared center for synthesis."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 7,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "distribute"
+        ]
+      }
+    },
+    {
+      "id": "meeting-retro-board",
+      "label": "Meeting Retro Board",
+      "category": "collaboration",
+      "description": "A classic retro board with structure and enough density to test organization.",
+      "tags": [
+        "retro",
+        "collaboration",
+        "sticky-notes"
+      ],
+      "steps": [
+        {
+          "id": "retro-columns",
+          "label": "Retro columns",
+          "message": "Create a team retrospective board with three columns for wins, friction, and experiments. Populate it with enough notes to feel real and keep the spacing disciplined."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 9,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "stack",
+          "align",
+          "distribute"
+        ]
+      }
+    },
+    {
+      "id": "call-ready-hero-board",
+      "label": "Call-Ready Hero Board",
+      "category": "realtime",
+      "description": "A high-signal board optimized for being reviewed live on a video call.",
+      "tags": [
+        "realtime",
+        "call",
+        "hero-layout"
+      ],
+      "steps": [
+        {
+          "id": "hero-board",
+          "label": "Hero board",
+          "message": "Create a call-ready hero board for a live video review. Make one dominant idea area, supporting notes, and enough whitespace that a presenter could quickly orient teammates in realtime."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 6,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "reorder"
+        ]
+      }
+    }
+  ],
+  "runs": [
+    {
+      "runId": "business-operating-plan-haiku-4-5-mmmll7fq",
+      "scenarioId": "business-operating-plan",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Business Operating Plan",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "business",
+      "startedAt": "2026-03-11T22:15:39.134Z",
+      "completedAt": "2026-03-11T22:15:39.139Z",
+      "status": "failed",
+      "roomId": "canvas-18e0290d-0da6-4c52-ba3c-c81c4fc0cc35",
+      "canvasId": "18e0290d-0da6-4c52-ba3c-c81c4fc0cc35",
+      "canvasName": "business-operating-plan-haiku-4-5-business-operating-plan-haiku-4-5-mmmll7fq",
+      "viewerPath": "/canvas?room=canvas-18e0290d-0da6-4c52-ba3c-c81c4fc0cc35&id=18e0290d-0da6-4c52-ba3c-c81c4fc0cc35&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "business-operating-plan-gpt5-4-low-mmmll7r7",
+      "scenarioId": "business-operating-plan",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Business Operating Plan",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "business",
+      "startedAt": "2026-03-11T22:15:39.323Z",
+      "completedAt": "2026-03-11T22:15:39.325Z",
+      "status": "failed",
+      "roomId": "canvas-1ec4ace3-c9ec-41cf-847a-64e3b66f5b6d",
+      "canvasId": "1ec4ace3-c9ec-41cf-847a-64e3b66f5b6d",
+      "canvasName": "business-operating-plan-gpt5-4-low-business-operating-plan-gpt5-4-low-mmmll7r7",
+      "viewerPath": "/canvas?room=canvas-1ec4ace3-c9ec-41cf-847a-64e3b66f5b6d&id=1ec4ace3-c9ec-41cf-847a-64e3b66f5b6d&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "business-operating-plan-cerebras-gpt-oss-120b-mmmll7wd",
+      "scenarioId": "business-operating-plan",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Business Operating Plan",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "business",
+      "startedAt": "2026-03-11T22:15:39.562Z",
+      "completedAt": "2026-03-11T22:15:39.564Z",
+      "status": "failed",
+      "roomId": "canvas-3fbe4342-69c6-4506-b6eb-f9e1c5c313ab",
+      "canvasId": "3fbe4342-69c6-4506-b6eb-f9e1c5c313ab",
+      "canvasName": "business-operating-plan-cerebras-gpt-oss-120b-business-operating-plan-cerebras-gpt-oss-120b-mmmll7wd",
+      "viewerPath": "/canvas?room=canvas-3fbe4342-69c6-4506-b6eb-f9e1c5c313ab&id=3fbe4342-69c6-4506-b6eb-f9e1c5c313ab&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/business-operating-plan__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "podcast-episode-map-haiku-4-5-mmmll830",
+      "scenarioId": "podcast-episode-map",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Podcast Episode Map",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "podcast",
+      "startedAt": "2026-03-11T22:15:39.768Z",
+      "completedAt": "2026-03-11T22:15:39.769Z",
+      "status": "failed",
+      "roomId": "canvas-e15da218-ed4b-4249-ab01-c656274e751c",
+      "canvasId": "e15da218-ed4b-4249-ab01-c656274e751c",
+      "canvasName": "podcast-episode-map-haiku-4-5-podcast-episode-map-haiku-4-5-mmmll830",
+      "viewerPath": "/canvas?room=canvas-e15da218-ed4b-4249-ab01-c656274e751c&id=e15da218-ed4b-4249-ab01-c656274e751c&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "podcast-episode-map-gpt5-4-low-mmmll88q",
+      "scenarioId": "podcast-episode-map",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Podcast Episode Map",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "podcast",
+      "startedAt": "2026-03-11T22:15:39.971Z",
+      "completedAt": "2026-03-11T22:15:39.972Z",
+      "status": "failed",
+      "roomId": "canvas-fd23b73e-c9cd-4ef3-9a58-7db1191f3062",
+      "canvasId": "fd23b73e-c9cd-4ef3-9a58-7db1191f3062",
+      "canvasName": "podcast-episode-map-gpt5-4-low-podcast-episode-map-gpt5-4-low-mmmll88q",
+      "viewerPath": "/canvas?room=canvas-fd23b73e-c9cd-4ef3-9a58-7db1191f3062&id=fd23b73e-c9cd-4ef3-9a58-7db1191f3062&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "podcast-episode-map-cerebras-gpt-oss-120b-mmmll8ed",
+      "scenarioId": "podcast-episode-map",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Podcast Episode Map",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "podcast",
+      "startedAt": "2026-03-11T22:15:40.207Z",
+      "completedAt": "2026-03-11T22:15:40.209Z",
+      "status": "failed",
+      "roomId": "canvas-dddef873-8273-48ca-9760-631b31e39f41",
+      "canvasId": "dddef873-8273-48ca-9760-631b31e39f41",
+      "canvasName": "podcast-episode-map-cerebras-gpt-oss-120b-podcast-episode-map-cerebras-gpt-oss-120b-mmmll8ed",
+      "viewerPath": "/canvas?room=canvas-dddef873-8273-48ca-9760-631b31e39f41&id=dddef873-8273-48ca-9760-631b31e39f41&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "collaborative-brainstorm-haiku-4-5-mmmll8kx",
+      "scenarioId": "collaborative-brainstorm",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Collaborative Brainstorm",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "brainstorm",
+      "startedAt": "2026-03-11T22:15:40.404Z",
+      "completedAt": "2026-03-11T22:15:40.406Z",
+      "status": "failed",
+      "roomId": "canvas-e09b8d29-9266-4cda-ae66-5ccd24fcc0a9",
+      "canvasId": "e09b8d29-9266-4cda-ae66-5ccd24fcc0a9",
+      "canvasName": "collaborative-brainstorm-haiku-4-5-collaborative-brainstorm-haiku-4-5-mmmll8kx",
+      "viewerPath": "/canvas?room=canvas-e09b8d29-9266-4cda-ae66-5ccd24fcc0a9&id=e09b8d29-9266-4cda-ae66-5ccd24fcc0a9&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "collaborative-brainstorm-gpt5-4-low-mmmll8qf",
+      "scenarioId": "collaborative-brainstorm",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Collaborative Brainstorm",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "brainstorm",
+      "startedAt": "2026-03-11T22:15:40.625Z",
+      "completedAt": "2026-03-11T22:15:40.627Z",
+      "status": "failed",
+      "roomId": "canvas-7d19b9ff-b251-4c59-bea9-0ac10b585489",
+      "canvasId": "7d19b9ff-b251-4c59-bea9-0ac10b585489",
+      "canvasName": "collaborative-brainstorm-gpt5-4-low-collaborative-brainstorm-gpt5-4-low-mmmll8qf",
+      "viewerPath": "/canvas?room=canvas-7d19b9ff-b251-4c59-bea9-0ac10b585489&id=7d19b9ff-b251-4c59-bea9-0ac10b585489&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "collaborative-brainstorm-cerebras-gpt-oss-120b-mmmll8wj",
+      "scenarioId": "collaborative-brainstorm",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Collaborative Brainstorm",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "brainstorm",
+      "startedAt": "2026-03-11T22:15:40.816Z",
+      "completedAt": "2026-03-11T22:15:40.818Z",
+      "status": "failed",
+      "roomId": "canvas-2c45e522-fb4d-4814-a543-6d9f20b23bf8",
+      "canvasId": "2c45e522-fb4d-4814-a543-6d9f20b23bf8",
+      "canvasName": "collaborative-brainstorm-cerebras-gpt-oss-120b-collaborative-brainstorm-cerebras-gpt-oss-120b-mmmll8wj",
+      "viewerPath": "/canvas?room=canvas-2c45e522-fb4d-4814-a543-6d9f20b23bf8&id=2c45e522-fb4d-4814-a543-6d9f20b23bf8&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-brainstorm__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "scratchpad-systems-haiku-4-5-mmmll91u",
+      "scenarioId": "scratchpad-systems",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Scratchpad Systems Sketch",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "scratchpad",
+      "startedAt": "2026-03-11T22:15:41.014Z",
+      "completedAt": "2026-03-11T22:15:41.016Z",
+      "status": "failed",
+      "roomId": "canvas-0e7fb4c1-e5cd-4a49-b6c6-724604597cb0",
+      "canvasId": "0e7fb4c1-e5cd-4a49-b6c6-724604597cb0",
+      "canvasName": "scratchpad-systems-haiku-4-5-scratchpad-systems-haiku-4-5-mmmll91u",
+      "viewerPath": "/canvas?room=canvas-0e7fb4c1-e5cd-4a49-b6c6-724604597cb0&id=0e7fb4c1-e5cd-4a49-b6c6-724604597cb0&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "scratchpad-systems-gpt5-4-low-mmmll97c",
+      "scenarioId": "scratchpad-systems",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Scratchpad Systems Sketch",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "scratchpad",
+      "startedAt": "2026-03-11T22:15:41.225Z",
+      "completedAt": "2026-03-11T22:15:41.226Z",
+      "status": "failed",
+      "roomId": "canvas-a365b7fd-d40c-4409-aa7c-46a9b337bdb0",
+      "canvasId": "a365b7fd-d40c-4409-aa7c-46a9b337bdb0",
+      "canvasName": "scratchpad-systems-gpt5-4-low-scratchpad-systems-gpt5-4-low-mmmll97c",
+      "viewerPath": "/canvas?room=canvas-a365b7fd-d40c-4409-aa7c-46a9b337bdb0&id=a365b7fd-d40c-4409-aa7c-46a9b337bdb0&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "scratchpad-systems-cerebras-gpt-oss-120b-mmmll9d6",
+      "scenarioId": "scratchpad-systems",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Scratchpad Systems Sketch",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "scratchpad",
+      "startedAt": "2026-03-11T22:15:41.427Z",
+      "completedAt": "2026-03-11T22:15:41.428Z",
+      "status": "failed",
+      "roomId": "canvas-474c9d2b-bb55-4dfe-abc7-6c8c6c5ebb35",
+      "canvasId": "474c9d2b-bb55-4dfe-abc7-6c8c6c5ebb35",
+      "canvasName": "scratchpad-systems-cerebras-gpt-oss-120b-scratchpad-systems-cerebras-gpt-oss-120b-mmmll9d6",
+      "viewerPath": "/canvas?room=canvas-474c9d2b-bb55-4dfe-abc7-6c8c6c5ebb35&id=474c9d2b-bb55-4dfe-abc7-6c8c6c5ebb35&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "presentation-storyboard-haiku-4-5-mmmll9it",
+      "scenarioId": "presentation-storyboard",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Presentation Storyboard",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "presentation",
+      "startedAt": "2026-03-11T22:15:41.623Z",
+      "completedAt": "2026-03-11T22:15:41.624Z",
+      "status": "failed",
+      "roomId": "canvas-27e880c8-6d5a-487f-a0d6-63bc42c36b20",
+      "canvasId": "27e880c8-6d5a-487f-a0d6-63bc42c36b20",
+      "canvasName": "presentation-storyboard-haiku-4-5-presentation-storyboard-haiku-4-5-mmmll9it",
+      "viewerPath": "/canvas?room=canvas-27e880c8-6d5a-487f-a0d6-63bc42c36b20&id=27e880c8-6d5a-487f-a0d6-63bc42c36b20&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "presentation-storyboard-gpt5-4-low-mmmll9o9",
+      "scenarioId": "presentation-storyboard",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Presentation Storyboard",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "presentation",
+      "startedAt": "2026-03-11T22:15:41.814Z",
+      "completedAt": "2026-03-11T22:15:41.816Z",
+      "status": "failed",
+      "roomId": "canvas-f77d7204-6c22-4679-92fb-b6785a1c63f3",
+      "canvasId": "f77d7204-6c22-4679-92fb-b6785a1c63f3",
+      "canvasName": "presentation-storyboard-gpt5-4-low-presentation-storyboard-gpt5-4-low-mmmll9o9",
+      "viewerPath": "/canvas?room=canvas-f77d7204-6c22-4679-92fb-b6785a1c63f3&id=f77d7204-6c22-4679-92fb-b6785a1c63f3&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "presentation-storyboard-cerebras-gpt-oss-120b-mmmll9tk",
+      "scenarioId": "presentation-storyboard",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Presentation Storyboard",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "presentation",
+      "startedAt": "2026-03-11T22:15:41.996Z",
+      "completedAt": "2026-03-11T22:15:41.997Z",
+      "status": "failed",
+      "roomId": "canvas-6f4f99e1-9cef-46c7-9bbb-7c37dfcbf38b",
+      "canvasId": "6f4f99e1-9cef-46c7-9bbb-7c37dfcbf38b",
+      "canvasName": "presentation-storyboard-cerebras-gpt-oss-120b-presentation-storyboard-cerebras-gpt-oss-120b-mmmll9tk",
+      "viewerPath": "/canvas?room=canvas-6f4f99e1-9cef-46c7-9bbb-7c37dfcbf38b&id=6f4f99e1-9cef-46c7-9bbb-7c37dfcbf38b&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "remote-board-game-night-haiku-4-5-mmmll9yl",
+      "scenarioId": "remote-board-game-night",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Remote Board Game Night",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "play",
+      "startedAt": "2026-03-11T22:15:42.193Z",
+      "completedAt": "2026-03-11T22:15:42.194Z",
+      "status": "failed",
+      "roomId": "canvas-32b1eb71-ff14-4abf-9dc7-4614c2b80eac",
+      "canvasId": "32b1eb71-ff14-4abf-9dc7-4614c2b80eac",
+      "canvasName": "remote-board-game-night-haiku-4-5-remote-board-game-night-haiku-4-5-mmmll9yl",
+      "viewerPath": "/canvas?room=canvas-32b1eb71-ff14-4abf-9dc7-4614c2b80eac&id=32b1eb71-ff14-4abf-9dc7-4614c2b80eac&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "remote-board-game-night-gpt5-4-low-mmmlla42",
+      "scenarioId": "remote-board-game-night",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Remote Board Game Night",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "play",
+      "startedAt": "2026-03-11T22:15:42.369Z",
+      "completedAt": "2026-03-11T22:15:42.371Z",
+      "status": "failed",
+      "roomId": "canvas-9db1d139-4d2f-4a9d-94d0-af56e48bd1af",
+      "canvasId": "9db1d139-4d2f-4a9d-94d0-af56e48bd1af",
+      "canvasName": "remote-board-game-night-gpt5-4-low-remote-board-game-night-gpt5-4-low-mmmlla42",
+      "viewerPath": "/canvas?room=canvas-9db1d139-4d2f-4a9d-94d0-af56e48bd1af&id=9db1d139-4d2f-4a9d-94d0-af56e48bd1af&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "remote-board-game-night-cerebras-gpt-oss-120b-mmmlla90",
+      "scenarioId": "remote-board-game-night",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Remote Board Game Night",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "play",
+      "startedAt": "2026-03-11T22:15:42.572Z",
+      "completedAt": "2026-03-11T22:15:42.573Z",
+      "status": "failed",
+      "roomId": "canvas-0045efb9-d074-4ba6-9d5e-3cb7bc6e229c",
+      "canvasId": "0045efb9-d074-4ba6-9d5e-3cb7bc6e229c",
+      "canvasName": "remote-board-game-night-cerebras-gpt-oss-120b-remote-board-game-night-cerebras-gpt-oss-120b-mmmlla90",
+      "viewerPath": "/canvas?room=canvas-0045efb9-d074-4ba6-9d5e-3cb7bc6e229c&id=0045efb9-d074-4ba6-9d5e-3cb7bc6e229c&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "collaborative-drawing-mural-haiku-4-5-mmmllael",
+      "scenarioId": "collaborative-drawing-mural",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Collaborative Drawing Mural",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "collaborative-drawing",
+      "startedAt": "2026-03-11T22:15:42.762Z",
+      "completedAt": "2026-03-11T22:15:42.763Z",
+      "status": "failed",
+      "roomId": "canvas-56c77854-95a0-4781-a7ea-9e99525bfecc",
+      "canvasId": "56c77854-95a0-4781-a7ea-9e99525bfecc",
+      "canvasName": "collaborative-drawing-mural-haiku-4-5-collaborative-drawing-mural-haiku-4-5-mmmllael",
+      "viewerPath": "/canvas?room=canvas-56c77854-95a0-4781-a7ea-9e99525bfecc&id=56c77854-95a0-4781-a7ea-9e99525bfecc&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "collaborative-drawing-mural-gpt5-4-low-mmmllajv",
+      "scenarioId": "collaborative-drawing-mural",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Collaborative Drawing Mural",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "collaborative-drawing",
+      "startedAt": "2026-03-11T22:15:42.946Z",
+      "completedAt": "2026-03-11T22:15:42.947Z",
+      "status": "failed",
+      "roomId": "canvas-242ee61a-bca4-44d1-a9b2-2034ccf6f65d",
+      "canvasId": "242ee61a-bca4-44d1-a9b2-2034ccf6f65d",
+      "canvasName": "collaborative-drawing-mural-gpt5-4-low-collaborative-drawing-mural-gpt5-4-low-mmmllajv",
+      "viewerPath": "/canvas?room=canvas-242ee61a-bca4-44d1-a9b2-2034ccf6f65d&id=242ee61a-bca4-44d1-a9b2-2034ccf6f65d&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "collaborative-drawing-mural-cerebras-gpt-oss-120b-mmmllaoz",
+      "scenarioId": "collaborative-drawing-mural",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Collaborative Drawing Mural",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "collaborative-drawing",
+      "startedAt": "2026-03-11T22:15:43.145Z",
+      "completedAt": "2026-03-11T22:15:43.147Z",
+      "status": "failed",
+      "roomId": "canvas-a012e191-3422-4178-8198-e0e05b9762af",
+      "canvasId": "a012e191-3422-4178-8198-e0e05b9762af",
+      "canvasName": "collaborative-drawing-mural-cerebras-gpt-oss-120b-collaborative-drawing-mural-cerebras-gpt-oss-120b-mmmllaoz",
+      "viewerPath": "/canvas?room=canvas-a012e191-3422-4178-8198-e0e05b9762af&id=a012e191-3422-4178-8198-e0e05b9762af&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/collaborative-drawing-mural__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "freehand-sketchnote-recap-haiku-4-5-mmmllauj",
+      "scenarioId": "freehand-sketchnote-recap",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Freehand Sketchnote Recap",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "freehand",
+      "startedAt": "2026-03-11T22:15:43.314Z",
+      "completedAt": "2026-03-11T22:15:43.316Z",
+      "status": "failed",
+      "roomId": "canvas-9e4d200a-5293-4d25-a088-661a81af8f27",
+      "canvasId": "9e4d200a-5293-4d25-a088-661a81af8f27",
+      "canvasName": "freehand-sketchnote-recap-haiku-4-5-freehand-sketchnote-recap-haiku-4-5-mmmllauj",
+      "viewerPath": "/canvas?room=canvas-9e4d200a-5293-4d25-a088-661a81af8f27&id=9e4d200a-5293-4d25-a088-661a81af8f27&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "freehand-sketchnote-recap-gpt5-4-low-mmmllaz8",
+      "scenarioId": "freehand-sketchnote-recap",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Freehand Sketchnote Recap",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "freehand",
+      "startedAt": "2026-03-11T22:15:43.504Z",
+      "completedAt": "2026-03-11T22:15:43.505Z",
+      "status": "failed",
+      "roomId": "canvas-09cd42cb-60ec-4d64-9824-eac67bab192e",
+      "canvasId": "09cd42cb-60ec-4d64-9824-eac67bab192e",
+      "canvasName": "freehand-sketchnote-recap-gpt5-4-low-freehand-sketchnote-recap-gpt5-4-low-mmmllaz8",
+      "viewerPath": "/canvas?room=canvas-09cd42cb-60ec-4d64-9824-eac67bab192e&id=09cd42cb-60ec-4d64-9824-eac67bab192e&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "freehand-sketchnote-recap-cerebras-gpt-oss-120b-mmmllb4h",
+      "scenarioId": "freehand-sketchnote-recap",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Freehand Sketchnote Recap",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "freehand",
+      "startedAt": "2026-03-11T22:15:43.746Z",
+      "completedAt": "2026-03-11T22:15:43.747Z",
+      "status": "failed",
+      "roomId": "canvas-fc47df86-5dbb-4e47-93ff-5bf2dcbfc8e0",
+      "canvasId": "fc47df86-5dbb-4e47-93ff-5bf2dcbfc8e0",
+      "canvasName": "freehand-sketchnote-recap-cerebras-gpt-oss-120b-freehand-sketchnote-recap-cerebras-gpt-oss-120b-mmmllb4h",
+      "viewerPath": "/canvas?room=canvas-fc47df86-5dbb-4e47-93ff-5bf2dcbfc8e0&id=fc47df86-5dbb-4e47-93ff-5bf2dcbfc8e0&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-sketchnote-recap__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "freehand-mascot-poster-haiku-4-5-mmmllbb8",
+      "scenarioId": "freehand-mascot-poster",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Freehand Mascot Poster",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "freehand",
+      "startedAt": "2026-03-11T22:15:43.995Z",
+      "completedAt": "2026-03-11T22:15:43.997Z",
+      "status": "failed",
+      "roomId": "canvas-1cbbcb78-3168-4443-ae67-06fce629aefb",
+      "canvasId": "1cbbcb78-3168-4443-ae67-06fce629aefb",
+      "canvasName": "freehand-mascot-poster-haiku-4-5-freehand-mascot-poster-haiku-4-5-mmmllbb8",
+      "viewerPath": "/canvas?room=canvas-1cbbcb78-3168-4443-ae67-06fce629aefb&id=1cbbcb78-3168-4443-ae67-06fce629aefb&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "freehand-mascot-poster-gpt5-4-low-mmmllbi5",
+      "scenarioId": "freehand-mascot-poster",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Freehand Mascot Poster",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "freehand",
+      "startedAt": "2026-03-11T22:15:44.192Z",
+      "completedAt": "2026-03-11T22:15:44.193Z",
+      "status": "failed",
+      "roomId": "canvas-0b829b6c-472c-4a7e-a631-158e147c3a48",
+      "canvasId": "0b829b6c-472c-4a7e-a631-158e147c3a48",
+      "canvasName": "freehand-mascot-poster-gpt5-4-low-freehand-mascot-poster-gpt5-4-low-mmmllbi5",
+      "viewerPath": "/canvas?room=canvas-0b829b6c-472c-4a7e-a631-158e147c3a48&id=0b829b6c-472c-4a7e-a631-158e147c3a48&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "freehand-mascot-poster-cerebras-gpt-oss-120b-mmmllbnm",
+      "scenarioId": "freehand-mascot-poster",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Freehand Mascot Poster",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "freehand",
+      "startedAt": "2026-03-11T22:15:44.356Z",
+      "completedAt": "2026-03-11T22:15:44.358Z",
+      "status": "failed",
+      "roomId": "canvas-95708ef7-cc2a-4333-acd3-ca7e1c16c8d1",
+      "canvasId": "95708ef7-cc2a-4333-acd3-ca7e1c16c8d1",
+      "canvasName": "freehand-mascot-poster-cerebras-gpt-oss-120b-freehand-mascot-poster-cerebras-gpt-oss-120b-mmmllbnm",
+      "viewerPath": "/canvas?room=canvas-95708ef7-cc2a-4333-acd3-ca7e1c16c8d1&id=95708ef7-cc2a-4333-acd3-ca7e1c16c8d1&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-mascot-poster__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "freehand-journey-map-haiku-4-5-mmmllbs6",
+      "scenarioId": "freehand-journey-map",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Freehand Journey Map",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "freehand",
+      "startedAt": "2026-03-11T22:15:44.542Z",
+      "completedAt": "2026-03-11T22:15:44.543Z",
+      "status": "failed",
+      "roomId": "canvas-b498716b-77b4-4785-996d-152685d78481",
+      "canvasId": "b498716b-77b4-4785-996d-152685d78481",
+      "canvasName": "freehand-journey-map-haiku-4-5-freehand-journey-map-haiku-4-5-mmmllbs6",
+      "viewerPath": "/canvas?room=canvas-b498716b-77b4-4785-996d-152685d78481&id=b498716b-77b4-4785-996d-152685d78481&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "freehand-journey-map-gpt5-4-low-mmmllbxc",
+      "scenarioId": "freehand-journey-map",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Freehand Journey Map",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "freehand",
+      "startedAt": "2026-03-11T22:15:44.771Z",
+      "completedAt": "2026-03-11T22:15:44.773Z",
+      "status": "failed",
+      "roomId": "canvas-a0ef0836-939a-44de-b76e-e0abcd64ee89",
+      "canvasId": "a0ef0836-939a-44de-b76e-e0abcd64ee89",
+      "canvasName": "freehand-journey-map-gpt5-4-low-freehand-journey-map-gpt5-4-low-mmmllbxc",
+      "viewerPath": "/canvas?room=canvas-a0ef0836-939a-44de-b76e-e0abcd64ee89&id=a0ef0836-939a-44de-b76e-e0abcd64ee89&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "freehand-journey-map-cerebras-gpt-oss-120b-mmmllc3p",
+      "scenarioId": "freehand-journey-map",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Freehand Journey Map",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "freehand",
+      "startedAt": "2026-03-11T22:15:44.962Z",
+      "completedAt": "2026-03-11T22:15:44.963Z",
+      "status": "failed",
+      "roomId": "canvas-40c78032-f1f2-4b7a-ac4d-c9b11a558bfb",
+      "canvasId": "40c78032-f1f2-4b7a-ac4d-c9b11a558bfb",
+      "canvasName": "freehand-journey-map-cerebras-gpt-oss-120b-freehand-journey-map-cerebras-gpt-oss-120b-mmmllc3p",
+      "viewerPath": "/canvas?room=canvas-40c78032-f1f2-4b7a-ac4d-c9b11a558bfb&id=40c78032-f1f2-4b7a-ac4d-c9b11a558bfb&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/freehand-journey-map__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "multi-fairy-zones-haiku-4-5-mmmllc8z",
+      "scenarioId": "multi-fairy-zones",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Multi-Fairy Zones",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "multi-fairy",
+      "startedAt": "2026-03-11T22:15:45.162Z",
+      "completedAt": "2026-03-11T22:15:45.164Z",
+      "status": "failed",
+      "roomId": "canvas-64bfc885-5bf1-4de3-925e-1a0c1ae62377",
+      "canvasId": "64bfc885-5bf1-4de3-925e-1a0c1ae62377",
+      "canvasName": "multi-fairy-zones-haiku-4-5-multi-fairy-zones-haiku-4-5-mmmllc8z",
+      "viewerPath": "/canvas?room=canvas-64bfc885-5bf1-4de3-925e-1a0c1ae62377&id=64bfc885-5bf1-4de3-925e-1a0c1ae62377&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "multi-fairy-zones-gpt5-4-low-mmmllcek",
+      "scenarioId": "multi-fairy-zones",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Multi-Fairy Zones",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "multi-fairy",
+      "startedAt": "2026-03-11T22:15:45.335Z",
+      "completedAt": "2026-03-11T22:15:45.337Z",
+      "status": "failed",
+      "roomId": "canvas-f1d6bad9-771d-48bf-a93e-5affc0f390c7",
+      "canvasId": "f1d6bad9-771d-48bf-a93e-5affc0f390c7",
+      "canvasName": "multi-fairy-zones-gpt5-4-low-multi-fairy-zones-gpt5-4-low-mmmllcek",
+      "viewerPath": "/canvas?room=canvas-f1d6bad9-771d-48bf-a93e-5affc0f390c7&id=f1d6bad9-771d-48bf-a93e-5affc0f390c7&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "multi-fairy-zones-cerebras-gpt-oss-120b-mmmllcjd",
+      "scenarioId": "multi-fairy-zones",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Multi-Fairy Zones",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "multi-fairy",
+      "startedAt": "2026-03-11T22:15:45.538Z",
+      "completedAt": "2026-03-11T22:15:45.539Z",
+      "status": "failed",
+      "roomId": "canvas-191fc877-3577-4923-9ffd-64640f8bb32f",
+      "canvasId": "191fc877-3577-4923-9ffd-64640f8bb32f",
+      "canvasName": "multi-fairy-zones-cerebras-gpt-oss-120b-multi-fairy-zones-cerebras-gpt-oss-120b-mmmllcjd",
+      "viewerPath": "/canvas?room=canvas-191fc877-3577-4923-9ffd-64640f8bb32f&id=191fc877-3577-4923-9ffd-64640f8bb32f&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/multi-fairy-zones__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "meeting-retro-board-haiku-4-5-mmmllcp0",
+      "scenarioId": "meeting-retro-board",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Meeting Retro Board",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "collaboration",
+      "startedAt": "2026-03-11T22:15:45.728Z",
+      "completedAt": "2026-03-11T22:15:45.730Z",
+      "status": "failed",
+      "roomId": "canvas-37e0bc9f-9b97-40cc-b5b3-18eb3764ab44",
+      "canvasId": "37e0bc9f-9b97-40cc-b5b3-18eb3764ab44",
+      "canvasName": "meeting-retro-board-haiku-4-5-meeting-retro-board-haiku-4-5-mmmllcp0",
+      "viewerPath": "/canvas?room=canvas-37e0bc9f-9b97-40cc-b5b3-18eb3764ab44&id=37e0bc9f-9b97-40cc-b5b3-18eb3764ab44&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "meeting-retro-board-gpt5-4-low-mmmllcub",
+      "scenarioId": "meeting-retro-board",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Meeting Retro Board",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "collaboration",
+      "startedAt": "2026-03-11T22:15:45.915Z",
+      "completedAt": "2026-03-11T22:15:45.920Z",
+      "status": "failed",
+      "roomId": "canvas-93f43701-0c96-4b87-b67f-e4e76ed58edf",
+      "canvasId": "93f43701-0c96-4b87-b67f-e4e76ed58edf",
+      "canvasName": "meeting-retro-board-gpt5-4-low-meeting-retro-board-gpt5-4-low-mmmllcub",
+      "viewerPath": "/canvas?room=canvas-93f43701-0c96-4b87-b67f-e4e76ed58edf&id=93f43701-0c96-4b87-b67f-e4e76ed58edf&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "meeting-retro-board-cerebras-gpt-oss-120b-mmmllczm",
+      "scenarioId": "meeting-retro-board",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Meeting Retro Board",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "collaboration",
+      "startedAt": "2026-03-11T22:15:46.122Z",
+      "completedAt": "2026-03-11T22:15:46.124Z",
+      "status": "failed",
+      "roomId": "canvas-e06d2730-6b26-42c0-9e08-4423ed4f46c8",
+      "canvasId": "e06d2730-6b26-42c0-9e08-4423ed4f46c8",
+      "canvasName": "meeting-retro-board-cerebras-gpt-oss-120b-meeting-retro-board-cerebras-gpt-oss-120b-mmmllczm",
+      "viewerPath": "/canvas?room=canvas-e06d2730-6b26-42c0-9e08-4423ed4f46c8&id=e06d2730-6b26-42c0-9e08-4423ed4f46c8&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/meeting-retro-board__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "call-ready-hero-board-haiku-4-5-mmmlld58",
+      "scenarioId": "call-ready-hero-board",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Call-Ready Hero Board",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "realtime",
+      "startedAt": "2026-03-11T22:15:46.298Z",
+      "completedAt": "2026-03-11T22:15:46.300Z",
+      "status": "failed",
+      "roomId": "canvas-d0f5222e-d2df-47ab-b9a6-9112323537f0",
+      "canvasId": "d0f5222e-d2df-47ab-b9a6-9112323537f0",
+      "canvasName": "call-ready-hero-board-haiku-4-5-call-ready-hero-board-haiku-4-5-mmmlld58",
+      "viewerPath": "/canvas?room=canvas-d0f5222e-d2df-47ab-b9a6-9112323537f0&id=d0f5222e-d2df-47ab-b9a6-9112323537f0&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__haiku-4-5.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "call-ready-hero-board-gpt5-4-low-mmmllda4",
+      "scenarioId": "call-ready-hero-board",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Call-Ready Hero Board",
+      "variantLabel": "GPT-5.4 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "realtime",
+      "startedAt": "2026-03-11T22:15:46.490Z",
+      "completedAt": "2026-03-11T22:15:46.491Z",
+      "status": "failed",
+      "roomId": "canvas-e93ba620-591c-474b-92e1-5b57be041c22",
+      "canvasId": "e93ba620-591c-474b-92e1-5b57be041c22",
+      "canvasName": "call-ready-hero-board-gpt5-4-low-call-ready-hero-board-gpt5-4-low-mmmllda4",
+      "viewerPath": "/canvas?room=canvas-e93ba620-591c-474b-92e1-5b57be041c22&id=e93ba620-591c-474b-92e1-5b57be041c22&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__gpt5-4-low-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "openai",
+      "model": "openai:gpt-5.4",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__gpt5-4-low.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    },
+    {
+      "runId": "call-ready-hero-board-cerebras-gpt-oss-120b-mmmlldff",
+      "scenarioId": "call-ready-hero-board",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Call-Ready Hero Board",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "realtime",
+      "startedAt": "2026-03-11T22:15:46.685Z",
+      "completedAt": "2026-03-11T22:15:46.699Z",
+      "status": "failed",
+      "roomId": "canvas-6f073304-800a-4460-b2e5-5a5022d34316",
+      "canvasId": "6f073304-800a-4460-b2e5-5a5022d34316",
+      "canvasName": "call-ready-hero-board-cerebras-gpt-oss-120b-call-ready-hero-board-cerebras-gpt-oss-120b-mmmlldff",
+      "viewerPath": "/canvas?room=canvas-6f073304-800a-4460-b2e5-5a5022d34316&id=6f073304-800a-4460-b2e5-5a5022d34316&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "metrics": {
+        "totalDurationMs": 0,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "usage": null,
+      "estimatedCost": null,
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "visualAnalysis": {
+        "summary": "Visual analysis failed.",
+        "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/call-ready-hero-board__cerebras-gpt-oss-120b.png'",
+        "strengths": [],
+        "issues": [
+          "Analysis pass failed for this artifact."
+        ]
+      },
+      "steps": [],
+      "score": {
+        "overall": 0,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 0,
+          "stability": 0
+        },
+        "notes": [
+          "fetch failed"
+        ]
+      },
+      "error": "fetch failed"
+    }
+  ],
+  "summary": {
+    "totalRuns": 39,
+    "completedRuns": 0,
+    "successRatePct": 0,
+    "byVariant": [
+      {
+        "variantId": "haiku-4-5",
+        "label": "Claude Haiku 4.5",
+        "avgScore": 0,
+        "avgDurationMs": 0,
+        "avgTtfbMs": null,
+        "successRatePct": 0
+      },
+      {
+        "variantId": "gpt5-4-low",
+        "label": "GPT-5.4 Low",
+        "avgScore": 0,
+        "avgDurationMs": 0,
+        "avgTtfbMs": null,
+        "successRatePct": 0
+      },
+      {
+        "variantId": "cerebras-gpt-oss-120b",
+        "label": "Cerebras GPT OSS 120B",
+        "avgScore": 0,
+        "avgDurationMs": 0,
+        "avgTtfbMs": null,
+        "successRatePct": 0
+      }
+    ]
+  },
+  "paths": {
+    "rootDir": "docs/benchmarks/canvas-agent",
+    "assetDir": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11",
+    "latestJson": "docs/benchmarks/canvas-agent/latest.json",
+    "latestHtml": "docs/benchmarks/canvas-agent/latest.html"
+  }
+}

@@ -1,0 +1,1373 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Canvas Benchmark Suite</title>
+  <style>
+    :root {
+      --bg: #f2ede2;
+      --paper: rgba(255,255,255,0.78);
+      --ink: #14110f;
+      --muted: #6c655f;
+      --accent: #9d3f0c;
+      --line: rgba(20,17,15,0.12);
+      --shadow: 0 24px 60px rgba(58, 43, 28, 0.14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(157,63,12,0.12), transparent 28%),
+        linear-gradient(180deg, #fbf7ef 0%, var(--bg) 55%, #ece2d1 100%);
+      padding: 40px 28px 80px;
+    }
+    .shell { max-width: 1500px; margin: 0 auto; }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+    .hero-card, .scenario-section, .summary-card {
+      background: var(--paper);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      border-radius: 28px;
+    }
+    .hero-card { padding: 30px; }
+    .hero-card h1 { margin: 0 0 10px; font-size: 3.2rem; line-height: 0.95; }
+    .hero-card p { margin: 0; color: var(--muted); font-size: 1.02rem; line-height: 1.5; }
+    .summary-card { padding: 24px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .summary-grid div { border-top: 1px solid var(--line); padding-top: 10px; }
+    .summary-grid span, .stat-grid span { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+    .summary-grid strong, .stat-grid strong { font-size: 1.1rem; }
+    .scenario-section { padding: 24px; margin-top: 26px; }
+    .section-head { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 18px; align-items: end; margin-bottom: 18px; }
+    .section-head h2 { margin: 4px 0 0; font-size: 2rem; }
+    .section-head p { margin: 0; color: var(--muted); line-height: 1.5; }
+    .eyebrow { font-family: "SFMono-Regular", Menlo, monospace; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--accent); }
+    .run-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .run-card { border: 1px solid var(--line); border-radius: 24px; background: rgba(255,255,255,0.72); padding: 16px; }
+    .run-card.failed { border-color: rgba(157,63,12,0.3); }
+    .run-topline { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    .run-topline h3 { margin: 4px 0 0; font-size: 1.3rem; }
+    .score-badge {
+      min-width: 48px; height: 48px; border-radius: 999px; display: grid; place-items: center;
+      background: #1f1b18; color: #f7f3ed; font-family: "SFMono-Regular", Menlo, monospace; font-size: 1rem;
+    }
+    .shot-wrap { margin-top: 14px; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 18px; border: 1px solid var(--line); background: #ece4d6; }
+    .shot-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .missing-shot { width: 100%; height: 100%; display: grid; place-items: center; color: var(--muted); font-style: italic; }
+    .stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .model-line, .notes { color: var(--muted); line-height: 1.45; }
+    .model-line { font-family: "SFMono-Regular", Menlo, monospace; font-size: 0.8rem; margin-top: 12px; }
+    .analysis { margin: 14px 0 0; font-size: 0.96rem; line-height: 1.5; }
+    .analysis-subtle { margin: 8px 0 0; font-size: 0.84rem; color: var(--muted); line-height: 1.5; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .chip {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(20,17,15,0.06);
+      border: 1px solid rgba(20,17,15,0.08);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 0.72rem;
+    }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+    @media (max-width: 1120px) {
+      .hero, .section-head, .run-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <article class="hero-card">
+        <div class="eyebrow">Canvas Benchmark Suite</div>
+        <h1>Side-by-side model evidence for the fairy canvas stack.</h1>
+        <p>Generated 3/11/2026, 4:31:29 PM. This suite compares model outputs across the same scenario catalog, with screenshots, latency, action counts, and rubric scoring held in one manifest.</p>
+      </article>
+      <aside class="summary-card">
+        <div class="eyebrow">Suite Summary</div>
+        <div class="summary-grid">
+          <div><span>Suite ID</span><strong>canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09</strong></div>
+          <div><span>Execution</span><strong>livekit-viewer-direct-runner</strong></div>
+          <div><span>Runs</span><strong>38/39</strong></div>
+          <div><span>Success</span><strong>97%</strong></div>
+        </div>
+        <table>
+          <thead><tr><th>Variant</th><th>Score</th><th>TTFB</th><th>Total</th><th>Success</th></tr></thead>
+          <tbody>
+        <tr>
+          <td>Claude Haiku 4.5</td>
+          <td>85</td>
+          <td>13.09s</td>
+          <td>61.99s</td>
+          <td>100%</td>
+        </tr>
+      
+
+        <tr>
+          <td>GPT-5.4 Low</td>
+          <td>87</td>
+          <td>8.86s</td>
+          <td>64.61s</td>
+          <td>100%</td>
+        </tr>
+      
+
+        <tr>
+          <td>Cerebras GPT OSS 120B</td>
+          <td>87</td>
+          <td>10.83s</td>
+          <td>14.68s</td>
+          <td>92%</td>
+        </tr>
+      </tbody>
+        </table>
+      </aside>
+    </section>
+    
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">business</div>
+              <h2>Business Operating Plan</h2>
+            </div>
+            <p>A structured planning board with objectives, owners, and risks.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">92</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/business-operating-plan__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>11.99s</strong></div>
+                <div><span>Total</span><strong>64.05s</strong></div>
+                <div><span>Tokens</span><strong>26738</strong></div>
+                <div><span>Cost</span><strong>$0.0356</strong></div>
+                <div><span>Shapes</span><strong>16</strong></div>
+                <div><span>Actions</span><strong>23</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 16</span><span class="chip">align 3</span><span class="chip">stack 3</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 13</span><span class="chip">rectangle 3</span></div>
+              
+              
+              <p class="notes">Retries recorded 23 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">92</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/business-operating-plan__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>15.21s</strong></div>
+                <div><span>Total</span><strong>85.07s</strong></div>
+                <div><span>Tokens</span><strong>20947</strong></div>
+                <div><span>Cost</span><strong>$0.0784</strong></div>
+                <div><span>Shapes</span><strong>24</strong></div>
+                <div><span>Actions</span><strong>30</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 24</span><span class="chip">align 3</span><span class="chip">stack 3</span></div>
+              <div class="chip-row"><span class="chip">note 12</span><span class="chip">text 6</span><span class="chip">rectangle 6</span></div>
+              
+              
+              <p class="notes">Retries recorded 30 time(s).</p>
+            </article>
+          
+
+            <article class="run-card failed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">10</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/business-operating-plan__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>failed</strong></div>
+                <div><span>TTFB</span><strong>n/a</strong></div>
+                <div><span>Total</span><strong>2.26s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>0</strong></div>
+                <div><span>Actions</span><strong>0</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">No actions</span></div>
+              <div class="chip-row"><span class="chip">No shape inventory</span></div>
+              
+              
+              <p class="notes">Shape count below target (0/8). Missing required verbs: create_shape.</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">podcast</div>
+              <h2>Podcast Episode Map</h2>
+            </div>
+            <p>An episode board with segment sequencing and sponsor placement.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">90</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/podcast-episode-map__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>16.42s</strong></div>
+                <div><span>Total</span><strong>97.44s</strong></div>
+                <div><span>Tokens</span><strong>28059</strong></div>
+                <div><span>Cost</span><strong>$0.0422</strong></div>
+                <div><span>Shapes</span><strong>28</strong></div>
+                <div><span>Actions</span><strong>35</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 28</span><span class="chip">distribute 3</span><span class="chip">align 3</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 14</span><span class="chip">rectangle 8</span><span class="chip">text 6</span></div>
+              
+              
+              <p class="notes">Retries recorded 35 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/podcast-episode-map__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.79s</strong></div>
+                <div><span>Total</span><strong>64.08s</strong></div>
+                <div><span>Tokens</span><strong>20496</strong></div>
+                <div><span>Cost</span><strong>$0.0716</strong></div>
+                <div><span>Shapes</span><strong>21</strong></div>
+                <div><span>Actions</span><strong>27</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 21</span><span class="chip">align 2</span><span class="chip">stack 2</span><span class="chip">distribute 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 8</span><span class="chip">rectangle 7</span><span class="chip">text 6</span></div>
+              
+              
+              <p class="notes">Retries recorded 27 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">74</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/podcast-episode-map__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>38.28s</strong></div>
+                <div><span>Total</span><strong>40.71s</strong></div>
+                <div><span>Tokens</span><strong>8932</strong></div>
+                <div><span>Cost</span><strong>$0.0032</strong></div>
+                <div><span>Shapes</span><strong>2</strong></div>
+                <div><span>Actions</span><strong>14</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 7</span><span class="chip">update_shape 5</span><span class="chip">align 1</span><span class="chip">stack 1</span></div>
+              <div class="chip-row"><span class="chip">rectangle 1</span><span class="chip">note 1</span></div>
+              
+              
+              <p class="notes">Shape count below target (2/7). Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">brainstorm</div>
+              <h2>Collaborative Brainstorm</h2>
+            </div>
+            <p>A cluster-based ideation board with grouped themes.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">90</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/collaborative-brainstorm__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>9.94s</strong></div>
+                <div><span>Total</span><strong>51.83s</strong></div>
+                <div><span>Tokens</span><strong>26342</strong></div>
+                <div><span>Cost</span><strong>$0.0336</strong></div>
+                <div><span>Shapes</span><strong>12</strong></div>
+                <div><span>Actions</span><strong>18</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 12</span><span class="chip">stack 3</span><span class="chip">align 1</span><span class="chip">distribute 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 6</span><span class="chip">rectangle 3</span><span class="chip">text 3</span></div>
+              
+              
+              <p class="notes">Retries recorded 18 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">90</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/collaborative-brainstorm__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>2.13s</strong></div>
+                <div><span>Total</span><strong>63.19s</strong></div>
+                <div><span>Tokens</span><strong>20202</strong></div>
+                <div><span>Cost</span><strong>$0.0674</strong></div>
+                <div><span>Shapes</span><strong>17</strong></div>
+                <div><span>Actions</span><strong>26</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 17</span><span class="chip">align 4</span><span class="chip">stack 4</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 13</span><span class="chip">rectangle 4</span></div>
+              
+              
+              <p class="notes">Retries recorded 26 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">78</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/collaborative-brainstorm__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.92s</strong></div>
+                <div><span>Total</span><strong>5.31s</strong></div>
+                <div><span>Tokens</span><strong>20506</strong></div>
+                <div><span>Cost</span><strong>$0.0058</strong></div>
+                <div><span>Shapes</span><strong>5</strong></div>
+                <div><span>Actions</span><strong>7</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 5</span><span class="chip">align 1</span><span class="chip">stack 1</span></div>
+              <div class="chip-row"><span class="chip">rectangle 3</span><span class="chip">note 2</span></div>
+              
+              
+              <p class="notes">Shape count below target (5/9). Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">scratchpad</div>
+              <h2>Scratchpad Systems Sketch</h2>
+            </div>
+            <p>An informal but legible systems sketch with arrows and annotations.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">55</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/scratchpad-systems__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>9.08s</strong></div>
+                <div><span>Total</span><strong>57.01s</strong></div>
+                <div><span>Tokens</span><strong>25767</strong></div>
+                <div><span>Cost</span><strong>$0.0307</strong></div>
+                <div><span>Shapes</span><strong>0</strong></div>
+                <div><span>Actions</span><strong>21</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 19</span><span class="chip">align 1</span><span class="chip">stack 1</span></div>
+              <div class="chip-row"><span class="chip">No shape inventory</span></div>
+              
+              
+              <p class="notes">Shape count below target (0/6). Retries recorded 21 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">90</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/scratchpad-systems__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.83s</strong></div>
+                <div><span>Total</span><strong>37.38s</strong></div>
+                <div><span>Tokens</span><strong>20253</strong></div>
+                <div><span>Cost</span><strong>$0.0679</strong></div>
+                <div><span>Shapes</span><strong>14</strong></div>
+                <div><span>Actions</span><strong>15</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 14</span><span class="chip">align 1</span></div>
+              <div class="chip-row"><span class="chip">draw 6</span><span class="chip">note 3</span><span class="chip">rectangle 3</span><span class="chip">text 2</span></div>
+              
+              
+              <p class="notes">Retries recorded 15 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">89</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/scratchpad-systems__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>4.43s</strong></div>
+                <div><span>Total</span><strong>7.81s</strong></div>
+                <div><span>Tokens</span><strong>21227</strong></div>
+                <div><span>Cost</span><strong>$0.0063</strong></div>
+                <div><span>Shapes</span><strong>12</strong></div>
+                <div><span>Actions</span><strong>12</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 12</span></div>
+              <div class="chip-row"><span class="chip">note 6</span><span class="chip">draw 6</span></div>
+              
+              
+              <p class="notes">Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">presentation</div>
+              <h2>Presentation Storyboard</h2>
+            </div>
+            <p>A visually strong presentation board that continues over two turns.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">53</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/presentation-storyboard__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>8.10s</strong></div>
+                <div><span>Total</span><strong>98.32s</strong></div>
+                <div><span>Tokens</span><strong>35099</strong></div>
+                <div><span>Cost</span><strong>$0.0444</strong></div>
+                <div><span>Shapes</span><strong>0</strong></div>
+                <div><span>Actions</span><strong>20</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 17</span><span class="chip">align 2</span><span class="chip">stack 1</span></div>
+              <div class="chip-row"><span class="chip">No shape inventory</span></div>
+              
+              
+              <p class="notes">Shape count below target (0/8). Retries recorded 20 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">88</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/presentation-storyboard__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.59s</strong></div>
+                <div><span>Total</span><strong>89.08s</strong></div>
+                <div><span>Tokens</span><strong>99043</strong></div>
+                <div><span>Cost</span><strong>$0.2711</strong></div>
+                <div><span>Shapes</span><strong>22</strong></div>
+                <div><span>Actions</span><strong>30</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 22</span><span class="chip">align 3</span><span class="chip">stack 3</span><span class="chip">reorder 2</span></div>
+              <div class="chip-row"><span class="chip">note 10</span><span class="chip">rectangle 7</span><span class="chip">draw 3</span><span class="chip">text 2</span></div>
+              
+              
+              <p class="notes">Retries recorded 30 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">87</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/presentation-storyboard__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>2.39s</strong></div>
+                <div><span>Total</span><strong>14.24s</strong></div>
+                <div><span>Tokens</span><strong>76401</strong></div>
+                <div><span>Cost</span><strong>$0.0205</strong></div>
+                <div><span>Shapes</span><strong>7</strong></div>
+                <div><span>Actions</span><strong>11</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 7</span><span class="chip">align 2</span><span class="chip">stack 2</span></div>
+              <div class="chip-row"><span class="chip">note 5</span><span class="chip">rectangle 2</span></div>
+              
+              
+              <p class="notes">Shape count below target (7/8). Retries recorded 2 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">play</div>
+              <h2>Remote Board Game Night</h2>
+            </div>
+            <p>A playful board for turn order, score, and shared game state.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/remote-board-game-night__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>12.83s</strong></div>
+                <div><span>Total</span><strong>83.09s</strong></div>
+                <div><span>Tokens</span><strong>27291</strong></div>
+                <div><span>Cost</span><strong>$0.0383</strong></div>
+                <div><span>Shapes</span><strong>22</strong></div>
+                <div><span>Actions</span><strong>31</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 22</span><span class="chip">align 4</span><span class="chip">stack 3</span><span class="chip">distribute 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 16</span><span class="chip">rectangle 5</span><span class="chip">draw 1</span></div>
+              
+              
+              <p class="notes">Retries recorded 31 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">92</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/remote-board-game-night__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.78s</strong></div>
+                <div><span>Total</span><strong>86.30s</strong></div>
+                <div><span>Tokens</span><strong>21507</strong></div>
+                <div><span>Cost</span><strong>$0.0869</strong></div>
+                <div><span>Shapes</span><strong>32</strong></div>
+                <div><span>Actions</span><strong>37</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 32</span><span class="chip">align 3</span><span class="chip">stack 1</span><span class="chip">distribute 1</span></div>
+              <div class="chip-row"><span class="chip">text 11</span><span class="chip">note 8</span><span class="chip">ellipse 6</span><span class="chip">rectangle 5</span><span class="chip">draw 2</span></div>
+              
+              
+              <p class="notes">Retries recorded 37 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">76</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/remote-board-game-night__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>2.41s</strong></div>
+                <div><span>Total</span><strong>5.79s</strong></div>
+                <div><span>Tokens</span><strong>20648</strong></div>
+                <div><span>Cost</span><strong>$0.0059</strong></div>
+                <div><span>Shapes</span><strong>5</strong></div>
+                <div><span>Actions</span><strong>5</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 5</span></div>
+              <div class="chip-row"><span class="chip">note 4</span><span class="chip">draw 1</span></div>
+              
+              
+              <p class="notes">Shape count below target (5/8). Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">collaborative-drawing</div>
+              <h2>Collaborative Drawing Mural</h2>
+            </div>
+            <p>A freer canvas that pressures the pen and spatial-composition path.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">90</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/collaborative-drawing-mural__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>9.40s</strong></div>
+                <div><span>Total</span><strong>35.06s</strong></div>
+                <div><span>Tokens</span><strong>26076</strong></div>
+                <div><span>Cost</span><strong>$0.0322</strong></div>
+                <div><span>Shapes</span><strong>10</strong></div>
+                <div><span>Actions</span><strong>11</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 10</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">rectangle 4</span><span class="chip">draw 2</span><span class="chip">ellipse 2</span><span class="chip">text 2</span></div>
+              
+              
+              <p class="notes">Retries recorded 11 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">90</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/collaborative-drawing-mural__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.47s</strong></div>
+                <div><span>Total</span><strong>45.64s</strong></div>
+                <div><span>Tokens</span><strong>20396</strong></div>
+                <div><span>Cost</span><strong>$0.0702</strong></div>
+                <div><span>Shapes</span><strong>15</strong></div>
+                <div><span>Actions</span><strong>19</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 15</span><span class="chip">align 3</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">draw 6</span><span class="chip">rectangle 3</span><span class="chip">note 3</span><span class="chip">ellipse 2</span><span class="chip">text 1</span></div>
+              
+              
+              <p class="notes">Retries recorded 19 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">89</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/collaborative-drawing-mural__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>2.52s</strong></div>
+                <div><span>Total</span><strong>5.90s</strong></div>
+                <div><span>Tokens</span><strong>20254</strong></div>
+                <div><span>Cost</span><strong>$0.0057</strong></div>
+                <div><span>Shapes</span><strong>6</strong></div>
+                <div><span>Actions</span><strong>8</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 8</span></div>
+              <div class="chip-row"><span class="chip">note 5</span><span class="chip">draw 1</span></div>
+              
+              
+              <p class="notes">Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">freehand</div>
+              <h2>Freehand Sketchnote Recap</h2>
+            </div>
+            <p>A live sketchnote board with handwriting energy, arrows, and loose grouping.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">88</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-sketchnote-recap__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>26.73s</strong></div>
+                <div><span>Total</span><strong>70.27s</strong></div>
+                <div><span>Tokens</span><strong>27155</strong></div>
+                <div><span>Cost</span><strong>$0.0376</strong></div>
+                <div><span>Shapes</span><strong>17</strong></div>
+                <div><span>Actions</span><strong>19</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 17</span><span class="chip">align 1</span><span class="chip">distribute 1</span></div>
+              <div class="chip-row"><span class="chip">draw 5</span><span class="chip">note 4</span><span class="chip">rectangle 4</span><span class="chip">text 4</span></div>
+              
+              
+              <p class="notes">Retries recorded 19 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">88</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-sketchnote-recap__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>2.04s</strong></div>
+                <div><span>Total</span><strong>50.67s</strong></div>
+                <div><span>Tokens</span><strong>20612</strong></div>
+                <div><span>Cost</span><strong>$0.0734</strong></div>
+                <div><span>Shapes</span><strong>20</strong></div>
+                <div><span>Actions</span><strong>21</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 20</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">text 7</span><span class="chip">draw 5</span><span class="chip">rectangle 4</span><span class="chip">note 4</span></div>
+              
+              
+              <p class="notes">Retries recorded 21 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">89</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-sketchnote-recap__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.86s</strong></div>
+                <div><span>Total</span><strong>4.29s</strong></div>
+                <div><span>Tokens</span><strong>21024</strong></div>
+                <div><span>Cost</span><strong>$0.0062</strong></div>
+                <div><span>Shapes</span><strong>8</strong></div>
+                <div><span>Actions</span><strong>8</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 8</span></div>
+              <div class="chip-row"><span class="chip">note 6</span><span class="chip">draw 2</span></div>
+              
+              
+              <p class="notes">Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">freehand</div>
+              <h2>Freehand Mascot Poster</h2>
+            </div>
+            <p>A poster-like scene that pressures composition and expressive pen strokes.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">85</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-mascot-poster__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>13.42s</strong></div>
+                <div><span>Total</span><strong>45.84s</strong></div>
+                <div><span>Tokens</span><strong>27172</strong></div>
+                <div><span>Cost</span><strong>$0.0377</strong></div>
+                <div><span>Shapes</span><strong>12</strong></div>
+                <div><span>Actions</span><strong>14</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 12</span><span class="chip">align 1</span><span class="chip">distribute 1</span></div>
+              <div class="chip-row"><span class="chip">draw 8</span><span class="chip">note 4</span></div>
+              
+              
+              <p class="notes">Retries recorded 14 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">50</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-mascot-poster__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>26.40s</strong></div>
+                <div><span>Total</span><strong>62.47s</strong></div>
+                <div><span>Tokens</span><strong>21330</strong></div>
+                <div><span>Cost</span><strong>$0.0843</strong></div>
+                <div><span>Shapes</span><strong>0</strong></div>
+                <div><span>Actions</span><strong>12</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 12</span></div>
+              <div class="chip-row"><span class="chip">No shape inventory</span></div>
+              
+              
+              <p class="notes">Shape count below target (0/6). Retries recorded 12 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">83</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-mascot-poster__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.61s</strong></div>
+                <div><span>Total</span><strong>4.99s</strong></div>
+                <div><span>Tokens</span><strong>20980</strong></div>
+                <div><span>Cost</span><strong>$0.0062</strong></div>
+                <div><span>Shapes</span><strong>5</strong></div>
+                <div><span>Actions</span><strong>8</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 8</span></div>
+              <div class="chip-row"><span class="chip">note 4</span><span class="chip">draw 1</span></div>
+              
+              
+              <p class="notes">Shape count below target (5/6). Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">freehand</div>
+              <h2>Freehand Journey Map</h2>
+            </div>
+            <p>A journey map that mixes looser drawing with structured storytelling.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">85</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-journey-map__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>13.34s</strong></div>
+                <div><span>Total</span><strong>54.62s</strong></div>
+                <div><span>Tokens</span><strong>27202</strong></div>
+                <div><span>Cost</span><strong>$0.0379</strong></div>
+                <div><span>Shapes</span><strong>18</strong></div>
+                <div><span>Actions</span><strong>18</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 18</span></div>
+              <div class="chip-row"><span class="chip">draw 6</span><span class="chip">rectangle 4</span><span class="chip">note 4</span><span class="chip">text 4</span></div>
+              
+              
+              <p class="notes">Retries recorded 18 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">85</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-journey-map__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>27.24s</strong></div>
+                <div><span>Total</span><strong>92.77s</strong></div>
+                <div><span>Tokens</span><strong>22427</strong></div>
+                <div><span>Cost</span><strong>$0.1007</strong></div>
+                <div><span>Shapes</span><strong>23</strong></div>
+                <div><span>Actions</span><strong>23</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 23</span></div>
+              <div class="chip-row"><span class="chip">text 12</span><span class="chip">draw 11</span></div>
+              
+              
+              <p class="notes">Retries recorded 23 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">96</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-journey-map__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>3.25s</strong></div>
+                <div><span>Total</span><strong>6.63s</strong></div>
+                <div><span>Tokens</span><strong>22168</strong></div>
+                <div><span>Cost</span><strong>$0.0070</strong></div>
+                <div><span>Shapes</span><strong>9</strong></div>
+                <div><span>Actions</span><strong>15</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 9</span><span class="chip">update_shape 4</span><span class="chip">distribute 1</span><span class="chip">align 1</span></div>
+              <div class="chip-row"><span class="chip">note 5</span><span class="chip">draw 4</span></div>
+              
+              
+              <p class="notes">Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">multi-fairy</div>
+              <h2>Multi-Fairy Zones</h2>
+            </div>
+            <p>A board divided into clearly separated work zones to mimic swarm collaboration.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/multi-fairy-zones__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>9.28s</strong></div>
+                <div><span>Total</span><strong>43.34s</strong></div>
+                <div><span>Tokens</span><strong>26021</strong></div>
+                <div><span>Cost</span><strong>$0.0320</strong></div>
+                <div><span>Shapes</span><strong>12</strong></div>
+                <div><span>Actions</span><strong>15</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 12</span><span class="chip">align 1</span><span class="chip">distribute 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">rectangle 6</span><span class="chip">note 6</span></div>
+              
+              
+              <p class="notes">Retries recorded 15 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">90</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/multi-fairy-zones__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.56s</strong></div>
+                <div><span>Total</span><strong>41.42s</strong></div>
+                <div><span>Tokens</span><strong>20053</strong></div>
+                <div><span>Cost</span><strong>$0.0651</strong></div>
+                <div><span>Shapes</span><strong>15</strong></div>
+                <div><span>Actions</span><strong>17</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 15</span><span class="chip">align 1</span><span class="chip">stack 1</span></div>
+              <div class="chip-row"><span class="chip">text 5</span><span class="chip">rectangle 3</span><span class="chip">note 3</span><span class="chip">draw 3</span><span class="chip">ellipse 1</span></div>
+              
+              
+              <p class="notes">Retries recorded 17 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">89</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/multi-fairy-zones__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.88s</strong></div>
+                <div><span>Total</span><strong>5.26s</strong></div>
+                <div><span>Tokens</span><strong>20890</strong></div>
+                <div><span>Cost</span><strong>$0.0061</strong></div>
+                <div><span>Shapes</span><strong>8</strong></div>
+                <div><span>Actions</span><strong>10</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 8</span><span class="chip">stack 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 4</span><span class="chip">rectangle 3</span><span class="chip">ellipse 1</span></div>
+              
+              
+              <p class="notes">Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">collaboration</div>
+              <h2>Meeting Retro Board</h2>
+            </div>
+            <p>A classic retro board with structure and enough density to test organization.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/meeting-retro-board__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>23.33s</strong></div>
+                <div><span>Total</span><strong>77.52s</strong></div>
+                <div><span>Tokens</span><strong>26639</strong></div>
+                <div><span>Cost</span><strong>$0.0351</strong></div>
+                <div><span>Shapes</span><strong>15</strong></div>
+                <div><span>Actions</span><strong>24</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 15</span><span class="chip">align 4</span><span class="chip">stack 3</span><span class="chip">distribute 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 11</span><span class="chip">text 3</span><span class="chip">rectangle 1</span></div>
+              
+              
+              <p class="notes">Retries recorded 24 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">92</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/meeting-retro-board__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>30.35s</strong></div>
+                <div><span>Total</span><strong>92.42s</strong></div>
+                <div><span>Tokens</span><strong>20390</strong></div>
+                <div><span>Cost</span><strong>$0.0703</strong></div>
+                <div><span>Shapes</span><strong>20</strong></div>
+                <div><span>Actions</span><strong>28</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 20</span><span class="chip">align 4</span><span class="chip">stack 4</span></div>
+              <div class="chip-row"><span class="chip">note 12</span><span class="chip">rectangle 4</span><span class="chip">text 4</span></div>
+              
+              
+              <p class="notes">Retries recorded 28 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">96</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/meeting-retro-board__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>3.56s</strong></div>
+                <div><span>Total</span><strong>6.95s</strong></div>
+                <div><span>Tokens</span><strong>22132</strong></div>
+                <div><span>Cost</span><strong>$0.0070</strong></div>
+                <div><span>Shapes</span><strong>21</strong></div>
+                <div><span>Actions</span><strong>25</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 21</span><span class="chip">stack 3</span><span class="chip">align 1</span></div>
+              <div class="chip-row"><span class="chip">note 18</span><span class="chip">rectangle 3</span></div>
+              
+              
+              <p class="notes">Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">realtime</div>
+              <h2>Call-Ready Hero Board</h2>
+            </div>
+            <p>A high-signal board optimized for being reviewed live on a video call.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/call-ready-hero-board__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>6.30s</strong></div>
+                <div><span>Total</span><strong>27.54s</strong></div>
+                <div><span>Tokens</span><strong>25438</strong></div>
+                <div><span>Cost</span><strong>$0.0291</strong></div>
+                <div><span>Shapes</span><strong>6</strong></div>
+                <div><span>Actions</span><strong>9</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 6</span><span class="chip">align 1</span><span class="chip">stack 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 5</span><span class="chip">rectangle 1</span></div>
+              
+              
+              <p class="notes">Retries recorded 9 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5.4 Low</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/call-ready-hero-board__gpt5-4-low.png" alt="GPT-5.4 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.77s</strong></div>
+                <div><span>Total</span><strong>29.36s</strong></div>
+                <div><span>Tokens</span><strong>19583</strong></div>
+                <div><span>Cost</span><strong>$0.0581</strong></div>
+                <div><span>Shapes</span><strong>9</strong></div>
+                <div><span>Actions</span><strong>12</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5.4</p>
+              <div class="chip-row"><span class="chip">create_shape 9</span><span class="chip">align 1</span><span class="chip">stack 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 5</span><span class="chip">rectangle 3</span><span class="chip">draw 1</span></div>
+              
+              
+              <p class="notes">Retries recorded 12 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">93</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/call-ready-hero-board__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>65.85s</strong></div>
+                <div><span>Total</span><strong>68.25s</strong></div>
+                <div><span>Tokens</span><strong>20905</strong></div>
+                <div><span>Cost</span><strong>$0.0061</strong></div>
+                <div><span>Shapes</span><strong>5</strong></div>
+                <div><span>Actions</span><strong>12</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 5</span><span class="chip">update_shape 4</span><span class="chip">align 1</span><span class="chip">stack 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 4</span><span class="chip">rectangle 1</span></div>
+              
+              
+              <p class="notes">Shape count below target (5/6). Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+  </main>
+</body>
+</html>

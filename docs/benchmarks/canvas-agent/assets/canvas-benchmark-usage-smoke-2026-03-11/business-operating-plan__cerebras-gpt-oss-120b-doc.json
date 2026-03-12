@@ -1,0 +1,204 @@
+{
+  "roomId": "canvas-3927c764-0d15-48a7-a440-04a70ad167a5",
+  "canvasId": "3927c764-0d15-48a7-a440-04a70ad167a5",
+  "canvasName": "business-operating-plan-cerebras-gpt-oss-120b-business-operating-plan-cerebras-gpt-oss-120b-mmmjdblu",
+  "source": "viewer",
+  "shapeCount": 19,
+  "shapes": [
+    {
+      "id": "shape:preset-mmmjdxfd-86",
+      "type": "note",
+      "x": 420,
+      "y": 80,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmjdxfd-936",
+      "type": "note",
+      "x": 370,
+      "y": 230,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmjdxfd-633",
+      "type": "note",
+      "x": 670,
+      "y": 230,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmjdxfd-279",
+      "type": "note",
+      "x": 970,
+      "y": 230,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-1",
+      "type": "note",
+      "x": 370,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-2",
+      "type": "note",
+      "x": 370,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-3",
+      "type": "note",
+      "x": 370,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-4",
+      "type": "note",
+      "x": 370,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-5",
+      "type": "note",
+      "x": 370,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-1",
+      "type": "note",
+      "x": 670,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-2",
+      "type": "note",
+      "x": 670,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-3",
+      "type": "note",
+      "x": 670,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-4",
+      "type": "note",
+      "x": 670,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-5",
+      "type": "note",
+      "x": 670,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-1",
+      "type": "note",
+      "x": 970,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-2",
+      "type": "note",
+      "x": 970,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-3",
+      "type": "note",
+      "x": 970,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-4",
+      "type": "note",
+      "x": 970,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-5",
+      "type": "note",
+      "x": 970,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773263645001
+  }
+}

@@ -1,0 +1,164 @@
+{
+  "roomId": "canvas-8f92175f-375f-425c-a79f-346299807c45",
+  "canvasId": "8f92175f-375f-425c-a79f-346299807c45",
+  "canvasName": "meeting-retro-board-haiku-4-5-meeting-retro-board-haiku-4-5-mmmo2qem",
+  "source": "viewer",
+  "shapeCount": 15,
+  "shapes": [
+    {
+      "id": "shape:retro-bg",
+      "type": "geo",
+      "x": 120,
+      "y": 180,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:col-wins-header",
+      "type": "text",
+      "x": 170,
+      "y": 220,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:col-friction-header",
+      "type": "text",
+      "x": 591.203125,
+      "y": 220,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:col-experiments-header",
+      "type": "text",
+      "x": 1070,
+      "y": 220,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-note-1",
+      "type": "note",
+      "x": 180,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-note-2",
+      "type": "note",
+      "x": 180,
+      "y": 312,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-note-3",
+      "type": "note",
+      "x": 180,
+      "y": 344,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:wins-note-4",
+      "type": "note",
+      "x": 180,
+      "y": 376,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-note-1",
+      "type": "note",
+      "x": 630,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-note-2",
+      "type": "note",
+      "x": 630,
+      "y": 312,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-note-3",
+      "type": "note",
+      "x": 630,
+      "y": 344,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:friction-note-4",
+      "type": "note",
+      "x": 630,
+      "y": 376,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:exp-note-1",
+      "type": "note",
+      "x": 1080,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:exp-note-2",
+      "type": "note",
+      "x": 1080,
+      "y": 312,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:exp-note-3",
+      "type": "note",
+      "x": 1080,
+      "y": 344,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271601552
+  }
+}

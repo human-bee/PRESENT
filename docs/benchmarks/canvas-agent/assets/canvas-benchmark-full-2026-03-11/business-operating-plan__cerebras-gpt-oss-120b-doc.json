@@ -1,0 +1,185 @@
+{
+  "roomId": "canvas-ee798b25-a9da-4e9d-a4cb-84513cf6f4a8",
+  "canvasId": "ee798b25-a9da-4e9d-a4cb-84513cf6f4a8",
+  "canvasName": "business-operating-plan-cerebras-gpt-oss-120b-business-operating-plan-cerebras-gpt-oss-120b-mmlz2wdv",
+  "source": "viewer",
+  "shapeCount": 19,
+  "shapes": [
+    {
+      "id": "shape:preset-mmlz38ls-412",
+      "type": "note",
+      "x": 720,
+      "y": 180,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:col-objectives",
+      "type": "geo",
+      "x": 320,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:col-owners",
+      "type": "geo",
+      "x": 652,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:col-risks",
+      "type": "geo",
+      "x": 984,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlz38ls-901",
+      "type": "note",
+      "x": 470,
+      "y": 290,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlz38ls-922",
+      "type": "note",
+      "x": 802,
+      "y": 290,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlz38ls-413",
+      "type": "note",
+      "x": 1134,
+      "y": 290,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-note-1",
+      "type": "note",
+      "x": 340,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-note-2",
+      "type": "note",
+      "x": 340,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-note-3",
+      "type": "note",
+      "x": 340,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-note-4",
+      "type": "note",
+      "x": 340,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-1",
+      "type": "note",
+      "x": 672,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-2",
+      "type": "note",
+      "x": 672,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-3",
+      "type": "note",
+      "x": 672,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-4",
+      "type": "note",
+      "x": 672,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-1",
+      "type": "note",
+      "x": 1004,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-2",
+      "type": "note",
+      "x": 1004,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-3",
+      "type": "note",
+      "x": 1004,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-4",
+      "type": "note",
+      "x": 1004,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773229548965
+  }
+}
