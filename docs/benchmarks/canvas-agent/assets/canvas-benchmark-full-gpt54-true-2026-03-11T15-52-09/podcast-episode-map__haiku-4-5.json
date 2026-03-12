@@ -1,0 +1,176 @@
+{
+  "runId": "podcast-episode-map-haiku-4-5-mmmn0dmh",
+  "scenarioId": "podcast-episode-map",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Podcast Episode Map",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "podcast",
+  "startedAt": "2026-03-11T22:55:26.391Z",
+  "completedAt": "2026-03-11T22:57:23.059Z",
+  "status": "completed",
+  "roomId": "canvas-909ae8c3-01a4-4d70-befd-aa2b3e78e30f",
+  "canvasId": "909ae8c3-01a4-4d70-befd-aa2b3e78e30f",
+  "canvasName": "podcast-episode-map-haiku-4-5-podcast-episode-map-haiku-4-5-mmmn0dmh",
+  "viewerPath": "/canvas?room=canvas-909ae8c3-01a4-4d70-befd-aa2b3e78e30f&id=909ae8c3-01a4-4d70-befd-aa2b3e78e30f&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/podcast-episode-map__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/podcast-episode-map__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/podcast-episode-map__haiku-4-5-doc.json",
+  "finalShapeCount": 28,
+  "actionSummary": {
+    "total": 35,
+    "byName": {
+      "create_shape": 28,
+      "distribute": 3,
+      "align": 3,
+      "reorder": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 28,
+    "byType": {
+      "rectangle": 8,
+      "note": 14,
+      "text": 6
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 97445,
+    "initialTtfbMs": 16416,
+    "totalActionCount": 35,
+    "totalMutatingActionCount": 35,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 35,
+    "avgFirstAckMs": 21893,
+    "avgScreenshotRttMs": 167
+  },
+  "usage": {
+    "inputTokens": 24536,
+    "outputTokens": 3523,
+    "reasoningTokens": null,
+    "cachedInputTokens": 0,
+    "totalTokens": 28059
+  },
+  "estimatedCost": {
+    "inputUsd": 0.024536,
+    "outputUsd": 0.017615,
+    "totalUsd": 0.042150999999999994,
+    "notes": "Anthropic Claude Platform list pricing for Haiku 4.5.",
+    "sourceUrl": "https://www.anthropic.com/claude/haiku"
+  },
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "episode-outline",
+      "label": "Episode outline",
+      "sessionId": "1773269743711-t3it0i",
+      "status": "completed",
+      "actionSummary": {
+        "total": 35,
+        "byName": {
+          "create_shape": 28,
+          "distribute": 3,
+          "align": 3,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 97445,
+        "ttfbMs": 16416,
+        "actionCount": 35,
+        "mutatingActionCount": 35,
+        "followupCount": 0,
+        "retryCount": 35,
+        "firstAckMs": 21893,
+        "screenshotRttMs": 167,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 24536,
+          "outputTokens": 3523,
+          "reasoningTokens": null,
+          "cachedInputTokens": 0,
+          "totalTokens": 28059
+        },
+        "estimatedCostUsd": 0.042150999999999994
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773269743711-t3it0i",
+          "roomId": "canvas-909ae8c3-01a4-4d70-befd-aa2b3e78e30f",
+          "ts": 1773269743722,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773269743711-t3it0i",
+          "roomId": "canvas-909ae8c3-01a4-4d70-befd-aa2b3e78e30f",
+          "ts": 1773269743994,
+          "preset": "creative",
+          "request_id": "3dd5aa46-6f78-48f4-a961-f0f81fb868de",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 167,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773269743711-t3it0i",
+          "roomId": "canvas-909ae8c3-01a4-4d70-befd-aa2b3e78e30f",
+          "ts": 1773269744105,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773269743711-t3it0i",
+          "roomId": "canvas-909ae8c3-01a4-4d70-befd-aa2b3e78e30f",
+          "ts": 1773269760137,
+          "preset": "creative",
+          "ttfb": 16416,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773269743711-t3it0i",
+          "roomId": "canvas-909ae8c3-01a4-4d70-befd-aa2b3e78e30f",
+          "ts": 1773269841150,
+          "preset": "creative",
+          "duration": 97430,
+          "chunkCount": 35,
+          "actionCount": 35,
+          "mutatingActionCount": 35,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 35,
+          "first_ack_ms": 21893,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 90,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 5,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 35 time(s)."
+    ]
+  }
+}

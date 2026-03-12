@@ -37,6 +37,8 @@ export const fairyCliRunEnvelopeSchema = z.object({
   idempotencyKey: z.string().min(1).optional(),
   lockKey: z.string().min(1).optional(),
   attempt: z.number().int().min(1).optional(),
+  provider: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
   params: z.record(z.string(), z.unknown()).optional(),
   summary: z.string().optional(),
   message: z.string().optional(),

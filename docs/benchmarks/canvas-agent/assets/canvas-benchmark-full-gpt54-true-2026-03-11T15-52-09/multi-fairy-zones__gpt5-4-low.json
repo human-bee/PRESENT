@@ -1,0 +1,176 @@
+{
+  "runId": "multi-fairy-zones-gpt5-4-low-mmmo18n6",
+  "scenarioId": "multi-fairy-zones",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Multi-Fairy Zones",
+  "variantLabel": "GPT-5.4 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "multi-fairy",
+  "startedAt": "2026-03-11T23:24:06.284Z",
+  "completedAt": "2026-03-11T23:24:58.825Z",
+  "status": "completed",
+  "roomId": "canvas-8f87e75e-2940-4233-94de-25cdff1bf65d",
+  "canvasId": "8f87e75e-2940-4233-94de-25cdff1bf65d",
+  "canvasName": "multi-fairy-zones-gpt5-4-low-multi-fairy-zones-gpt5-4-low-mmmo18n6",
+  "viewerPath": "/canvas?room=canvas-8f87e75e-2940-4233-94de-25cdff1bf65d&id=8f87e75e-2940-4233-94de-25cdff1bf65d&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/multi-fairy-zones__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/multi-fairy-zones__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/multi-fairy-zones__gpt5-4-low-doc.json",
+  "finalShapeCount": 15,
+  "actionSummary": {
+    "total": 17,
+    "byName": {
+      "create_shape": 15,
+      "align": 1,
+      "stack": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 15,
+    "byType": {
+      "rectangle": 3,
+      "text": 5,
+      "note": 3,
+      "ellipse": 1,
+      "draw": 3
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 41417,
+    "initialTtfbMs": 1562,
+    "totalActionCount": 17,
+    "totalMutatingActionCount": 17,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 17,
+    "avgFirstAckMs": 7860,
+    "avgScreenshotRttMs": 37
+  },
+  "usage": {
+    "inputTokens": 18853,
+    "outputTokens": 1200,
+    "reasoningTokens": 0,
+    "cachedInputTokens": 0,
+    "totalTokens": 20053
+  },
+  "estimatedCost": {
+    "inputUsd": 0.04713250000000001,
+    "outputUsd": 0.018,
+    "totalUsd": 0.06513250000000001,
+    "notes": "OpenAI GPT-5.4 text-token pricing.",
+    "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4"
+  },
+  "provider": "openai",
+  "model": "openai:gpt-5.4",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "zone-layout",
+      "label": "Zone layout",
+      "sessionId": "1773271455826-ep8tdo",
+      "status": "completed",
+      "actionSummary": {
+        "total": 17,
+        "byName": {
+          "create_shape": 15,
+          "align": 1,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 41417,
+        "ttfbMs": 1562,
+        "actionCount": 17,
+        "mutatingActionCount": 17,
+        "followupCount": 0,
+        "retryCount": 17,
+        "firstAckMs": 7860,
+        "screenshotRttMs": 37,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 18853,
+          "outputTokens": 1200,
+          "reasoningTokens": 0,
+          "cachedInputTokens": 0,
+          "totalTokens": 20053
+        },
+        "estimatedCostUsd": 0.06513250000000001
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773271455826-ep8tdo",
+          "roomId": "canvas-8f87e75e-2940-4233-94de-25cdff1bf65d",
+          "ts": 1773271455828,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773271455826-ep8tdo",
+          "roomId": "canvas-8f87e75e-2940-4233-94de-25cdff1bf65d",
+          "ts": 1773271455871,
+          "preset": "creative",
+          "request_id": "d3f9f96e-9fb7-4010-927b-e53d50aa8058",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 37,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773271455826-ep8tdo",
+          "roomId": "canvas-8f87e75e-2940-4233-94de-25cdff1bf65d",
+          "ts": 1773271455974,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773271455826-ep8tdo",
+          "roomId": "canvas-8f87e75e-2940-4233-94de-25cdff1bf65d",
+          "ts": 1773271457390,
+          "preset": "creative",
+          "ttfb": 1562,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773271455826-ep8tdo",
+          "roomId": "canvas-8f87e75e-2940-4233-94de-25cdff1bf65d",
+          "ts": 1773271497243,
+          "preset": "creative",
+          "duration": 41415,
+          "chunkCount": 18,
+          "actionCount": 17,
+          "mutatingActionCount": 17,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 17,
+          "first_ack_ms": 7860,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 90,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 5,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 17 time(s)."
+    ]
+  }
+}

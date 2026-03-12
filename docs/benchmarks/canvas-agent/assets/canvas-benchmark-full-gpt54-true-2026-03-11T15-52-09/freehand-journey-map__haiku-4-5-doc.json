@@ -1,0 +1,194 @@
+{
+  "roomId": "canvas-2ea59406-6552-432e-b09b-bcaac47112ec",
+  "canvasId": "2ea59406-6552-432e-b09b-bcaac47112ec",
+  "canvasName": "freehand-journey-map-haiku-4-5-freehand-journey-map-haiku-4-5-mmmnw0bd",
+  "source": "viewer",
+  "shapeCount": 18,
+  "shapes": [
+    {
+      "id": "shape:journey-baseline",
+      "type": "draw",
+      "x": 360,
+      "y": 660,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:stage-1-box",
+      "type": "geo",
+      "x": 400,
+      "y": 540,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:stage-2-box",
+      "type": "geo",
+      "x": 580,
+      "y": 440,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:stage-3-box",
+      "type": "geo",
+      "x": 760,
+      "y": 400,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:stage-4-box",
+      "type": "geo",
+      "x": 940,
+      "y": 500,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:emotional-curve",
+      "type": "draw",
+      "x": 380,
+      "y": 600,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:preset-mmmnwtei-770",
+      "type": "note",
+      "x": 410,
+      "y": 670,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnwv39-725",
+      "type": "note",
+      "x": 590,
+      "y": 670,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnwws2-885",
+      "type": "note",
+      "x": 770,
+      "y": 670,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnwyje-604",
+      "type": "note",
+      "x": 950,
+      "y": 670,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:high-marker",
+      "type": "draw",
+      "x": 840,
+      "y": 420,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:low-marker",
+      "type": "draw",
+      "x": 560,
+      "y": 450,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:annotation-1",
+      "type": "text",
+      "x": 430,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:annotation-2",
+      "type": "text",
+      "x": 610,
+      "y": 360,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:annotation-3",
+      "type": "text",
+      "x": 790,
+      "y": 340,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:annotation-4",
+      "type": "text",
+      "x": 970,
+      "y": 400,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:flourish-1",
+      "type": "draw",
+      "x": 1080,
+      "y": 420,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:flourish-2",
+      "type": "draw",
+      "x": 340,
+      "y": 520,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271264169
+  }
+}

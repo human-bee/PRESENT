@@ -101,6 +101,15 @@ const CanvasAgentPromptSchema = z
       .optional(),
     selectionIds: z.array(z.string().min(1)).optional(),
     metadata: jsonObjectSchema.optional(),
+    model: z.string().min(1).optional(),
+    provider: z.string().min(1).optional(),
+    billingUserId: z.string().min(1).optional(),
+    requesterUserId: z.string().min(1).optional(),
+    sharedUnlockSessionId: z.string().min(1).optional(),
+    modelKeySource: z.string().min(1).optional(),
+    primaryModelKeySource: z.string().min(1).optional(),
+    fastModelKeySource: z.string().min(1).optional(),
+    canvasConfigOverrides: jsonObjectSchema.optional(),
   })
   .passthrough();
 
@@ -333,6 +342,15 @@ async function handleCanvasAgentPrompt(rawParams: JsonObject) {
         : undefined,
     selectionIds: parsed.selectionIds,
     metadata: parsed.metadata ?? null,
+    model: parsed.model?.trim() || undefined,
+    provider: parsed.provider?.trim() || undefined,
+    billingUserId: parsed.billingUserId?.trim() || undefined,
+    requesterUserId: parsed.requesterUserId?.trim() || undefined,
+    sharedUnlockSessionId: parsed.sharedUnlockSessionId?.trim() || undefined,
+    modelKeySource: parsed.modelKeySource?.trim() || undefined,
+    primaryModelKeySource: parsed.primaryModelKeySource?.trim() || undefined,
+    fastModelKeySource: parsed.fastModelKeySource?.trim() || undefined,
+    canvasConfigOverrides: parsed.canvasConfigOverrides ?? null,
   };
 
   await broadcastAgentPrompt({
@@ -371,6 +389,21 @@ function buildFairyIntent(rawParams: JsonObject): FairyIntent {
     metadata: parsed.metadata ?? null,
     componentId: parsed.componentId,
     contextProfile,
+    model: typeof parsed.model === 'string' ? parsed.model : undefined,
+    provider: typeof parsed.provider === 'string' ? parsed.provider : undefined,
+    billingUserId: typeof parsed.billingUserId === 'string' ? parsed.billingUserId : undefined,
+    requesterUserId: typeof parsed.requesterUserId === 'string' ? parsed.requesterUserId : undefined,
+    sharedUnlockSessionId:
+      typeof parsed.sharedUnlockSessionId === 'string' ? parsed.sharedUnlockSessionId : undefined,
+    modelKeySource: typeof parsed.modelKeySource === 'string' ? parsed.modelKeySource : undefined,
+    primaryModelKeySource:
+      typeof parsed.primaryModelKeySource === 'string' ? parsed.primaryModelKeySource : undefined,
+    fastModelKeySource:
+      typeof parsed.fastModelKeySource === 'string' ? parsed.fastModelKeySource : undefined,
+    canvasConfigOverrides:
+      parsed.canvasConfigOverrides && typeof parsed.canvasConfigOverrides === 'object'
+        ? parsed.canvasConfigOverrides
+        : undefined,
   });
   return intent;
 }
@@ -388,7 +421,15 @@ const buildFairyIntentFingerprint = (intent: FairyIntent) => {
       ].join(':')
     : '';
   const messageKey = intent.message.trim().toLowerCase();
-  return [intent.room, intent.source, messageKey, intent.componentId ?? '', selectionKey, boundsKey].join('|');
+  return [
+    intent.room,
+    intent.source,
+    messageKey,
+    intent.componentId ?? '',
+    selectionKey,
+    boundsKey,
+    intent.model ?? '',
+  ].join('|');
 };
 
 const inferCrowdPulseQuestion = (message: string): string | undefined => {
@@ -1159,6 +1200,17 @@ async function handleFairyIntent(rawParams: JsonObject) {
         ...(intent.bounds ? { bounds: intent.bounds } : {}),
         ...(Array.isArray(intent.selectionIds) ? { selectionIds: intent.selectionIds } : {}),
         ...(actionMetadata ? { metadata: actionMetadata } : {}),
+        ...(intent.model ? { model: intent.model } : {}),
+        ...(intent.provider ? { provider: intent.provider } : {}),
+        ...(intent.billingUserId ? { billingUserId: intent.billingUserId } : {}),
+        ...(intent.requesterUserId ? { requesterUserId: intent.requesterUserId } : {}),
+        ...(intent.sharedUnlockSessionId ? { sharedUnlockSessionId: intent.sharedUnlockSessionId } : {}),
+        ...(intent.modelKeySource ? { modelKeySource: intent.modelKeySource } : {}),
+        ...(intent.primaryModelKeySource
+          ? { primaryModelKeySource: intent.primaryModelKeySource }
+          : {}),
+        ...(intent.fastModelKeySource ? { fastModelKeySource: intent.fastModelKeySource } : {}),
+        ...(intent.canvasConfigOverrides ? { canvasConfigOverrides: intent.canvasConfigOverrides } : {}),
       });
     }
 
@@ -2163,6 +2215,23 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
     }
     if (promptResult.payload.selectionIds) {
       stewardParams.selectionIds = promptResult.payload.selectionIds;
+    }
+    if (promptResult.payload.model) stewardParams.model = promptResult.payload.model;
+    if (promptResult.payload.provider) stewardParams.provider = promptResult.payload.provider;
+    if (promptResult.payload.billingUserId) stewardParams.billingUserId = promptResult.payload.billingUserId;
+    if (promptResult.payload.requesterUserId) stewardParams.requesterUserId = promptResult.payload.requesterUserId;
+    if (promptResult.payload.sharedUnlockSessionId) {
+      stewardParams.sharedUnlockSessionId = promptResult.payload.sharedUnlockSessionId;
+    }
+    if (promptResult.payload.modelKeySource) stewardParams.modelKeySource = promptResult.payload.modelKeySource;
+    if (promptResult.payload.primaryModelKeySource) {
+      stewardParams.primaryModelKeySource = promptResult.payload.primaryModelKeySource;
+    }
+    if (promptResult.payload.fastModelKeySource) {
+      stewardParams.fastModelKeySource = promptResult.payload.fastModelKeySource;
+    }
+    if (promptResult.payload.canvasConfigOverrides) {
+      stewardParams.canvasConfigOverrides = promptResult.payload.canvasConfigOverrides;
     }
     if (SERVER_CANVAS_AGENT_ENABLED) {
       // Execute via Canvas Steward on the server to ensure action even without the legacy client host

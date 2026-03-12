@@ -10,11 +10,17 @@ import {
   getFairyContextSpectrum,
 } from '@/lib/fairy-context/profiles';
 import { useCanvasContext } from '@/lib/hooks/use-canvas-context';
+import {
+  buildFairyCanvasModelRequest,
+  type FairyCanvasModelId,
+} from '@/lib/fairy-canvas-model-selection';
+import { useFairyCanvasModelSelection } from '@/lib/hooks/use-fairy-canvas-model-selection';
 
 export function FairyPromptPanel() {
   const editor = useEditor();
   const { roomName, widgets } = useCanvasContext();
   const buildPromptData = useFairyPromptData();
+  const { options: modelOptions, selectedModel, setSelectedModel } = useFairyCanvasModelSelection();
 
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -36,6 +42,7 @@ export function FairyPromptPanel() {
 
       const bundle = buildPromptData({ selectionIds, profile: contextProfile });
       const spectrum = getFairyContextSpectrum(contextProfile).value;
+      const runtimeSelection = buildFairyCanvasModelRequest(selectedModel);
 
       const counts: Record<string, number> = {};
       widgets.forEach((widget) => {
@@ -46,6 +53,7 @@ export function FairyPromptPanel() {
       const payload = {
         room: roomName,
         task: 'fairy.intent',
+        ...(runtimeSelection ? runtimeSelection : {}),
         params: {
           id:
             typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -68,6 +76,7 @@ export function FairyPromptPanel() {
               componentCounts: counts,
             },
           },
+          ...(runtimeSelection ? runtimeSelection : {}),
         },
       };
 
@@ -89,7 +98,7 @@ export function FairyPromptPanel() {
     } finally {
       setIsSending(false);
     }
-  }, [buildPromptData, contextProfile, editor, message, roomName, widgets]);
+  }, [buildPromptData, contextProfile, editor, message, roomName, selectedModel, widgets]);
 
   return (
     <div
@@ -138,6 +147,25 @@ export function FairyPromptPanel() {
           {FAIRY_CONTEXT_PROFILES.map((profile) => (
             <option key={profile} value={profile}>
               {profile}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex items-center justify-between text-[11px] text-slate-500">
+        <span>Canvas model</span>
+        <select
+          className="rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-700"
+          value={selectedModel ?? 'auto'}
+          onChange={(event) =>
+            setSelectedModel(
+              event.target.value === 'auto' ? null : (event.target.value as FairyCanvasModelId),
+            )
+          }
+        >
+          <option value="auto">Auto</option>
+          {modelOptions.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.shortLabel} - {option.label}
             </option>
           ))}
         </select>

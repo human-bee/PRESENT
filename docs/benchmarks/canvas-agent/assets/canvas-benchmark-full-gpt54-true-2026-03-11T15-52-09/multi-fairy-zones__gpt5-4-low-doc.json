@@ -1,0 +1,164 @@
+{
+  "roomId": "canvas-8f87e75e-2940-4233-94de-25cdff1bf65d",
+  "canvasId": "8f87e75e-2940-4233-94de-25cdff1bf65d",
+  "canvasName": "multi-fairy-zones-gpt5-4-low-multi-fairy-zones-gpt5-4-low-mmmo18n6",
+  "source": "viewer",
+  "shapeCount": 15,
+  "shapes": [
+    {
+      "id": "shape:fairy-zone-left",
+      "type": "geo",
+      "x": 112,
+      "y": 192,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-zone-top-right",
+      "type": "geo",
+      "x": 784,
+      "y": 128,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-zone-bottom-right",
+      "type": "geo",
+      "x": 784,
+      "y": 576,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-zone-left-title",
+      "type": "text",
+      "x": 144,
+      "y": 232,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-zone-top-right-title",
+      "type": "text",
+      "x": 816,
+      "y": 168,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-zone-bottom-right-title",
+      "type": "text",
+      "x": 816,
+      "y": 616,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-zone-left-note",
+      "type": "note",
+      "x": 160,
+      "y": 312,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-zone-top-right-note",
+      "type": "note",
+      "x": 816,
+      "y": 248,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-zone-bottom-right-note",
+      "type": "note",
+      "x": 816,
+      "y": 696,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-center",
+      "type": "geo",
+      "x": 592,
+      "y": 384,
+      "props": {
+        "geo": "ellipse",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-center-title",
+      "type": "text",
+      "x": 656,
+      "y": 452,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-center-caption",
+      "type": "text",
+      "x": 632,
+      "y": 512,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:fairy-link-left",
+      "type": "draw",
+      "x": 432,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:fairy-link-top-right",
+      "type": "draw",
+      "x": 816,
+      "y": 384,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:fairy-link-bottom-right",
+      "type": "draw",
+      "x": 816,
+      "y": 608,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271495030
+  }
+}

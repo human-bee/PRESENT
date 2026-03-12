@@ -1,0 +1,162 @@
+{
+  "runId": "collaborative-brainstorm-haiku-4-5-mmlza083",
+  "scenarioId": "collaborative-brainstorm",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Collaborative Brainstorm",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "brainstorm",
+  "startedAt": "2026-03-11T11:51:04.887Z",
+  "completedAt": "2026-03-11T11:51:54.640Z",
+  "status": "completed",
+  "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+  "canvasId": "bdbee606-21f5-4e58-8563-03d509f6566d",
+  "canvasName": "collaborative-brainstorm-haiku-4-5-collaborative-brainstorm-haiku-4-5-mmlza083",
+  "viewerPath": "/canvas?room=canvas-bdbee606-21f5-4e58-8563-03d509f6566d&id=bdbee606-21f5-4e58-8563-03d509f6566d&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__haiku-4-5-doc.json",
+  "finalShapeCount": 9,
+  "actionSummary": {
+    "total": 13,
+    "byName": {
+      "create_shape": 9,
+      "align": 2,
+      "distribute": 1,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 38105,
+    "initialTtfbMs": 7941,
+    "totalActionCount": 13,
+    "totalMutatingActionCount": 13,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 13,
+    "avgFirstAckMs": 13602,
+    "avgScreenshotRttMs": 23
+  },
+  "steps": [
+    {
+      "stepId": "theme-clusters",
+      "label": "Theme clusters",
+      "sessionId": "1773229874875-gglcya",
+      "status": "completed",
+      "actionSummary": {
+        "total": 13,
+        "byName": {
+          "create_shape": 9,
+          "align": 2,
+          "distribute": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 38105,
+        "ttfbMs": 7941,
+        "actionCount": 13,
+        "mutatingActionCount": 13,
+        "followupCount": 0,
+        "retryCount": 13,
+        "firstAckMs": 13602,
+        "screenshotRttMs": 23,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773229874875-gglcya",
+          "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+          "ts": 1773229874875,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773229874875-gglcya",
+          "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+          "ts": 1773229874906,
+          "preset": "creative",
+          "request_id": "80520b7b-82df-4729-81cf-a4c2961a1233",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 23,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773229874875-gglcya",
+          "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+          "ts": 1773229875016,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773229874875-gglcya",
+          "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+          "ts": 1773229882816,
+          "preset": "creative",
+          "ttfb": 7941,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773229874875-gglcya",
+          "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+          "ts": 1773229912980,
+          "preset": "creative",
+          "duration": 38105,
+          "chunkCount": 15,
+          "actionCount": 13,
+          "mutatingActionCount": 13,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 13,
+          "first_ack_ms": 13602,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 90,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 5,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 13 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 9,
+    "byType": {
+      "box": 3,
+      "note": 6
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows three equally spaced labeled blocks framed by distinct dotted border colors.",
+    "scoreRationale": "High score due to correct shape count, clear labeling, alignment, and screenshot completeness.",
+    "strengths": [
+      "Nine shapes created with appropriate labels",
+      "Good alignment and spacing of elements"
+    ],
+    "issues": [
+      "No visible preferred verbs indicated",
+      "One sync health issue noted in the embedded info box"
+    ]
+  }
+}

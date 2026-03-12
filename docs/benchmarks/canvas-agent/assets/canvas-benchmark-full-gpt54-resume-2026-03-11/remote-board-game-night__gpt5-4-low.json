@@ -1,0 +1,59 @@
+{
+  "runId": "remote-board-game-night-gpt5-4-low-mmml8faj",
+  "scenarioId": "remote-board-game-night",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Remote Board Game Night",
+  "variantLabel": "GPT-5.4 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "play",
+  "startedAt": "2026-03-11T22:05:42.667Z",
+  "completedAt": "2026-03-11T22:07:40.036Z",
+  "status": "failed",
+  "roomId": "canvas-5a9ffacd-f420-4d04-a184-9b924c49c49f",
+  "canvasId": "5a9ffacd-f420-4d04-a184-9b924c49c49f",
+  "canvasName": "remote-board-game-night-gpt5-4-low-remote-board-game-night-gpt5-4-low-mmml8faj",
+  "viewerPath": "/canvas?room=canvas-5a9ffacd-f420-4d04-a184-9b924c49c49f&id=5a9ffacd-f420-4d04-a184-9b924c49c49f&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/remote-board-game-night__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/remote-board-game-night__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/remote-board-game-night__gpt5-4-low-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "openai",
+  "model": "openai:gpt-5.4",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "page.waitForFunction: Timeout 30000ms exceeded."
+    ]
+  },
+  "error": "page.waitForFunction: Timeout 30000ms exceeded."
+}

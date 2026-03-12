@@ -1,0 +1,59 @@
+{
+  "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+  "canvasId": "7cd2359a-8112-4697-9889-a65f6969cbb2",
+  "canvasName": "call-ready-hero-board-haiku-4-5-call-ready-hero-board-haiku-4-5-mmm0d55r",
+  "source": "viewer",
+  "shapeCount": 5,
+  "shapes": [
+    {
+      "id": "shape:hero-bg-frame",
+      "type": "geo",
+      "x": 400,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmm0dl45-791",
+      "type": "note",
+      "x": 420,
+      "y": 320,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-1",
+      "type": "note",
+      "x": 880,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-2",
+      "type": "note",
+      "x": 880,
+      "y": 392,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-3",
+      "type": "note",
+      "x": 880,
+      "y": 424,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773231726948
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "roomId": "canvas-84e223de-4a1f-4cf6-a805-4424061f7654",
+  "canvasId": "84e223de-4a1f-4cf6-a805-4424061f7654",
+  "canvasName": "freehand-sketchnote-recap-cerebras-gpt-oss-120b-freehand-sketchnote-recap-cerebras-gpt-oss-120b-mmmnsgss",
+  "source": "viewer",
+  "shapeCount": 8,
+  "shapes": [
+    {
+      "id": "shape:sketch-base",
+      "type": "draw",
+      "x": 520,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:preset-mmmnspuo-849",
+      "type": "note",
+      "x": 540,
+      "y": 340,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnspuo-837",
+      "type": "note",
+      "x": 670,
+      "y": 340,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnspuo-453",
+      "type": "note",
+      "x": 800,
+      "y": 340,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnspuo-376",
+      "type": "note",
+      "x": 535,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnspuo-568",
+      "type": "note",
+      "x": 675,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnspuo-440",
+      "type": "note",
+      "x": 805,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:arrow-vision-metrics",
+      "type": "draw",
+      "x": 555,
+      "y": 360,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271052512
+  }
+}

@@ -6,8 +6,10 @@ const canvasModelNameSchema = z.enum(
   [
     'claude-haiku-4-5',
     'claude-sonnet-4-5',
+    'gpt-5.4',
     'gpt-5',
     'gpt-5-mini',
+    'gpt-oss-120b',
   ] as const,
 );
 
@@ -22,10 +24,13 @@ const MODEL_ALIASES: Record<string, CanvasModelName> = {
   'claude-sonnet-3.5': 'claude-sonnet-4-5',
   'gpt-4o': 'gpt-5-mini',
   'gpt-4.1': 'gpt-5-mini',
+  'gpt-5.4-low': 'gpt-5.4',
+  'gpt5.4-low': 'gpt-5.4',
+  'gpt-5-low': 'gpt-5.4',
 };
 
 export type CanvasModelName = z.infer<typeof canvasModelNameSchema>;
-export type CanvasModelProvider = 'anthropic' | 'openai' | 'google';
+export type CanvasModelProvider = 'anthropic' | 'openai' | 'google' | 'cerebras';
 
 export interface CanvasModelDefinition {
   name: CanvasModelName;
@@ -45,6 +50,11 @@ const CANVAS_MODEL_DEFINITIONS: Record<CanvasModelName, CanvasModelDefinition> =
     id: 'claude-sonnet-4-5-20250929',
     provider: 'anthropic',
   },
+  'gpt-5.4': {
+    name: 'gpt-5.4',
+    id: 'gpt-5.4',
+    provider: 'openai',
+  },
   'gpt-5': {
     name: 'gpt-5',
     id: 'gpt-5',
@@ -54,6 +64,11 @@ const CANVAS_MODEL_DEFINITIONS: Record<CanvasModelName, CanvasModelDefinition> =
     name: 'gpt-5-mini',
     id: 'gpt-5-mini',
     provider: 'openai',
+  },
+  'gpt-oss-120b': {
+    name: 'gpt-oss-120b',
+    id: 'gpt-oss-120b',
+    provider: 'cerebras',
   },
 };
 
@@ -96,7 +111,7 @@ export function normalizeCanvasModelName(raw: unknown): CanvasModelName | null {
   if (!trimmed) return null;
 
   const normalized = trimmed.replace(/\s+/g, '').toLowerCase();
-  const withoutPrefix = normalized.replace(/^(anthropic|openai|google)[:/]/, '');
+  const withoutPrefix = normalized.replace(/^(anthropic|openai|google|cerebras)[:/]/, '');
 
   const alias = MODEL_ALIASES[withoutPrefix];
   if (alias) return alias;

@@ -9,6 +9,7 @@ import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
 import { getCanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
 
 loadEnv({ path: path.join(process.cwd(), '.env.local') });
+loadEnv({ path: '/Users/bsteinher/PRESENT/.env.local', override: false });
 
 type ScenarioId = 'poster' | 'pen' | 'layout';
 

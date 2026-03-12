@@ -36,6 +36,10 @@ import {
   attachExperimentAssignmentToMetadata,
   readExperimentAssignmentFromUnknown,
 } from '@/lib/agents/shared/experiment-assignment';
+import {
+  buildFairyCanvasModelRequest,
+  readStoredFairyCanvasModel,
+} from '@/lib/fairy-canvas-model-selection';
 
 type ToolMetricEntry = {
   callId: string;
@@ -1285,6 +1289,25 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         if (tool === 'dispatch_to_conductor') {
           const task = typeof params?.task === 'string' ? params.task.trim() : '';
           const dispatchParams = (params?.params as Record<string, unknown>) || {};
+          if (task === 'fairy.intent' || task === 'canvas.agent_prompt') {
+            const explicitModel =
+              typeof dispatchParams.model === 'string' && dispatchParams.model.trim()
+                ? dispatchParams.model.trim()
+                : typeof params?.model === 'string' && params.model.trim()
+                  ? params.model.trim()
+                  : null;
+            const runtimeSelection = buildFairyCanvasModelRequest(
+              explicitModel ?? readStoredFairyCanvasModel(),
+            );
+            if (runtimeSelection) {
+              if (!dispatchParams.model) {
+                dispatchParams.model = runtimeSelection.model;
+              }
+              if (!dispatchParams.provider) {
+                dispatchParams.provider = runtimeSelection.provider;
+              }
+            }
+          }
           const dispatchMetadata = experimentAssignment
             ? attachExperimentAssignmentToMetadata(
                 (dispatchParams.metadata as JsonObject | undefined) ?? null,
@@ -1410,6 +1433,10 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 body: JSON.stringify({
                   room: targetRoom,
                   task,
+                  model:
+                    typeof dispatchParams.model === 'string' ? dispatchParams.model : undefined,
+                  provider:
+                    typeof dispatchParams.provider === 'string' ? dispatchParams.provider : undefined,
                   params: dispatchParams,
                   ...experimentEnvelope,
                   executionId,

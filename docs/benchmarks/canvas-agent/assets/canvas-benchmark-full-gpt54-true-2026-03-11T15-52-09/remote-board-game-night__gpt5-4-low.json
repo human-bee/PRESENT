@@ -1,0 +1,178 @@
+{
+  "runId": "remote-board-game-night-gpt5-4-low-mmmnk9jb",
+  "scenarioId": "remote-board-game-night",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Remote Board Game Night",
+  "variantLabel": "GPT-5.4 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "play",
+  "startedAt": "2026-03-11T23:10:54.406Z",
+  "completedAt": "2026-03-11T23:12:32.127Z",
+  "status": "completed",
+  "roomId": "canvas-f69696c3-857b-4dba-940f-0010e6a6addd",
+  "canvasId": "f69696c3-857b-4dba-940f-0010e6a6addd",
+  "canvasName": "remote-board-game-night-gpt5-4-low-remote-board-game-night-gpt5-4-low-mmmnk9jb",
+  "viewerPath": "/canvas?room=canvas-f69696c3-857b-4dba-940f-0010e6a6addd&id=f69696c3-857b-4dba-940f-0010e6a6addd&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/remote-board-game-night__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/remote-board-game-night__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/remote-board-game-night__gpt5-4-low-doc.json",
+  "finalShapeCount": 32,
+  "actionSummary": {
+    "total": 37,
+    "byName": {
+      "create_shape": 32,
+      "align": 3,
+      "stack": 1,
+      "distribute": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 32,
+    "byType": {
+      "rectangle": 5,
+      "text": 11,
+      "note": 8,
+      "draw": 2,
+      "ellipse": 6
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 86302,
+    "initialTtfbMs": 1780,
+    "totalActionCount": 37,
+    "totalMutatingActionCount": 37,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 37,
+    "avgFirstAckMs": 7960,
+    "avgScreenshotRttMs": 33
+  },
+  "usage": {
+    "inputTokens": 18860,
+    "outputTokens": 2647,
+    "reasoningTokens": 0,
+    "cachedInputTokens": 2304,
+    "totalTokens": 21507
+  },
+  "estimatedCost": {
+    "inputUsd": 0.04715,
+    "outputUsd": 0.039705000000000004,
+    "totalUsd": 0.086855,
+    "notes": "OpenAI GPT-5.4 text-token pricing.",
+    "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4"
+  },
+  "provider": "openai",
+  "model": "openai:gpt-5.4",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "game-state",
+      "label": "Game state board",
+      "sessionId": "1773270664091-03402b",
+      "status": "completed",
+      "actionSummary": {
+        "total": 37,
+        "byName": {
+          "create_shape": 32,
+          "align": 3,
+          "stack": 1,
+          "distribute": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 86302,
+        "ttfbMs": 1780,
+        "actionCount": 37,
+        "mutatingActionCount": 37,
+        "followupCount": 0,
+        "retryCount": 37,
+        "firstAckMs": 7960,
+        "screenshotRttMs": 33,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 18860,
+          "outputTokens": 2647,
+          "reasoningTokens": 0,
+          "cachedInputTokens": 2304,
+          "totalTokens": 21507
+        },
+        "estimatedCostUsd": 0.086855
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773270664091-03402b",
+          "roomId": "canvas-f69696c3-857b-4dba-940f-0010e6a6addd",
+          "ts": 1773270664092,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773270664091-03402b",
+          "roomId": "canvas-f69696c3-857b-4dba-940f-0010e6a6addd",
+          "ts": 1773270664132,
+          "preset": "creative",
+          "request_id": "c7fc3bb5-727d-48ff-8be6-788c6c6ee20c",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 33,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773270664091-03402b",
+          "roomId": "canvas-f69696c3-857b-4dba-940f-0010e6a6addd",
+          "ts": 1773270664233,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773270664091-03402b",
+          "roomId": "canvas-f69696c3-857b-4dba-940f-0010e6a6addd",
+          "ts": 1773270665872,
+          "preset": "creative",
+          "ttfb": 1780,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773270664091-03402b",
+          "roomId": "canvas-f69696c3-857b-4dba-940f-0010e6a6addd",
+          "ts": 1773270750393,
+          "preset": "creative",
+          "duration": 86301,
+          "chunkCount": 38,
+          "actionCount": 37,
+          "mutatingActionCount": 37,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 37,
+          "first_ack_ms": 7960,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 92,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 7,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 37 time(s)."
+    ]
+  }
+}

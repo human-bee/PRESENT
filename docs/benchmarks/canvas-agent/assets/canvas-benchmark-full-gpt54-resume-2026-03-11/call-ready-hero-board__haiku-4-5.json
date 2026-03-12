@@ -1,0 +1,59 @@
+{
+  "runId": "call-ready-hero-board-haiku-4-5-mmmlioxf",
+  "scenarioId": "call-ready-hero-board",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Call-Ready Hero Board",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "realtime",
+  "startedAt": "2026-03-11T22:13:41.619Z",
+  "completedAt": "2026-03-11T22:13:41.622Z",
+  "status": "failed",
+  "roomId": "canvas-98b7e143-d1e8-40b5-8464-0106fcd2926e",
+  "canvasId": "98b7e143-d1e8-40b5-8464-0106fcd2926e",
+  "canvasName": "call-ready-hero-board-haiku-4-5-call-ready-hero-board-haiku-4-5-mmmlioxf",
+  "viewerPath": "/canvas?room=canvas-98b7e143-d1e8-40b5-8464-0106fcd2926e&id=98b7e143-d1e8-40b5-8464-0106fcd2926e&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/call-ready-hero-board__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/call-ready-hero-board__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/call-ready-hero-board__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

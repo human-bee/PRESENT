@@ -1,0 +1,176 @@
+{
+  "runId": "podcast-episode-map-cerebras-gpt-oss-120b-mmlz9iey",
+  "scenarioId": "podcast-episode-map",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Podcast Episode Map",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "podcast",
+  "startedAt": "2026-03-11T11:50:41.805Z",
+  "completedAt": "2026-03-11T11:51:04.606Z",
+  "status": "completed",
+  "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+  "canvasId": "0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+  "canvasName": "podcast-episode-map-cerebras-gpt-oss-120b-podcast-episode-map-cerebras-gpt-oss-120b-mmlz9iey",
+  "viewerPath": "/canvas?room=canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2&id=0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 2,
+  "actionSummary": {
+    "total": 13,
+    "byName": {
+      "create_shape": 7,
+      "reorder": 2,
+      "update_shape": 1,
+      "align": 2,
+      "stack": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 11538,
+    "initialTtfbMs": 1616,
+    "totalActionCount": 13,
+    "totalMutatingActionCount": 13,
+    "totalFollowupCount": 1,
+    "totalRetryCount": 2,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": 28
+  },
+  "steps": [
+    {
+      "stepId": "episode-outline",
+      "label": "Episode outline",
+      "sessionId": "1773229851425-mxzcbl",
+      "status": "completed",
+      "actionSummary": {
+        "total": 13,
+        "byName": {
+          "create_shape": 7,
+          "reorder": 2,
+          "update_shape": 1,
+          "align": 2,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 11538,
+        "ttfbMs": 1616,
+        "actionCount": 13,
+        "mutatingActionCount": 13,
+        "followupCount": 1,
+        "retryCount": 2,
+        "firstAckMs": null,
+        "screenshotRttMs": 28,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773229851425-mxzcbl",
+          "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+          "ts": 1773229851427,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773229851425-mxzcbl",
+          "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+          "ts": 1773229851464,
+          "preset": "creative",
+          "request_id": "e17d8f8f-4356-49fc-af28-e54d914a2b24",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 28,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773229851425-mxzcbl",
+          "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+          "ts": 1773229851564,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773229851425-mxzcbl",
+          "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+          "ts": 1773229853042,
+          "preset": "creative",
+          "ttfb": 1616,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773229851425-mxzcbl",
+          "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+          "ts": 1773229856777,
+          "preset": "creative",
+          "request_id": "bfdfd224-3b2c-47ca-80cc-73e59c2ec103",
+          "timeout_ms": 12000,
+          "image_bytes": 63911,
+          "rtt": 47,
+          "result": "received"
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773229851425-mxzcbl",
+          "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+          "ts": 1773229862963,
+          "preset": "creative",
+          "duration": 11537,
+          "chunkCount": 2,
+          "actionCount": 13,
+          "mutatingActionCount": 13,
+          "followupCount": 1,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 2,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 72,
+    "grade": "strong",
+    "rubric": {
+      "shapes": 10,
+      "requiredVerbs": 35,
+      "preferredVerbs": 10,
+      "screenshot": 10,
+      "stability": 7
+    },
+    "notes": [
+      "Shape count below target (2/7).",
+      "Followups fired 1 time(s).",
+      "Retries recorded 2 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 2,
+    "byType": {
+      "box": 2
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows two simple shapes, a red rectangle inside a larger dotted boundary, with minimal content.",
+    "scoreRationale": "The score of 72 reflects limited shape usage and basic actions with a mostly empty canvas.",
+    "strengths": [
+      "Includes basic shapes created and aligned",
+      "Stable connection status despite sync degraded"
+    ],
+    "issues": [
+      "Only two shapes created, limiting completeness",
+      "Minimal updates and layout complexity, missing required verbs"
+    ]
+  }
+}

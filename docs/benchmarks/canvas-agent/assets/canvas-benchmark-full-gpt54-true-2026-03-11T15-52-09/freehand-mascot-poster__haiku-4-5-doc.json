@@ -1,0 +1,134 @@
+{
+  "roomId": "canvas-123c36b2-ddd7-40d9-9e84-3390b607ba76",
+  "canvasId": "123c36b2-ddd7-40d9-9e84-3390b607ba76",
+  "canvasName": "freehand-mascot-poster-haiku-4-5-freehand-mascot-poster-haiku-4-5-mmmnst0m",
+  "source": "viewer",
+  "shapeCount": 12,
+  "shapes": [
+    {
+      "id": "shape:mascot-head",
+      "type": "draw",
+      "x": 440,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:mascot-eye-left",
+      "type": "draw",
+      "x": 470,
+      "y": 320,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:mascot-eye-right",
+      "type": "draw",
+      "x": 520,
+      "y": 320,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:mascot-smile",
+      "type": "draw",
+      "x": 485,
+      "y": 370,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:preset-mmmntix6-167",
+      "type": "note",
+      "x": 720,
+      "y": 260,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-1",
+      "type": "note",
+      "x": 740,
+      "y": 470,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-2",
+      "type": "note",
+      "x": 920,
+      "y": 470,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:support-note-3",
+      "type": "note",
+      "x": 830,
+      "y": 470,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:connector-1",
+      "type": "draw",
+      "x": 620,
+      "y": 420,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:connector-2",
+      "type": "draw",
+      "x": 620,
+      "y": 520,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:accent-spray-1",
+      "type": "draw",
+      "x": 1020,
+      "y": 280,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:accent-spray-2",
+      "type": "draw",
+      "x": 1100,
+      "y": 600,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271110427
+  }
+}

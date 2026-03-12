@@ -1,0 +1,59 @@
+{
+  "runId": "call-ready-hero-board-haiku-4-5-mmmmnq3k",
+  "scenarioId": "call-ready-hero-board",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Call-Ready Hero Board",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "realtime",
+  "startedAt": "2026-03-11T22:45:36.061Z",
+  "completedAt": "2026-03-11T22:45:36.066Z",
+  "status": "failed",
+  "roomId": "canvas-bf6ab449-48d5-44fd-b514-2b251f4b7bbc",
+  "canvasId": "bf6ab449-48d5-44fd-b514-2b251f4b7bbc",
+  "canvasName": "call-ready-hero-board-haiku-4-5-call-ready-hero-board-haiku-4-5-mmmmnq3k",
+  "viewerPath": "/canvas?room=canvas-bf6ab449-48d5-44fd-b514-2b251f4b7bbc&id=bf6ab449-48d5-44fd-b514-2b251f4b7bbc&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/call-ready-hero-board__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/call-ready-hero-board__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/call-ready-hero-board__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "browser.newPage: Target page, context or browser has been closed"
+    ]
+  },
+  "error": "browser.newPage: Target page, context or browser has been closed"
+}

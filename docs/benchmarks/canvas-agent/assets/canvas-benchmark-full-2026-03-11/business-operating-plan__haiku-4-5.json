@@ -1,0 +1,162 @@
+{
+  "runId": "business-operating-plan-haiku-4-5-mmlywhy3",
+  "scenarioId": "business-operating-plan",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Business Operating Plan",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "business",
+  "startedAt": "2026-03-11T11:40:34.928Z",
+  "completedAt": "2026-03-11T11:42:01.569Z",
+  "status": "completed",
+  "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+  "canvasId": "35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+  "canvasName": "business-operating-plan-haiku-4-5-business-operating-plan-haiku-4-5-mmlywhy3",
+  "viewerPath": "/canvas?room=canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152&id=35fdff1d-18e1-4307-a1d2-1bdd4e0c2152&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__haiku-4-5-doc.json",
+  "finalShapeCount": 20,
+  "actionSummary": {
+    "total": 27,
+    "byName": {
+      "create_shape": 20,
+      "align": 3,
+      "stack": 3,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 75579,
+    "initialTtfbMs": 14082,
+    "totalActionCount": 27,
+    "totalMutatingActionCount": 27,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 27,
+    "avgFirstAckMs": 19734,
+    "avgScreenshotRttMs": 29
+  },
+  "steps": [
+    {
+      "stepId": "plan-board",
+      "label": "Plan board",
+      "sessionId": "1773229244416-dpdrwi",
+      "status": "completed",
+      "actionSummary": {
+        "total": 27,
+        "byName": {
+          "create_shape": 20,
+          "align": 3,
+          "stack": 3,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 75579,
+        "ttfbMs": 14082,
+        "actionCount": 27,
+        "mutatingActionCount": 27,
+        "followupCount": 0,
+        "retryCount": 27,
+        "firstAckMs": 19734,
+        "screenshotRttMs": 29,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773229244416-dpdrwi",
+          "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+          "ts": 1773229244434,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773229244416-dpdrwi",
+          "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+          "ts": 1773229244472,
+          "preset": "creative",
+          "request_id": "360a836f-f8a6-4210-90e1-a93b65eb8483",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 29,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773229244416-dpdrwi",
+          "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+          "ts": 1773229244585,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773229244416-dpdrwi",
+          "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+          "ts": 1773229258516,
+          "preset": "creative",
+          "ttfb": 14082,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773229244416-dpdrwi",
+          "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+          "ts": 1773229319992,
+          "preset": "creative",
+          "duration": 75557,
+          "chunkCount": 28,
+          "actionCount": 27,
+          "mutatingActionCount": 27,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 27,
+          "first_ack_ms": 19734,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 92,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 7,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 27 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 20,
+    "byType": {
+      "box": 4,
+      "note": 16
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas is a partially developed business operating plan with 20 shapes, some overlapping and misaligned elements, and visible interface artifacts.",
+    "scoreRationale": "The score likely reflects adequate shape usage and verb inclusion but is reduced by cluttered layout, overlapping shapes, and screenshot distractions.",
+    "strengths": [
+      "Includes required shapes and verbs relevant to the business plan",
+      "Maintains presence of key labels like 'Q1 Launch Operating' and CEO annotation"
+    ],
+    "issues": [
+      "Multiple overlapping shapes causing visual clutter",
+      "Screenshot shows interface elements and degraded sync health affecting overall clarity"
+    ]
+  }
+}

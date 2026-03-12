@@ -1,0 +1,171 @@
+{
+  "runId": "freehand-journey-map-haiku-4-5-mmmnw0bd",
+  "scenarioId": "freehand-journey-map",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Freehand Journey Map",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "freehand",
+  "startedAt": "2026-03-11T23:20:02.137Z",
+  "completedAt": "2026-03-11T23:21:07.972Z",
+  "status": "completed",
+  "roomId": "canvas-2ea59406-6552-432e-b09b-bcaac47112ec",
+  "canvasId": "2ea59406-6552-432e-b09b-bcaac47112ec",
+  "canvasName": "freehand-journey-map-haiku-4-5-freehand-journey-map-haiku-4-5-mmmnw0bd",
+  "viewerPath": "/canvas?room=canvas-2ea59406-6552-432e-b09b-bcaac47112ec&id=2ea59406-6552-432e-b09b-bcaac47112ec&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-journey-map__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-journey-map__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-journey-map__haiku-4-5-doc.json",
+  "finalShapeCount": 18,
+  "actionSummary": {
+    "total": 18,
+    "byName": {
+      "create_shape": 18
+    }
+  },
+  "shapeSummary": {
+    "total": 18,
+    "byType": {
+      "draw": 6,
+      "rectangle": 4,
+      "note": 4,
+      "text": 4
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 54619,
+    "initialTtfbMs": 13337,
+    "totalActionCount": 18,
+    "totalMutatingActionCount": 18,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 18,
+    "avgFirstAckMs": 18928,
+    "avgScreenshotRttMs": 22
+  },
+  "usage": {
+    "inputTokens": 24536,
+    "outputTokens": 2666,
+    "reasoningTokens": null,
+    "cachedInputTokens": 0,
+    "totalTokens": 27202
+  },
+  "estimatedCost": {
+    "inputUsd": 0.024536,
+    "outputUsd": 0.01333,
+    "totalUsd": 0.037866,
+    "notes": "Anthropic Claude Platform list pricing for Haiku 4.5.",
+    "sourceUrl": "https://www.anthropic.com/claude/haiku"
+  },
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "journey-map",
+      "label": "Journey map",
+      "sessionId": "1773271211768-v7ljw2",
+      "status": "completed",
+      "actionSummary": {
+        "total": 18,
+        "byName": {
+          "create_shape": 18
+        }
+      },
+      "metrics": {
+        "durationMs": 54619,
+        "ttfbMs": 13337,
+        "actionCount": 18,
+        "mutatingActionCount": 18,
+        "followupCount": 0,
+        "retryCount": 18,
+        "firstAckMs": 18928,
+        "screenshotRttMs": 22,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 24536,
+          "outputTokens": 2666,
+          "reasoningTokens": null,
+          "cachedInputTokens": 0,
+          "totalTokens": 27202
+        },
+        "estimatedCostUsd": 0.037866
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773271211768-v7ljw2",
+          "roomId": "canvas-2ea59406-6552-432e-b09b-bcaac47112ec",
+          "ts": 1773271211769,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773271211768-v7ljw2",
+          "roomId": "canvas-2ea59406-6552-432e-b09b-bcaac47112ec",
+          "ts": 1773271211798,
+          "preset": "creative",
+          "request_id": "40a0036a-8943-43d8-893a-2bc4e4e3ae9e",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 22,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773271211768-v7ljw2",
+          "roomId": "canvas-2ea59406-6552-432e-b09b-bcaac47112ec",
+          "ts": 1773271211890,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773271211768-v7ljw2",
+          "roomId": "canvas-2ea59406-6552-432e-b09b-bcaac47112ec",
+          "ts": 1773271225106,
+          "preset": "creative",
+          "ttfb": 13337,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773271211768-v7ljw2",
+          "roomId": "canvas-2ea59406-6552-432e-b09b-bcaac47112ec",
+          "ts": 1773271266386,
+          "preset": "creative",
+          "duration": 54617,
+          "chunkCount": 19,
+          "actionCount": 18,
+          "mutatingActionCount": 18,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 18,
+          "first_ack_ms": 18928,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 85,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 0,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 18 time(s)."
+    ]
+  }
+}

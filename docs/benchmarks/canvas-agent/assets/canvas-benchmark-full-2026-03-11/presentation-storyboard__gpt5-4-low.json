@@ -1,0 +1,249 @@
+{
+  "runId": "presentation-storyboard-gpt5-4-low-mmlzkcek",
+  "scenarioId": "presentation-storyboard",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Presentation Storyboard",
+  "variantLabel": "GPT-5 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "presentation",
+  "startedAt": "2026-03-11T11:59:07.367Z",
+  "completedAt": "2026-03-11T12:02:24.172Z",
+  "status": "completed",
+  "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+  "canvasId": "2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+  "canvasName": "presentation-storyboard-gpt5-4-low-presentation-storyboard-gpt5-4-low-mmlzkcek",
+  "viewerPath": "/canvas?room=canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45&id=2b97e6b6-2ac6-4feb-8c60-06825d4ebb45&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__gpt5-4-low-doc.json",
+  "finalShapeCount": 17,
+  "actionSummary": {
+    "total": 21,
+    "byName": {
+      "create_shape": 17,
+      "align": 1,
+      "stack": 2,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 183921,
+    "initialTtfbMs": 68354,
+    "totalActionCount": 21,
+    "totalMutatingActionCount": 21,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 21,
+    "avgFirstAckMs": 72952,
+    "avgScreenshotRttMs": 88
+  },
+  "steps": [
+    {
+      "stepId": "opening-slide",
+      "label": "Opening slide",
+      "sessionId": "1773230357098-qoaq4h",
+      "status": "completed",
+      "actionSummary": {
+        "total": 16,
+        "byName": {
+          "create_shape": 13,
+          "align": 1,
+          "stack": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 105217,
+        "ttfbMs": 68354,
+        "actionCount": 16,
+        "mutatingActionCount": 16,
+        "followupCount": 0,
+        "retryCount": 16,
+        "firstAckMs": 73940,
+        "screenshotRttMs": 26,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773230357098-qoaq4h",
+          "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+          "ts": 1773230357099,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773230357098-qoaq4h",
+          "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+          "ts": 1773230357133,
+          "preset": "creative",
+          "request_id": "506a1305-f716-48dd-8930-6b81cfb83d6b",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 26,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773230357098-qoaq4h",
+          "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+          "ts": 1773230357218,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773230357098-qoaq4h",
+          "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+          "ts": 1773230425453,
+          "preset": "creative",
+          "ttfb": 68354,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773230357098-qoaq4h",
+          "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+          "ts": 1773230462315,
+          "preset": "creative",
+          "duration": 105216,
+          "chunkCount": 17,
+          "actionCount": 16,
+          "mutatingActionCount": 16,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 16,
+          "first_ack_ms": 73940,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    },
+    {
+      "stepId": "continue-storyboard",
+      "label": "Continue storyboard",
+      "sessionId": "1773230463817-o92jt0",
+      "status": "completed",
+      "actionSummary": {
+        "total": 5,
+        "byName": {
+          "create_shape": 4,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 78704,
+        "ttfbMs": 66369,
+        "actionCount": 5,
+        "mutatingActionCount": 5,
+        "followupCount": 0,
+        "retryCount": 5,
+        "firstAckMs": 71964,
+        "screenshotRttMs": 149,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773230463817-o92jt0",
+          "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+          "ts": 1773230463817,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773230463817-o92jt0",
+          "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+          "ts": 1773230463971,
+          "preset": "creative",
+          "request_id": "62e20753-c5a5-428b-9dba-61c7812020db",
+          "timeout_ms": 12000,
+          "image_bytes": 80546,
+          "rtt": 149,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773230463817-o92jt0",
+          "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+          "ts": 1773230464071,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773230463817-o92jt0",
+          "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+          "ts": 1773230530186,
+          "preset": "creative",
+          "ttfb": 66369,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773230463817-o92jt0",
+          "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+          "ts": 1773230542521,
+          "preset": "creative",
+          "duration": 78704,
+          "chunkCount": 5,
+          "actionCount": 5,
+          "mutatingActionCount": 5,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 5,
+          "first_ack_ms": 71964,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 88,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 3,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 21 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 17,
+    "byType": {
+      "box": 6,
+      "note": 9,
+      "draw": 2
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows a storyboard with connected sections labeled 1, 2, and 3, plus descriptive blocks below, scoring high for shape and verb use.",
+    "scoreRationale": "The high score reflects comprehensive shape creation and effective use of required verbs, with clear layout and minimal stability issues.",
+    "strengths": [
+      "Clear sequential storyboard layout with connected labeled shapes",
+      "Effective use of action verbs and variety of shapes"
+    ],
+    "issues": [
+      "Overlapping debug overlay obscures part of the canvas",
+      "Slight inconsistency in shape alignment and spacing"
+    ]
+  }
+}

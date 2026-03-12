@@ -1,0 +1,221 @@
+{
+  "roomId": "canvas-2f054e76-69d8-471e-8780-c61eaf0c13aa",
+  "canvasId": "2f054e76-69d8-471e-8780-c61eaf0c13aa",
+  "canvasName": "remote-board-game-night-haiku-4-5-remote-board-game-night-haiku-4-5-mmlzqefy",
+  "source": "viewer",
+  "shapeCount": 23,
+  "shapes": [
+    {
+      "id": "shape:preset-mmlzqv2v-1",
+      "type": "note",
+      "x": 480,
+      "y": 80,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:turn-order-frame",
+      "type": "geo",
+      "x": 120,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzqzdw-369",
+      "type": "note",
+      "x": 130,
+      "y": 300,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:player-1",
+      "type": "note",
+      "x": 140,
+      "y": 360,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:player-2",
+      "type": "note",
+      "x": 140,
+      "y": 392,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:player-3",
+      "type": "note",
+      "x": 140,
+      "y": 424,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:player-4",
+      "type": "note",
+      "x": 140,
+      "y": 456,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:score-track-bg",
+      "type": "geo",
+      "x": 500,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzrd61-265",
+      "type": "note",
+      "x": 520,
+      "y": 300,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:score-p1",
+      "type": "geo",
+      "x": 520,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:score-p2",
+      "type": "geo",
+      "x": 616,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:score-p3",
+      "type": "geo",
+      "x": 712,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:score-p4",
+      "type": "geo",
+      "x": 808,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:resource-pool-frame",
+      "type": "geo",
+      "x": 1000,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzrqxe-547",
+      "type": "note",
+      "x": 1020,
+      "y": 300,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:resource-1",
+      "type": "geo",
+      "x": 1030,
+      "y": 480,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:resource-2",
+      "type": "geo",
+      "x": 1100,
+      "y": 480,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:resource-3",
+      "type": "geo",
+      "x": 1030,
+      "y": 480,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:resource-4",
+      "type": "geo",
+      "x": 1100,
+      "y": 480,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:resource-5",
+      "type": "geo",
+      "x": 1030,
+      "y": 480,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:resource-6",
+      "type": "geo",
+      "x": 1100,
+      "y": 480,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mascot",
+      "type": "draw",
+      "x": 620,
+      "y": 780,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:preset-mmlzs6fr-963",
+      "type": "note",
+      "x": 640,
+      "y": 800,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773230716316
+  }
+}

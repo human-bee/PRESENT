@@ -1,0 +1,294 @@
+{
+  "roomId": "canvas-909ae8c3-01a4-4d70-befd-aa2b3e78e30f",
+  "canvasId": "909ae8c3-01a4-4d70-befd-aa2b3e78e30f",
+  "canvasName": "podcast-episode-map-haiku-4-5-podcast-episode-map-haiku-4-5-mmmn0dmh",
+  "source": "viewer",
+  "shapeCount": 28,
+  "shapes": [
+    {
+      "id": "shape:podcast-bg",
+      "type": "geo",
+      "x": 40,
+      "y": 60,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:timing-section",
+      "type": "geo",
+      "x": 80,
+      "y": 580,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmn15rk-258",
+      "type": "note",
+      "x": 60,
+      "y": 100,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:segment-cold-open",
+      "type": "geo",
+      "x": 80,
+      "y": 220,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-cold-open",
+      "type": "text",
+      "x": 90,
+      "y": 240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:segment-beat-1",
+      "type": "geo",
+      "x": 350,
+      "y": 220,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-beat-1",
+      "type": "text",
+      "x": 360,
+      "y": 240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:segment-beat-2",
+      "type": "geo",
+      "x": 620,
+      "y": 220,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-beat-2",
+      "type": "text",
+      "x": 630,
+      "y": 240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:segment-sponsor",
+      "type": "geo",
+      "x": 890,
+      "y": 220,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-sponsor",
+      "type": "text",
+      "x": 900,
+      "y": 240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:segment-qa",
+      "type": "geo",
+      "x": 1160,
+      "y": 220,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-qa",
+      "type": "text",
+      "x": 1170,
+      "y": 240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:segment-closing",
+      "type": "geo",
+      "x": 1430,
+      "y": 220,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-closing",
+      "type": "text",
+      "x": 1440,
+      "y": 240,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-cold-open-copy",
+      "type": "note",
+      "x": 90,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-beat-1-copy",
+      "type": "note",
+      "x": 360,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-beat-2-copy",
+      "type": "note",
+      "x": 630,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-sponsor-copy",
+      "type": "note",
+      "x": 900,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-qa-copy",
+      "type": "note",
+      "x": 1170,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:note-closing-copy",
+      "type": "note",
+      "x": 1440,
+      "y": 440,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmn2dms-346",
+      "type": "note",
+      "x": 100,
+      "y": 600,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:timing-cold-open",
+      "type": "note",
+      "x": 90,
+      "y": 660,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:timing-beat-1",
+      "type": "note",
+      "x": 360,
+      "y": 660,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:timing-beat-2",
+      "type": "note",
+      "x": 630,
+      "y": 660,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:timing-sponsor",
+      "type": "note",
+      "x": 900,
+      "y": 660,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:timing-qa",
+      "type": "note",
+      "x": 1170,
+      "y": 660,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:timing-closing",
+      "type": "note",
+      "x": 1440,
+      "y": 660,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773269843057
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "runId": "meeting-retro-board-haiku-4-5-mmmo2qem",
+  "scenarioId": "meeting-retro-board",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Meeting Retro Board",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "collaboration",
+  "startedAt": "2026-03-11T23:25:15.920Z",
+  "completedAt": "2026-03-11T23:26:45.369Z",
+  "status": "completed",
+  "roomId": "canvas-8f92175f-375f-425c-a79f-346299807c45",
+  "canvasId": "8f92175f-375f-425c-a79f-346299807c45",
+  "canvasName": "meeting-retro-board-haiku-4-5-meeting-retro-board-haiku-4-5-mmmo2qem",
+  "viewerPath": "/canvas?room=canvas-8f92175f-375f-425c-a79f-346299807c45&id=8f92175f-375f-425c-a79f-346299807c45&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/meeting-retro-board__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/meeting-retro-board__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/meeting-retro-board__haiku-4-5-doc.json",
+  "finalShapeCount": 15,
+  "actionSummary": {
+    "total": 24,
+    "byName": {
+      "create_shape": 15,
+      "align": 4,
+      "stack": 3,
+      "distribute": 1,
+      "reorder": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 15,
+    "byType": {
+      "rectangle": 1,
+      "text": 3,
+      "note": 11
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 77520,
+    "initialTtfbMs": 23334,
+    "totalActionCount": 24,
+    "totalMutatingActionCount": 24,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 24,
+    "avgFirstAckMs": 29008,
+    "avgScreenshotRttMs": 48
+  },
+  "usage": {
+    "inputTokens": 24520,
+    "outputTokens": 2119,
+    "reasoningTokens": null,
+    "cachedInputTokens": 0,
+    "totalTokens": 26639
+  },
+  "estimatedCost": {
+    "inputUsd": 0.02452,
+    "outputUsd": 0.010594999999999999,
+    "totalUsd": 0.035115,
+    "notes": "Anthropic Claude Platform list pricing for Haiku 4.5.",
+    "sourceUrl": "https://www.anthropic.com/claude/haiku"
+  },
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "retro-columns",
+      "label": "Retro columns",
+      "sessionId": "1773271526244-8nov6a",
+      "status": "completed",
+      "actionSummary": {
+        "total": 24,
+        "byName": {
+          "create_shape": 15,
+          "align": 4,
+          "stack": 3,
+          "distribute": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 77520,
+        "ttfbMs": 23334,
+        "actionCount": 24,
+        "mutatingActionCount": 24,
+        "followupCount": 0,
+        "retryCount": 24,
+        "firstAckMs": 29008,
+        "screenshotRttMs": 48,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 24520,
+          "outputTokens": 2119,
+          "reasoningTokens": null,
+          "cachedInputTokens": 0,
+          "totalTokens": 26639
+        },
+        "estimatedCostUsd": 0.035115
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773271526244-8nov6a",
+          "roomId": "canvas-8f92175f-375f-425c-a79f-346299807c45",
+          "ts": 1773271526246,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773271526244-8nov6a",
+          "roomId": "canvas-8f92175f-375f-425c-a79f-346299807c45",
+          "ts": 1773271538271,
+          "preset": "creative",
+          "request_id": "4dc37615-d7ff-45c7-9671-4373096c2969",
+          "timeout_ms": 12000,
+          "result": "timeout"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773271526244-8nov6a",
+          "roomId": "canvas-8f92175f-375f-425c-a79f-346299807c45",
+          "ts": 1773271538621,
+          "preset": "creative",
+          "request_id": "26864bc2-6d7b-4b15-88dc-ed3c84db9239",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 48,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773271526244-8nov6a",
+          "roomId": "canvas-8f92175f-375f-425c-a79f-346299807c45",
+          "ts": 1773271538755,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773271526244-8nov6a",
+          "roomId": "canvas-8f92175f-375f-425c-a79f-346299807c45",
+          "ts": 1773271549580,
+          "preset": "creative",
+          "ttfb": 23334,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773271526244-8nov6a",
+          "roomId": "canvas-8f92175f-375f-425c-a79f-346299807c45",
+          "ts": 1773271603763,
+          "preset": "creative",
+          "duration": 77514,
+          "chunkCount": 25,
+          "actionCount": 24,
+          "mutatingActionCount": 24,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 24,
+          "first_ack_ms": 29008,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 95,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 10,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 24 time(s)."
+    ]
+  }
+}

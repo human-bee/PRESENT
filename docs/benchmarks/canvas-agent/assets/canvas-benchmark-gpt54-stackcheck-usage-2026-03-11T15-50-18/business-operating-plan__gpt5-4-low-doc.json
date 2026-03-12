@@ -1,0 +1,214 @@
+{
+  "roomId": "canvas-6214e654-2555-439e-9d79-dd178a62fb82",
+  "canvasId": "6214e654-2555-439e-9d79-dd178a62fb82",
+  "canvasName": "business-operating-plan-gpt5-4-low-business-operating-plan-gpt5-4-low-mmmmtu2o",
+  "source": "viewer",
+  "shapeCount": 20,
+  "shapes": [
+    {
+      "id": "shape:qop-frame",
+      "type": "geo",
+      "x": 112,
+      "y": 128,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:qop-title-block",
+      "type": "geo",
+      "x": 144,
+      "y": 160,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:qop-title",
+      "type": "text",
+      "x": 176,
+      "y": 184,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-objectives",
+      "type": "geo",
+      "x": 144,
+      "y": 288,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-owners",
+      "type": "geo",
+      "x": 144,
+      "y": 512,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:lane-risks",
+      "type": "geo",
+      "x": 144,
+      "y": 672,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-objectives",
+      "type": "text",
+      "x": 176,
+      "y": 304,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-owners",
+      "type": "text",
+      "x": 176,
+      "y": 528,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-risks",
+      "type": "text",
+      "x": 176,
+      "y": 688,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-card-1",
+      "type": "note",
+      "x": 208,
+      "y": 368,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-card-2",
+      "type": "note",
+      "x": 240,
+      "y": 368,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-card-3",
+      "type": "note",
+      "x": 272,
+      "y": 368,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-card-4",
+      "type": "note",
+      "x": 304,
+      "y": 368,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-card-1",
+      "type": "note",
+      "x": 208,
+      "y": 544,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-card-2",
+      "type": "note",
+      "x": 240,
+      "y": 544,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-card-3",
+      "type": "note",
+      "x": 272,
+      "y": 544,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-card-1",
+      "type": "note",
+      "x": 208,
+      "y": 720,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-card-2",
+      "type": "note",
+      "x": 240,
+      "y": 720,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-card-3",
+      "type": "note",
+      "x": 272,
+      "y": 720,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:launch-underline",
+      "type": "draw",
+      "x": 176,
+      "y": 236,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773269499331
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+  "canvasId": "dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+  "canvasName": "collaborative-drawing-mural-haiku-4-5-collaborative-drawing-mural-haiku-4-5-mmlzxbi4",
+  "source": "viewer",
+  "shapeCount": 12,
+  "shapes": [
+    {
+      "id": "shape:mural-bg",
+      "type": "geo",
+      "x": 220,
+      "y": 130,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:focal-circle",
+      "type": "geo",
+      "x": 570,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:freehand-main",
+      "type": "draw",
+      "x": 600,
+      "y": 400,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:accent-arc-left",
+      "type": "draw",
+      "x": 440,
+      "y": 420,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:accent-arc-right",
+      "type": "draw",
+      "x": 900,
+      "y": 520,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:preset-mmlzy1yh-552",
+      "type": "note",
+      "x": 620,
+      "y": 620,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:supporting-mark-1",
+      "type": "note",
+      "x": 300,
+      "y": 470,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:supporting-mark-2",
+      "type": "note",
+      "x": 793.3333333333333,
+      "y": 470,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:supporting-mark-3",
+      "type": "note",
+      "x": 546.6666666666666,
+      "y": 470,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:supporting-mark-4",
+      "type": "note",
+      "x": 1040,
+      "y": 470,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:decorative-dash-top",
+      "type": "draw",
+      "x": 660,
+      "y": 240,
+      "props": {
+        "text": null
+      }
+    },
+    {
+      "id": "shape:decorative-dash-bottom",
+      "type": "draw",
+      "x": 660,
+      "y": 750,
+      "props": {
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773231006768
+  }
+}

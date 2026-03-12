@@ -1,0 +1,185 @@
+{
+  "roomId": "canvas-7cb518b3-2581-4285-b98f-6412441fa3e8",
+  "canvasId": "7cb518b3-2581-4285-b98f-6412441fa3e8",
+  "canvasName": "business-operating-plan-haiku-4-5-business-operating-plan-haiku-4-5-mmlykvc5",
+  "source": "viewer",
+  "shapeCount": 19,
+  "shapes": [
+    {
+      "id": "shape:swimlane-bg-objectives",
+      "type": "geo",
+      "x": 360,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:swimlane-bg-owners",
+      "type": "geo",
+      "x": 692,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:swimlane-bg-risks",
+      "type": "geo",
+      "x": 1024,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlyloov-897",
+      "type": "note",
+      "x": 360,
+      "y": 80,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlylwgq-123",
+      "type": "note",
+      "x": 370,
+      "y": 320,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlyly5p-995",
+      "type": "note",
+      "x": 710,
+      "y": 320,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlylzwm-249",
+      "type": "note",
+      "x": 1050,
+      "y": 320,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-note-1",
+      "type": "note",
+      "x": 380,
+      "y": 400,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-note-2",
+      "type": "note",
+      "x": 380,
+      "y": 432,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-note-3",
+      "type": "note",
+      "x": 380,
+      "y": 464,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:obj-note-4",
+      "type": "note",
+      "x": 380,
+      "y": 496,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-1",
+      "type": "note",
+      "x": 720,
+      "y": 400,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-2",
+      "type": "note",
+      "x": 720,
+      "y": 432,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-3",
+      "type": "note",
+      "x": 720,
+      "y": 464,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:owner-note-4",
+      "type": "note",
+      "x": 720,
+      "y": 496,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-1",
+      "type": "note",
+      "x": 1060,
+      "y": 400,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-2",
+      "type": "note",
+      "x": 1060,
+      "y": 432,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-3",
+      "type": "note",
+      "x": 1060,
+      "y": 464,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:risk-note-4",
+      "type": "note",
+      "x": 1060,
+      "y": 496,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773228795141
+  }
+}

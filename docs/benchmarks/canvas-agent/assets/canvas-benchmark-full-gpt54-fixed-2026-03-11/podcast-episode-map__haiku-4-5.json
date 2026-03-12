@@ -1,0 +1,66 @@
+{
+  "runId": "podcast-episode-map-haiku-4-5-mmmll830",
+  "scenarioId": "podcast-episode-map",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Podcast Episode Map",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "podcast",
+  "startedAt": "2026-03-11T22:15:39.768Z",
+  "completedAt": "2026-03-11T22:15:39.769Z",
+  "status": "failed",
+  "roomId": "canvas-e15da218-ed4b-4249-ab01-c656274e751c",
+  "canvasId": "e15da218-ed4b-4249-ab01-c656274e751c",
+  "canvasName": "podcast-episode-map-haiku-4-5-podcast-episode-map-haiku-4-5-mmmll830",
+  "viewerPath": "/canvas?room=canvas-e15da218-ed4b-4249-ab01-c656274e751c&id=e15da218-ed4b-4249-ab01-c656274e751c&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": {
+    "summary": "Visual analysis failed.",
+    "scoreRationale": "ENOENT: no such file or directory, open '/Users/bsteinher/.codex/worktrees/a22a/PRESENT/docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-fixed-2026-03-11/podcast-episode-map__haiku-4-5.png'",
+    "strengths": [],
+    "issues": [
+      "Analysis pass failed for this artifact."
+    ]
+  },
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

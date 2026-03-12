@@ -1,0 +1,59 @@
+{
+  "runId": "freehand-journey-map-haiku-4-5-mmmlindh",
+  "scenarioId": "freehand-journey-map",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Freehand Journey Map",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "freehand",
+  "startedAt": "2026-03-11T22:13:39.614Z",
+  "completedAt": "2026-03-11T22:13:39.615Z",
+  "status": "failed",
+  "roomId": "canvas-b982047c-c69a-4e8a-abd9-63ee639c8e9e",
+  "canvasId": "b982047c-c69a-4e8a-abd9-63ee639c8e9e",
+  "canvasName": "freehand-journey-map-haiku-4-5-freehand-journey-map-haiku-4-5-mmmlindh",
+  "viewerPath": "/canvas?room=canvas-b982047c-c69a-4e8a-abd9-63ee639c8e9e&id=b982047c-c69a-4e8a-abd9-63ee639c8e9e&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/freehand-journey-map__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/freehand-journey-map__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/freehand-journey-map__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

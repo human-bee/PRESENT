@@ -1,0 +1,158 @@
+{
+  "runId": "multi-fairy-zones-gpt5-4-low-mmm03vxz",
+  "scenarioId": "multi-fairy-zones",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Multi-Fairy Zones",
+  "variantLabel": "GPT-5 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "multi-fairy",
+  "startedAt": "2026-03-11T12:14:19.184Z",
+  "completedAt": "2026-03-11T12:16:52.102Z",
+  "status": "completed",
+  "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+  "canvasId": "a0d71405-ecda-4eb8-8264-6e48210418a5",
+  "canvasName": "multi-fairy-zones-gpt5-4-low-multi-fairy-zones-gpt5-4-low-mmm03vxz",
+  "viewerPath": "/canvas?room=canvas-a0d71405-ecda-4eb8-8264-6e48210418a5&id=a0d71405-ecda-4eb8-8264-6e48210418a5&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__gpt5-4-low-doc.json",
+  "finalShapeCount": 8,
+  "actionSummary": {
+    "total": 10,
+    "byName": {
+      "create_shape": 8,
+      "align": 2
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 141732,
+    "initialTtfbMs": 118257,
+    "totalActionCount": 10,
+    "totalMutatingActionCount": 10,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 10,
+    "avgFirstAckMs": 123855,
+    "avgScreenshotRttMs": 33
+  },
+  "steps": [
+    {
+      "stepId": "zone-layout",
+      "label": "Zone layout",
+      "sessionId": "1773231268724-ztqqe1",
+      "status": "completed",
+      "actionSummary": {
+        "total": 10,
+        "byName": {
+          "create_shape": 8,
+          "align": 2
+        }
+      },
+      "metrics": {
+        "durationMs": 141732,
+        "ttfbMs": 118257,
+        "actionCount": 10,
+        "mutatingActionCount": 10,
+        "followupCount": 0,
+        "retryCount": 10,
+        "firstAckMs": 123855,
+        "screenshotRttMs": 33,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773231268724-ztqqe1",
+          "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+          "ts": 1773231268724,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773231268724-ztqqe1",
+          "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+          "ts": 1773231268766,
+          "preset": "creative",
+          "request_id": "741c1302-eef1-4b05-9acf-561a9f9a78f0",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 33,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773231268724-ztqqe1",
+          "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+          "ts": 1773231268881,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773231268724-ztqqe1",
+          "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+          "ts": 1773231386981,
+          "preset": "creative",
+          "ttfb": 118257,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773231268724-ztqqe1",
+          "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+          "ts": 1773231410455,
+          "preset": "creative",
+          "duration": 141731,
+          "chunkCount": 10,
+          "actionCount": 10,
+          "mutatingActionCount": 10,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 10,
+          "first_ack_ms": 123855,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 90,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 5,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 10 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 8,
+    "byType": {
+      "box": 4,
+      "note": 4
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows four labeled zones with distinct boundary colors and a central shared zone, demonstrating clear organization.",
+    "scoreRationale": "The score likely reflects good shape usage, the inclusion of required and preferred verbs, clear screenshots, and stable layout with minor issues.",
+    "strengths": [
+      "Clear labeling of distinct fairy zones",
+      "Use of colored borders to separate zones visually"
+    ],
+    "issues": [
+      "Some imbalance in zone sizes and shape alignment",
+      "Realtime Sync Health showing degraded status"
+    ]
+  }
+}

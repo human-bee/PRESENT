@@ -1,0 +1,173 @@
+{
+  "runId": "freehand-mascot-poster-haiku-4-5-mmmnst0m",
+  "scenarioId": "freehand-mascot-poster",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Freehand Mascot Poster",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "freehand",
+  "startedAt": "2026-03-11T23:17:32.757Z",
+  "completedAt": "2026-03-11T23:18:30.657Z",
+  "status": "completed",
+  "roomId": "canvas-123c36b2-ddd7-40d9-9e84-3390b607ba76",
+  "canvasId": "123c36b2-ddd7-40d9-9e84-3390b607ba76",
+  "canvasName": "freehand-mascot-poster-haiku-4-5-freehand-mascot-poster-haiku-4-5-mmmnst0m",
+  "viewerPath": "/canvas?room=canvas-123c36b2-ddd7-40d9-9e84-3390b607ba76&id=123c36b2-ddd7-40d9-9e84-3390b607ba76&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-mascot-poster__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-mascot-poster__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/freehand-mascot-poster__haiku-4-5-doc.json",
+  "finalShapeCount": 12,
+  "actionSummary": {
+    "total": 14,
+    "byName": {
+      "create_shape": 12,
+      "align": 1,
+      "distribute": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 12,
+    "byType": {
+      "draw": 8,
+      "note": 4
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 45836,
+    "initialTtfbMs": 13418,
+    "totalActionCount": 14,
+    "totalMutatingActionCount": 14,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 14,
+    "avgFirstAckMs": 19099,
+    "avgScreenshotRttMs": 24
+  },
+  "usage": {
+    "inputTokens": 24535,
+    "outputTokens": 2637,
+    "reasoningTokens": null,
+    "cachedInputTokens": 0,
+    "totalTokens": 27172
+  },
+  "estimatedCost": {
+    "inputUsd": 0.024535,
+    "outputUsd": 0.013185,
+    "totalUsd": 0.037720000000000004,
+    "notes": "Anthropic Claude Platform list pricing for Haiku 4.5.",
+    "sourceUrl": "https://www.anthropic.com/claude/haiku"
+  },
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "mascot-poster",
+      "label": "Mascot poster",
+      "sessionId": "1773271062506-n8phhr",
+      "status": "completed",
+      "actionSummary": {
+        "total": 14,
+        "byName": {
+          "create_shape": 12,
+          "align": 1,
+          "distribute": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 45836,
+        "ttfbMs": 13418,
+        "actionCount": 14,
+        "mutatingActionCount": 14,
+        "followupCount": 0,
+        "retryCount": 14,
+        "firstAckMs": 19099,
+        "screenshotRttMs": 24,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 24535,
+          "outputTokens": 2637,
+          "reasoningTokens": null,
+          "cachedInputTokens": 0,
+          "totalTokens": 27172
+        },
+        "estimatedCostUsd": 0.037720000000000004
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773271062506-n8phhr",
+          "roomId": "canvas-123c36b2-ddd7-40d9-9e84-3390b607ba76",
+          "ts": 1773271062507,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773271062506-n8phhr",
+          "roomId": "canvas-123c36b2-ddd7-40d9-9e84-3390b607ba76",
+          "ts": 1773271062538,
+          "preset": "creative",
+          "request_id": "e543ddf5-3241-4cae-83d2-db88d7bc4140",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 24,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773271062506-n8phhr",
+          "roomId": "canvas-123c36b2-ddd7-40d9-9e84-3390b607ba76",
+          "ts": 1773271062635,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773271062506-n8phhr",
+          "roomId": "canvas-123c36b2-ddd7-40d9-9e84-3390b607ba76",
+          "ts": 1773271075925,
+          "preset": "creative",
+          "ttfb": 13418,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773271062506-n8phhr",
+          "roomId": "canvas-123c36b2-ddd7-40d9-9e84-3390b607ba76",
+          "ts": 1773271108342,
+          "preset": "creative",
+          "duration": 45835,
+          "chunkCount": 15,
+          "actionCount": 14,
+          "mutatingActionCount": 14,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 14,
+          "first_ack_ms": 19099,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 85,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 0,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 14 time(s)."
+    ]
+  }
+}

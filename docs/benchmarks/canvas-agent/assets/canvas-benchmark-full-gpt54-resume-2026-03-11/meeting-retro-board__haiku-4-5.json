@@ -1,0 +1,59 @@
+{
+  "runId": "meeting-retro-board-haiku-4-5-mmmliob1",
+  "scenarioId": "meeting-retro-board",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Meeting Retro Board",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "collaboration",
+  "startedAt": "2026-03-11T22:13:40.803Z",
+  "completedAt": "2026-03-11T22:13:40.804Z",
+  "status": "failed",
+  "roomId": "canvas-c2b4a5a2-9ead-47bd-9d83-03b0383a035c",
+  "canvasId": "c2b4a5a2-9ead-47bd-9d83-03b0383a035c",
+  "canvasName": "meeting-retro-board-haiku-4-5-meeting-retro-board-haiku-4-5-mmmliob1",
+  "viewerPath": "/canvas?room=canvas-c2b4a5a2-9ead-47bd-9d83-03b0383a035c&id=c2b4a5a2-9ead-47bd-9d83-03b0383a035c&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/meeting-retro-board__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/meeting-retro-board__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-resume-2026-03-11/meeting-retro-board__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "anthropic",
+  "model": "anthropic:claude-haiku-4-5",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "fetch failed"
+    ]
+  },
+  "error": "fetch failed"
+}

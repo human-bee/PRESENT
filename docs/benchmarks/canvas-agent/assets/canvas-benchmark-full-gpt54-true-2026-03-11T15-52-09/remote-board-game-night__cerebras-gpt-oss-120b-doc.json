@@ -1,0 +1,64 @@
+{
+  "roomId": "canvas-a3a076e0-3c78-4d70-8d0d-a5198de5dcfb",
+  "canvasId": "a3a076e0-3c78-4d70-8d0d-a5198de5dcfb",
+  "canvasName": "remote-board-game-night-cerebras-gpt-oss-120b-remote-board-game-night-cerebras-gpt-oss-120b-mmmnmd8y",
+  "source": "viewer",
+  "shapeCount": 5,
+  "shapes": [
+    {
+      "id": "shape:preset-mmmnmn3s-512",
+      "type": "note",
+      "x": 520,
+      "y": 180,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnmn3s-994",
+      "type": "note",
+      "x": 380,
+      "y": 300,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnmn3s-520",
+      "type": "note",
+      "x": 720,
+      "y": 300,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmnmn3s-31",
+      "type": "note",
+      "x": 380,
+      "y": 380,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:mascot",
+      "type": "draw",
+      "x": 1020,
+      "y": 300,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773270769972
+  }
+}

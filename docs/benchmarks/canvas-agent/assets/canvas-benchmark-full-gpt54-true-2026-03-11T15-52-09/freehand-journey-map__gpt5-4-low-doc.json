@@ -1,0 +1,244 @@
+{
+  "roomId": "canvas-891d91d4-de3f-40ea-926a-c242222e817f",
+  "canvasId": "891d91d4-de3f-40ea-926a-c242222e817f",
+  "canvasName": "freehand-journey-map-gpt5-4-low-freehand-journey-map-gpt5-4-low-mmmnxf9j",
+  "source": "viewer",
+  "shapeCount": 23,
+  "shapes": [
+    {
+      "id": "shape:journey-start",
+      "type": "draw",
+      "x": 200,
+      "y": 460,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:journey-signup",
+      "type": "draw",
+      "x": 410,
+      "y": 444,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:journey-team",
+      "type": "draw",
+      "x": 670,
+      "y": 460,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:journey-firstdoc",
+      "type": "draw",
+      "x": 940,
+      "y": 452,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:journey-live",
+      "type": "draw",
+      "x": 1190,
+      "y": 450,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:journey-aha",
+      "type": "draw",
+      "x": 1450,
+      "y": 446,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:label-start",
+      "type": "text",
+      "x": 200,
+      "y": 562,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-signup",
+      "type": "text",
+      "x": 420,
+      "y": 570,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-team",
+      "type": "text",
+      "x": 680,
+      "y": 576,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-firstdoc",
+      "type": "text",
+      "x": 940,
+      "y": 576,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-live",
+      "type": "text",
+      "x": 1188,
+      "y": 576,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:label-aha",
+      "type": "text",
+      "x": 1444,
+      "y": 576,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:emotion-curve",
+      "type": "draw",
+      "x": 220,
+      "y": 690,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:emotion-axis",
+      "type": "draw",
+      "x": 172,
+      "y": 632,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:emotion-high",
+      "type": "text",
+      "x": 184,
+      "y": 624,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:emotion-low",
+      "type": "text",
+      "x": 184,
+      "y": 744,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:emotion-label-1",
+      "type": "text",
+      "x": 346,
+      "y": 780,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:emotion-label-2",
+      "type": "text",
+      "x": 738,
+      "y": 794,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:emotion-label-3",
+      "type": "text",
+      "x": 1104,
+      "y": 670,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:emotion-label-4",
+      "type": "text",
+      "x": 1480,
+      "y": 584,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:flourish-spark-1",
+      "type": "draw",
+      "x": 250,
+      "y": 370,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:flourish-spark-2",
+      "type": "draw",
+      "x": 1280,
+      "y": 360,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    },
+    {
+      "id": "shape:flourish-underline",
+      "type": "draw",
+      "x": 200,
+      "y": 606,
+      "props": {
+        "geo": null,
+        "text": null
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271372180
+  }
+}

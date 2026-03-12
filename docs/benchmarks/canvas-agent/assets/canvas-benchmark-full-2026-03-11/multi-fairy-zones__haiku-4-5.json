@@ -1,0 +1,154 @@
+{
+  "runId": "multi-fairy-zones-haiku-4-5-mmm02uir",
+  "scenarioId": "multi-fairy-zones",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Multi-Fairy Zones",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "multi-fairy",
+  "startedAt": "2026-03-11T12:13:30.497Z",
+  "completedAt": "2026-03-11T12:14:18.740Z",
+  "status": "completed",
+  "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+  "canvasId": "75572254-fbc1-4505-91a8-0626f57b74ce",
+  "canvasName": "multi-fairy-zones-haiku-4-5-multi-fairy-zones-haiku-4-5-mmm02uir",
+  "viewerPath": "/canvas?room=canvas-75572254-fbc1-4505-91a8-0626f57b74ce&id=75572254-fbc1-4505-91a8-0626f57b74ce&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__haiku-4-5-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 12,
+    "byName": {
+      "create_shape": 12
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 36819,
+    "initialTtfbMs": 8900,
+    "totalActionCount": 12,
+    "totalMutatingActionCount": 12,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 12,
+    "avgFirstAckMs": 14472,
+    "avgScreenshotRttMs": 27
+  },
+  "steps": [
+    {
+      "stepId": "zone-layout",
+      "label": "Zone layout",
+      "sessionId": "1773231220334-7ybvyh",
+      "status": "completed",
+      "actionSummary": {
+        "total": 12,
+        "byName": {
+          "create_shape": 12
+        }
+      },
+      "metrics": {
+        "durationMs": 36819,
+        "ttfbMs": 8900,
+        "actionCount": 12,
+        "mutatingActionCount": 12,
+        "followupCount": 0,
+        "retryCount": 12,
+        "firstAckMs": 14472,
+        "screenshotRttMs": 27,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773231220334-7ybvyh",
+          "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+          "ts": 1773231220335,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773231220334-7ybvyh",
+          "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+          "ts": 1773231220375,
+          "preset": "creative",
+          "request_id": "55e119f9-0c23-4fd9-9baa-7821dd5a3df8",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 27,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773231220334-7ybvyh",
+          "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+          "ts": 1773231220471,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773231220334-7ybvyh",
+          "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+          "ts": 1773231229235,
+          "preset": "creative",
+          "ttfb": 8900,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773231220334-7ybvyh",
+          "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+          "ts": 1773231257152,
+          "preset": "creative",
+          "duration": 36817,
+          "chunkCount": 13,
+          "actionCount": 12,
+          "mutatingActionCount": 12,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 12,
+          "first_ack_ms": 14472,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 50,
+    "grade": "partial",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 35,
+      "preferredVerbs": 0,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Shape count below target (0/7).",
+      "Retries recorded 12 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "visualAnalysis": {
+    "summary": "The canvas displays an error message with no shapes visible.",
+    "scoreRationale": "Score is low because no shapes were successfully created and an error interrupted normal function.",
+    "strengths": [
+      "Screenshot clearly shows the error message",
+      "Some diagnostic information about sync and connection is visible"
+    ],
+    "issues": [
+      "No shapes created despite multiple create attempts",
+      "Validation error interrupts canvas functionality"
+    ]
+  }
+}

@@ -26,6 +26,10 @@ import { buildLivekitTokenHeaders } from '@/components/ui/livekit/hooks/utils/lk
 import { resolveEdgeIngressUrl } from '@/lib/edge-ingress';
 import { createVoiceControlMessage, type VoiceTurnMode } from '@/lib/livekit/voice-control';
 import { createAudioCommandRecorder } from './audio-command-recorder';
+import {
+  buildFairyCanvasModelRequest,
+  readStoredFairyCanvasModel,
+} from '@/lib/fairy-canvas-model-selection';
 
 /**
  * Props for the MessageThreadCollapsible component
@@ -595,6 +599,7 @@ export const MessageThreadCollapsible = React.forwardRef<
         typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
           ? crypto.randomUUID()
           : Math.random().toString(36).slice(2);
+      const runtimeSelection = buildFairyCanvasModelRequest(readStoredFairyCanvasModel());
       try {
         console.debug('[Transcript] Canvas steward prompt', {
           room: roomName,
@@ -616,11 +621,13 @@ export const MessageThreadCollapsible = React.forwardRef<
         body: JSON.stringify({
           room: roomName,
           task: 'fairy.intent',
+          ...(runtimeSelection ? runtimeSelection : {}),
           params: {
             id: requestId,
             room: roomName,
             message,
             source: 'voice',
+            ...(runtimeSelection ? runtimeSelection : {}),
           },
         }),
       });

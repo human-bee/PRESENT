@@ -1,0 +1,59 @@
+{
+  "runId": "podcast-episode-map-cerebras-gpt-oss-120b-mmmmnkot",
+  "scenarioId": "podcast-episode-map",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Podcast Episode Map",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "podcast",
+  "startedAt": "2026-03-11T22:45:29.053Z",
+  "completedAt": "2026-03-11T22:45:29.058Z",
+  "status": "failed",
+  "roomId": "canvas-e619027e-2a53-448b-aff2-6f4bd935dde9",
+  "canvasId": "e619027e-2a53-448b-aff2-6f4bd935dde9",
+  "canvasName": "podcast-episode-map-cerebras-gpt-oss-120b-podcast-episode-map-cerebras-gpt-oss-120b-mmmmnkot",
+  "viewerPath": "/canvas?room=canvas-e619027e-2a53-448b-aff2-6f4bd935dde9&id=e619027e-2a53-448b-aff2-6f4bd935dde9&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/podcast-episode-map__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/podcast-episode-map__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-clean-2026-03-11T15-39-40/podcast-episode-map__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "metrics": {
+    "totalDurationMs": 0,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "usage": null,
+  "estimatedCost": null,
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": null,
+  "steps": [],
+  "score": {
+    "overall": 0,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 0,
+      "stability": 0
+    },
+    "notes": [
+      "browser.newPage: Target page, context or browser has been closed"
+    ]
+  },
+  "error": "browser.newPage: Target page, context or browser has been closed"
+}

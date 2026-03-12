@@ -1,0 +1,158 @@
+{
+  "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+  "canvasId": "7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+  "canvasName": "remote-board-game-night-cerebras-gpt-oss-120b-remote-board-game-night-cerebras-gpt-oss-120b-mmlzwy85",
+  "source": "viewer",
+  "shapeCount": 16,
+  "shapes": [
+    {
+      "id": "shape:preset-mmlzx7ll-14",
+      "type": "note",
+      "x": 600,
+      "y": 120,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:turn-order-frame",
+      "type": "geo",
+      "x": 260,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-845",
+      "type": "note",
+      "x": 280,
+      "y": 300,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-169",
+      "type": "note",
+      "x": 280,
+      "y": 340,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-527",
+      "type": "note",
+      "x": 280,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-877",
+      "type": "note",
+      "x": 280,
+      "y": 420,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:resource-pool-frame",
+      "type": "geo",
+      "x": 880,
+      "y": 280,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-959",
+      "type": "note",
+      "x": 900,
+      "y": 300,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-261",
+      "type": "note",
+      "x": 900,
+      "y": 340,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-32",
+      "type": "note",
+      "x": 900,
+      "y": 380,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-968",
+      "type": "note",
+      "x": 900,
+      "y": 420,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:score-track-frame",
+      "type": "geo",
+      "x": 480,
+      "y": 680,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-719",
+      "type": "note",
+      "x": 500,
+      "y": 700,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-813",
+      "type": "note",
+      "x": 600,
+      "y": 700,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-206",
+      "type": "note",
+      "x": 700,
+      "y": 700,
+      "props": {
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmlzx7lm-209",
+      "type": "note",
+      "x": 800,
+      "y": 700,
+      "props": {
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773230952310
+  }
+}

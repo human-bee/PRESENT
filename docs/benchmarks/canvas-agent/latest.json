@@ -1,0 +1,5461 @@
+{
+  "benchmark": "canvas-agent-benchmark-suite",
+  "suiteId": "canvas-benchmark-full-2026-03-11",
+  "generatedAt": "2026-03-11T12:25:14.099Z",
+  "baseUrl": "http://127.0.0.1:3000",
+  "executionMode": "livekit-viewer-direct-runner",
+  "assumptions": [
+    "Each run uses a fresh room and canvas to avoid queue and document contention.",
+    "The benchmark uses the live viewer plus direct canvas runner path for deterministic screenshot capture.",
+    "The GPT-5 Low comparison label maps to the OpenAI GPT-5 canvas path with a lean preset."
+  ],
+  "variants": [
+    {
+      "id": "haiku-4-5",
+      "label": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "provider": "anthropic",
+      "model": "anthropic:claude-haiku-4-5",
+      "execution": {
+        "preset": "creative",
+        "contextProfile": "standard",
+        "configOverrides": {
+          "followups": {
+            "maxDepth": 2
+          }
+        }
+      }
+    },
+    {
+      "id": "gpt5-4-low",
+      "label": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "provider": "openai",
+      "model": "openai:gpt-5",
+      "assumptions": [
+        "Runtime maps the requested label to the OpenAI GPT-5 canvas path.",
+        "Low-latency behavior is approximated through the precise preset and lean followup budget."
+      ],
+      "execution": {
+        "preset": "precise",
+        "contextProfile": "standard",
+        "configOverrides": {
+          "followups": {
+            "maxDepth": 1
+          },
+          "prompt": {
+            "maxChars": 160000
+          }
+        }
+      }
+    },
+    {
+      "id": "cerebras-gpt-oss-120b",
+      "label": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "provider": "cerebras",
+      "model": "cerebras:gpt-oss-120b",
+      "execution": {
+        "preset": "precise",
+        "contextProfile": "standard",
+        "configOverrides": {
+          "followups": {
+            "maxDepth": 1
+          },
+          "prompt": {
+            "maxChars": 160000
+          }
+        }
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "business-operating-plan",
+      "label": "Business Operating Plan",
+      "category": "business",
+      "description": "A structured planning board with objectives, owners, and risks.",
+      "tags": [
+        "business",
+        "planning",
+        "layout"
+      ],
+      "steps": [
+        {
+          "id": "plan-board",
+          "label": "Plan board",
+          "message": "Build a quarterly operating plan canvas for a startup launch. Use a clear title, three swimlanes for objectives, owners, and risks, and enough notes or cards that an operator could talk through it on a call."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 8,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "distribute",
+          "stack"
+        ]
+      }
+    },
+    {
+      "id": "podcast-episode-map",
+      "label": "Podcast Episode Map",
+      "category": "podcast",
+      "description": "An episode board with segment sequencing and sponsor placement.",
+      "tags": [
+        "podcast",
+        "storytelling",
+        "sequence"
+      ],
+      "steps": [
+        {
+          "id": "episode-outline",
+          "label": "Episode outline",
+          "message": "Design a podcast episode planning board for a design-and-technology show. Map the cold open, segment beats, sponsor slot, listener questions, and closing. Make it readable for collaborators in a live canvas review."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 7,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "stack",
+          "align"
+        ]
+      }
+    },
+    {
+      "id": "collaborative-brainstorm",
+      "label": "Collaborative Brainstorm",
+      "category": "brainstorm",
+      "description": "A cluster-based ideation board with grouped themes.",
+      "tags": [
+        "brainstorm",
+        "collaboration",
+        "sticky-notes"
+      ],
+      "steps": [
+        {
+          "id": "theme-clusters",
+          "label": "Theme clusters",
+          "message": "Create a collaborative brainstorm board for new realtime-canvas features. Show three thematic clusters, leave room for new notes, and label the clusters with short, memorable names."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 9,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "group"
+        ]
+      }
+    },
+    {
+      "id": "scratchpad-systems",
+      "label": "Scratchpad Systems Sketch",
+      "category": "scratchpad",
+      "description": "An informal but legible systems sketch with arrows and annotations.",
+      "tags": [
+        "scratchpad",
+        "systems",
+        "diagram"
+      ],
+      "steps": [
+        {
+          "id": "latency-sketch",
+          "label": "Latency sketch",
+          "message": "On a blank board, sketch the low-latency canvas pipeline as a rough scratchpad: voice input, queue, steward, screenshot, action stream, and ack loop. Keep it legible but informal, like something a staff engineer would draw live."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 6,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "reorder",
+          "align"
+        ]
+      }
+    },
+    {
+      "id": "presentation-storyboard",
+      "label": "Presentation Storyboard",
+      "category": "presentation",
+      "description": "A visually strong presentation board that continues over two turns.",
+      "tags": [
+        "presentation",
+        "storyboard",
+        "continuation"
+      ],
+      "steps": [
+        {
+          "id": "opening-slide",
+          "label": "Opening slide",
+          "message": "Draft a presentation storyboard for a product kickoff. Create a strong opening panel, two supporting panels, and concise visual hierarchy for a live walkthrough."
+        },
+        {
+          "id": "continue-storyboard",
+          "label": "Continue storyboard",
+          "message": "Continue the existing storyboard without recreating the opening panel. Add a proof or evidence area and a final next-steps panel that fits the composition."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 8,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "update_shape",
+          "align",
+          "distribute"
+        ]
+      }
+    },
+    {
+      "id": "remote-board-game-night",
+      "label": "Remote Board Game Night",
+      "category": "play",
+      "description": "A playful board for turn order, score, and shared game state.",
+      "tags": [
+        "play",
+        "game-night",
+        "scoreboard"
+      ],
+      "steps": [
+        {
+          "id": "game-state",
+          "label": "Game state board",
+          "message": "Design a remote board game night canvas with a title, turn order area, score track, shared resource pool, and a playful mascot or flourish. It should feel useful, not childish."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 8,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "stack",
+          "reorder"
+        ]
+      }
+    },
+    {
+      "id": "collaborative-drawing-mural",
+      "label": "Collaborative Drawing Mural",
+      "category": "collaborative-drawing",
+      "description": "A freer canvas that pressures the pen and spatial-composition path.",
+      "tags": [
+        "drawing",
+        "pen",
+        "mural"
+      ],
+      "steps": [
+        {
+          "id": "draw-mural",
+          "label": "Draw mural",
+          "message": "Use the canvas like a collaborative drawing wall. Create a lively mural with at least some freehand energy, a central focal area, and supporting marks around it. Keep it tasteful and presentation-ready."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 5,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "draw",
+          "reorder"
+        ]
+      }
+    },
+    {
+      "id": "multi-fairy-zones",
+      "label": "Multi-Fairy Zones",
+      "category": "multi-fairy",
+      "description": "A board divided into clearly separated work zones to mimic swarm collaboration.",
+      "tags": [
+        "multi-fairy",
+        "zones",
+        "parallelism"
+      ],
+      "steps": [
+        {
+          "id": "zone-layout",
+          "label": "Zone layout",
+          "message": "Lay out a canvas as if three fairies were collaborating in parallel. Create three clearly separated zones with distinct visual purposes and leave a shared center for synthesis."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 7,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "distribute"
+        ]
+      }
+    },
+    {
+      "id": "meeting-retro-board",
+      "label": "Meeting Retro Board",
+      "category": "collaboration",
+      "description": "A classic retro board with structure and enough density to test organization.",
+      "tags": [
+        "retro",
+        "collaboration",
+        "sticky-notes"
+      ],
+      "steps": [
+        {
+          "id": "retro-columns",
+          "label": "Retro columns",
+          "message": "Create a team retrospective board with three columns for wins, friction, and experiments. Populate it with enough notes to feel real and keep the spacing disciplined."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 9,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "stack",
+          "align",
+          "distribute"
+        ]
+      }
+    },
+    {
+      "id": "call-ready-hero-board",
+      "label": "Call-Ready Hero Board",
+      "category": "realtime",
+      "description": "A high-signal board optimized for being reviewed live on a video call.",
+      "tags": [
+        "realtime",
+        "call",
+        "hero-layout"
+      ],
+      "steps": [
+        {
+          "id": "hero-board",
+          "label": "Hero board",
+          "message": "Create a call-ready hero board for a live video review. Make one dominant idea area, supporting notes, and enough whitespace that a presenter could quickly orient teammates in realtime."
+        }
+      ],
+      "evaluation": {
+        "minShapeCount": 6,
+        "requiredVerbs": [
+          "create_shape"
+        ],
+        "preferredVerbs": [
+          "align",
+          "reorder"
+        ]
+      }
+    }
+  ],
+  "runs": [
+    {
+      "runId": "business-operating-plan-haiku-4-5-mmlywhy3",
+      "scenarioId": "business-operating-plan",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Business Operating Plan",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "business",
+      "startedAt": "2026-03-11T11:40:34.928Z",
+      "completedAt": "2026-03-11T11:42:01.569Z",
+      "status": "completed",
+      "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+      "canvasId": "35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+      "canvasName": "business-operating-plan-haiku-4-5-business-operating-plan-haiku-4-5-mmlywhy3",
+      "viewerPath": "/canvas?room=canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152&id=35fdff1d-18e1-4307-a1d2-1bdd4e0c2152&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__haiku-4-5-doc.json",
+      "finalShapeCount": 20,
+      "actionSummary": {
+        "total": 27,
+        "byName": {
+          "create_shape": 20,
+          "align": 3,
+          "stack": 3,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 75579,
+        "initialTtfbMs": 14082,
+        "totalActionCount": 27,
+        "totalMutatingActionCount": 27,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 27,
+        "avgFirstAckMs": 19734,
+        "avgScreenshotRttMs": 29
+      },
+      "steps": [
+        {
+          "stepId": "plan-board",
+          "label": "Plan board",
+          "sessionId": "1773229244416-dpdrwi",
+          "status": "completed",
+          "actionSummary": {
+            "total": 27,
+            "byName": {
+              "create_shape": 20,
+              "align": 3,
+              "stack": 3,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 75579,
+            "ttfbMs": 14082,
+            "actionCount": 27,
+            "mutatingActionCount": 27,
+            "followupCount": 0,
+            "retryCount": 27,
+            "firstAckMs": 19734,
+            "screenshotRttMs": 29,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773229244416-dpdrwi",
+              "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+              "ts": 1773229244434,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773229244416-dpdrwi",
+              "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+              "ts": 1773229244472,
+              "preset": "creative",
+              "request_id": "360a836f-f8a6-4210-90e1-a93b65eb8483",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 29,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773229244416-dpdrwi",
+              "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+              "ts": 1773229244585,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773229244416-dpdrwi",
+              "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+              "ts": 1773229258516,
+              "preset": "creative",
+              "ttfb": 14082,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773229244416-dpdrwi",
+              "roomId": "canvas-35fdff1d-18e1-4307-a1d2-1bdd4e0c2152",
+              "ts": 1773229319992,
+              "preset": "creative",
+              "duration": 75557,
+              "chunkCount": 28,
+              "actionCount": 27,
+              "mutatingActionCount": 27,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 27,
+              "first_ack_ms": 19734,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 92,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 7,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 27 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 20,
+        "byType": {
+          "box": 4,
+          "note": 16
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas is a partially developed business operating plan with 20 shapes, some overlapping and misaligned elements, and visible interface artifacts.",
+        "scoreRationale": "The score likely reflects adequate shape usage and verb inclusion but is reduced by cluttered layout, overlapping shapes, and screenshot distractions.",
+        "strengths": [
+          "Includes required shapes and verbs relevant to the business plan",
+          "Maintains presence of key labels like 'Q1 Launch Operating' and CEO annotation"
+        ],
+        "issues": [
+          "Multiple overlapping shapes causing visual clutter",
+          "Screenshot shows interface elements and degraded sync health affecting overall clarity"
+        ]
+      }
+    },
+    {
+      "runId": "business-operating-plan-gpt5-4-low-mmlyyd7s",
+      "scenarioId": "business-operating-plan",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Business Operating Plan",
+      "variantLabel": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "business",
+      "startedAt": "2026-03-11T11:42:02.229Z",
+      "completedAt": "2026-03-11T11:45:33.039Z",
+      "status": "completed",
+      "roomId": "canvas-d5924093-9a18-4ffd-bab1-65370cd81059",
+      "canvasId": "d5924093-9a18-4ffd-bab1-65370cd81059",
+      "canvasName": "business-operating-plan-gpt5-4-low-business-operating-plan-gpt5-4-low-mmlyyd7s",
+      "viewerPath": "/canvas?room=canvas-d5924093-9a18-4ffd-bab1-65370cd81059&id=d5924093-9a18-4ffd-bab1-65370cd81059&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__gpt5-4-low-doc.json",
+      "finalShapeCount": 23,
+      "actionSummary": {
+        "total": 33,
+        "byName": {
+          "create_shape": 23,
+          "align": 4,
+          "stack": 4,
+          "reorder": 2
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 199887,
+        "initialTtfbMs": 125062,
+        "totalActionCount": 33,
+        "totalMutatingActionCount": 33,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 33,
+        "avgFirstAckMs": 130651,
+        "avgScreenshotRttMs": 28
+      },
+      "steps": [
+        {
+          "stepId": "plan-board",
+          "label": "Plan board",
+          "sessionId": "1773229331575-f6ytsi",
+          "status": "completed",
+          "actionSummary": {
+            "total": 33,
+            "byName": {
+              "create_shape": 23,
+              "align": 4,
+              "stack": 4,
+              "reorder": 2
+            }
+          },
+          "metrics": {
+            "durationMs": 199887,
+            "ttfbMs": 125062,
+            "actionCount": 33,
+            "mutatingActionCount": 33,
+            "followupCount": 0,
+            "retryCount": 33,
+            "firstAckMs": 130651,
+            "screenshotRttMs": 28,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773229331575-f6ytsi",
+              "roomId": "canvas-d5924093-9a18-4ffd-bab1-65370cd81059",
+              "ts": 1773229331578,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773229331575-f6ytsi",
+              "roomId": "canvas-d5924093-9a18-4ffd-bab1-65370cd81059",
+              "ts": 1773229331619,
+              "preset": "creative",
+              "request_id": "b5a468c3-b7e0-4c47-8d4f-81ccec8537f6",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 28,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773229331575-f6ytsi",
+              "roomId": "canvas-d5924093-9a18-4ffd-bab1-65370cd81059",
+              "ts": 1773229331731,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773229331575-f6ytsi",
+              "roomId": "canvas-d5924093-9a18-4ffd-bab1-65370cd81059",
+              "ts": 1773229456640,
+              "preset": "creative",
+              "ttfb": 125062,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773229331575-f6ytsi",
+              "roomId": "canvas-d5924093-9a18-4ffd-bab1-65370cd81059",
+              "ts": 1773229531462,
+              "preset": "creative",
+              "duration": 199884,
+              "chunkCount": 33,
+              "actionCount": 33,
+              "mutatingActionCount": 33,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 33,
+              "first_ack_ms": 130651,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 92,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 7,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 33 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 23,
+        "byType": {
+          "box": 4,
+          "note": 19
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows three columns of colored cards under a main operating plan heading with some overlap in the top-left area.",
+        "scoreRationale": "High score due to substantial shape count, clear structure, and mostly aligned elements despite minor overlap.",
+        "strengths": [
+          "Good number of shapes demonstrating complexity",
+          "Clear columnar organization of information"
+        ],
+        "issues": [
+          "Overlap of red title cards causing readability issues",
+          "Some text partially obscured or cramped"
+        ]
+      }
+    },
+    {
+      "runId": "business-operating-plan-cerebras-gpt-oss-120b-mmlz2wdv",
+      "scenarioId": "business-operating-plan",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Business Operating Plan",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "business",
+      "startedAt": "2026-03-11T11:45:33.485Z",
+      "completedAt": "2026-03-11T11:45:53.918Z",
+      "status": "completed",
+      "roomId": "canvas-ee798b25-a9da-4e9d-a4cb-84513cf6f4a8",
+      "canvasId": "ee798b25-a9da-4e9d-a4cb-84513cf6f4a8",
+      "canvasName": "business-operating-plan-cerebras-gpt-oss-120b-business-operating-plan-cerebras-gpt-oss-120b-mmlz2wdv",
+      "viewerPath": "/canvas?room=canvas-ee798b25-a9da-4e9d-a4cb-84513cf6f4a8&id=ee798b25-a9da-4e9d-a4cb-84513cf6f4a8&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/business-operating-plan__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 19,
+      "actionSummary": {
+        "total": 24,
+        "byName": {
+          "create_shape": 19,
+          "stack": 3,
+          "align": 1,
+          "distribute": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 9217,
+        "initialTtfbMs": 5829,
+        "totalActionCount": 24,
+        "totalMutatingActionCount": 24,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 1,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": 26
+      },
+      "steps": [
+        {
+          "stepId": "plan-board",
+          "label": "Plan board",
+          "sessionId": "1773229543137-xxdjpe",
+          "status": "completed",
+          "actionSummary": {
+            "total": 24,
+            "byName": {
+              "create_shape": 19,
+              "stack": 3,
+              "align": 1,
+              "distribute": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 9217,
+            "ttfbMs": 5829,
+            "actionCount": 24,
+            "mutatingActionCount": 24,
+            "followupCount": 0,
+            "retryCount": 1,
+            "firstAckMs": null,
+            "screenshotRttMs": 26,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773229543137-xxdjpe",
+              "roomId": "canvas-ee798b25-a9da-4e9d-a4cb-84513cf6f4a8",
+              "ts": 1773229543138,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773229543137-xxdjpe",
+              "roomId": "canvas-ee798b25-a9da-4e9d-a4cb-84513cf6f4a8",
+              "ts": 1773229543173,
+              "preset": "creative",
+              "request_id": "c0a83712-17c3-448b-b0fd-94727cde09c2",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 26,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773229543137-xxdjpe",
+              "roomId": "canvas-ee798b25-a9da-4e9d-a4cb-84513cf6f4a8",
+              "ts": 1773229543269,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773229543137-xxdjpe",
+              "roomId": "canvas-ee798b25-a9da-4e9d-a4cb-84513cf6f4a8",
+              "ts": 1773229548967,
+              "preset": "creative",
+              "ttfb": 5829,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773229543137-xxdjpe",
+              "roomId": "canvas-ee798b25-a9da-4e9d-a4cb-84513cf6f4a8",
+              "ts": 1773229552352,
+              "preset": "creative",
+              "duration": 9214,
+              "chunkCount": 1,
+              "actionCount": 24,
+              "mutatingActionCount": 24,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 1,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 99,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 10,
+          "screenshot": 10,
+          "stability": 9
+        },
+        "notes": [
+          "Retries recorded 1 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 19,
+        "byType": {
+          "note": 16,
+          "box": 3
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas displays a structured business operating plan with clear sections for objectives, owners, and risks connected hierarchically under a central title.",
+        "scoreRationale": "High score due to comprehensive shape use, well-organized layout, and proper inclusion of required and preferred verbs with a stable and clear screenshot.",
+        "strengths": [
+          "Clear hierarchical structure linking all items",
+          "Use of distinct colors for title and sections"
+        ],
+        "issues": [
+          "Some text overlaps on the title shape",
+          "Minor visual clutter from overlapping shapes"
+        ]
+      }
+    },
+    {
+      "runId": "podcast-episode-map-haiku-4-5-mmlz3cht",
+      "scenarioId": "podcast-episode-map",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Podcast Episode Map",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "podcast",
+      "startedAt": "2026-03-11T11:45:54.212Z",
+      "completedAt": "2026-03-11T11:47:08.497Z",
+      "status": "completed",
+      "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+      "canvasId": "9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+      "canvasName": "podcast-episode-map-haiku-4-5-podcast-episode-map-haiku-4-5-mmlz3cht",
+      "viewerPath": "/canvas?room=canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733&id=9bcd3fb1-9a07-4d82-9c22-64772c2a1733&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__haiku-4-5-doc.json",
+      "finalShapeCount": 18,
+      "actionSummary": {
+        "total": 22,
+        "byName": {
+          "create_shape": 18,
+          "distribute": 1,
+          "align": 1,
+          "stack": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 63068,
+        "initialTtfbMs": 12862,
+        "totalActionCount": 22,
+        "totalMutatingActionCount": 22,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 22,
+        "avgFirstAckMs": 18519,
+        "avgScreenshotRttMs": 25
+      },
+      "steps": [
+        {
+          "stepId": "episode-outline",
+          "label": "Episode outline",
+          "sessionId": "1773229563772-fiue9g",
+          "status": "completed",
+          "actionSummary": {
+            "total": 22,
+            "byName": {
+              "create_shape": 18,
+              "distribute": 1,
+              "align": 1,
+              "stack": 1,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 63068,
+            "ttfbMs": 12862,
+            "actionCount": 22,
+            "mutatingActionCount": 22,
+            "followupCount": 0,
+            "retryCount": 22,
+            "firstAckMs": 18519,
+            "screenshotRttMs": 25,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773229563772-fiue9g",
+              "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+              "ts": 1773229563772,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773229563772-fiue9g",
+              "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+              "ts": 1773229563803,
+              "preset": "creative",
+              "request_id": "2e3aeacf-87d1-4123-b6fc-77b1f055b28e",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 25,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773229563772-fiue9g",
+              "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+              "ts": 1773229563903,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773229563772-fiue9g",
+              "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+              "ts": 1773229576634,
+              "preset": "creative",
+              "ttfb": 12862,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773229563772-fiue9g",
+              "roomId": "canvas-9bcd3fb1-9a07-4d82-9c22-64772c2a1733",
+              "ts": 1773229626839,
+              "preset": "creative",
+              "duration": 63067,
+              "chunkCount": 23,
+              "actionCount": 22,
+              "mutatingActionCount": 22,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 22,
+              "first_ack_ms": 18519,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 95,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 10,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 22 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 18,
+        "byType": {
+          "box": 7,
+          "note": 6,
+          "text": 5
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas displays a clear podcast episode plan with organized sections and labeled shapes, earning a high score for structure and verb usage.",
+        "scoreRationale": "High score due to complete shape creation, inclusion of required and preferred verbs, and a clear screenshot demonstrating stable layout.",
+        "strengths": [
+          "Well-organized section layout",
+          "Correct and varied use of required and preferred verbs"
+        ],
+        "issues": [
+          "Minor sync health message noted",
+          "One overlapping text area in bottom section"
+        ]
+      }
+    },
+    {
+      "runId": "podcast-episode-map-gpt5-4-low-mmlz4y1h",
+      "scenarioId": "podcast-episode-map",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Podcast Episode Map",
+      "variantLabel": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "podcast",
+      "startedAt": "2026-03-11T11:47:08.825Z",
+      "completedAt": "2026-03-11T11:50:41.525Z",
+      "status": "completed",
+      "roomId": "canvas-7e114c95-cc78-4a85-bdcf-dbff469ed0a1",
+      "canvasId": "7e114c95-cc78-4a85-bdcf-dbff469ed0a1",
+      "canvasName": "podcast-episode-map-gpt5-4-low-podcast-episode-map-gpt5-4-low-mmlz4y1h",
+      "viewerPath": "/canvas?room=canvas-7e114c95-cc78-4a85-bdcf-dbff469ed0a1&id=7e114c95-cc78-4a85-bdcf-dbff469ed0a1&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__gpt5-4-low-doc.json",
+      "finalShapeCount": 28,
+      "actionSummary": {
+        "total": 40,
+        "byName": {
+          "create_shape": 28,
+          "align": 6,
+          "stack": 5,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 201145,
+        "initialTtfbMs": 110660,
+        "totalActionCount": 40,
+        "totalMutatingActionCount": 40,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 40,
+        "avgFirstAckMs": 116245,
+        "avgScreenshotRttMs": 27
+      },
+      "steps": [
+        {
+          "stepId": "episode-outline",
+          "label": "Episode outline",
+          "sessionId": "1773229638704-7sxym0",
+          "status": "completed",
+          "actionSummary": {
+            "total": 40,
+            "byName": {
+              "create_shape": 28,
+              "align": 6,
+              "stack": 5,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 201145,
+            "ttfbMs": 110660,
+            "actionCount": 40,
+            "mutatingActionCount": 40,
+            "followupCount": 0,
+            "retryCount": 40,
+            "firstAckMs": 116245,
+            "screenshotRttMs": 27,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773229638704-7sxym0",
+              "roomId": "canvas-7e114c95-cc78-4a85-bdcf-dbff469ed0a1",
+              "ts": 1773229638705,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773229638704-7sxym0",
+              "roomId": "canvas-7e114c95-cc78-4a85-bdcf-dbff469ed0a1",
+              "ts": 1773229638741,
+              "preset": "creative",
+              "request_id": "6e54390b-fb2d-4107-972f-1e45966ebb59",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 27,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773229638704-7sxym0",
+              "roomId": "canvas-7e114c95-cc78-4a85-bdcf-dbff469ed0a1",
+              "ts": 1773229638829,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773229638704-7sxym0",
+              "roomId": "canvas-7e114c95-cc78-4a85-bdcf-dbff469ed0a1",
+              "ts": 1773229749365,
+              "preset": "creative",
+              "ttfb": 110660,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773229638704-7sxym0",
+              "roomId": "canvas-7e114c95-cc78-4a85-bdcf-dbff469ed0a1",
+              "ts": 1773229839848,
+              "preset": "creative",
+              "duration": 201143,
+              "chunkCount": 40,
+              "actionCount": 40,
+              "mutatingActionCount": 40,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 40,
+              "first_ack_ms": 116245,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 95,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 10,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 40 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 28,
+        "byType": {
+          "box": 6,
+          "note": 22
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows a well-organized podcast episode map with multiple color-coded cards and clear section titles.",
+        "scoreRationale": "High shape count with comprehensive content and structured layout likely contributed to a high score.",
+        "strengths": [
+          "Clear segmentation of episode parts",
+          "Incorporation of live review tips for workflow"
+        ],
+        "issues": [
+          "Some text partially obscured by overlays",
+          "Realtime Sync Health status is degraded"
+        ]
+      }
+    },
+    {
+      "runId": "podcast-episode-map-cerebras-gpt-oss-120b-mmlz9iey",
+      "scenarioId": "podcast-episode-map",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Podcast Episode Map",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "podcast",
+      "startedAt": "2026-03-11T11:50:41.805Z",
+      "completedAt": "2026-03-11T11:51:04.606Z",
+      "status": "completed",
+      "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+      "canvasId": "0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+      "canvasName": "podcast-episode-map-cerebras-gpt-oss-120b-podcast-episode-map-cerebras-gpt-oss-120b-mmlz9iey",
+      "viewerPath": "/canvas?room=canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2&id=0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 2,
+      "actionSummary": {
+        "total": 13,
+        "byName": {
+          "create_shape": 7,
+          "reorder": 2,
+          "update_shape": 1,
+          "align": 2,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 11538,
+        "initialTtfbMs": 1616,
+        "totalActionCount": 13,
+        "totalMutatingActionCount": 13,
+        "totalFollowupCount": 1,
+        "totalRetryCount": 2,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": 28
+      },
+      "steps": [
+        {
+          "stepId": "episode-outline",
+          "label": "Episode outline",
+          "sessionId": "1773229851425-mxzcbl",
+          "status": "completed",
+          "actionSummary": {
+            "total": 13,
+            "byName": {
+              "create_shape": 7,
+              "reorder": 2,
+              "update_shape": 1,
+              "align": 2,
+              "stack": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 11538,
+            "ttfbMs": 1616,
+            "actionCount": 13,
+            "mutatingActionCount": 13,
+            "followupCount": 1,
+            "retryCount": 2,
+            "firstAckMs": null,
+            "screenshotRttMs": 28,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773229851425-mxzcbl",
+              "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+              "ts": 1773229851427,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773229851425-mxzcbl",
+              "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+              "ts": 1773229851464,
+              "preset": "creative",
+              "request_id": "e17d8f8f-4356-49fc-af28-e54d914a2b24",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 28,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773229851425-mxzcbl",
+              "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+              "ts": 1773229851564,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773229851425-mxzcbl",
+              "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+              "ts": 1773229853042,
+              "preset": "creative",
+              "ttfb": 1616,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773229851425-mxzcbl",
+              "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+              "ts": 1773229856777,
+              "preset": "creative",
+              "request_id": "bfdfd224-3b2c-47ca-80cc-73e59c2ec103",
+              "timeout_ms": 12000,
+              "image_bytes": 63911,
+              "rtt": 47,
+              "result": "received"
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773229851425-mxzcbl",
+              "roomId": "canvas-0c14b7d3-2078-4a3d-a72f-d2b2a21e8fc2",
+              "ts": 1773229862963,
+              "preset": "creative",
+              "duration": 11537,
+              "chunkCount": 2,
+              "actionCount": 13,
+              "mutatingActionCount": 13,
+              "followupCount": 1,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 2,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 72,
+        "grade": "strong",
+        "rubric": {
+          "shapes": 10,
+          "requiredVerbs": 35,
+          "preferredVerbs": 10,
+          "screenshot": 10,
+          "stability": 7
+        },
+        "notes": [
+          "Shape count below target (2/7).",
+          "Followups fired 1 time(s).",
+          "Retries recorded 2 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 2,
+        "byType": {
+          "box": 2
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows two simple shapes, a red rectangle inside a larger dotted boundary, with minimal content.",
+        "scoreRationale": "The score of 72 reflects limited shape usage and basic actions with a mostly empty canvas.",
+        "strengths": [
+          "Includes basic shapes created and aligned",
+          "Stable connection status despite sync degraded"
+        ],
+        "issues": [
+          "Only two shapes created, limiting completeness",
+          "Minimal updates and layout complexity, missing required verbs"
+        ]
+      }
+    },
+    {
+      "runId": "collaborative-brainstorm-haiku-4-5-mmlza083",
+      "scenarioId": "collaborative-brainstorm",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Collaborative Brainstorm",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "brainstorm",
+      "startedAt": "2026-03-11T11:51:04.887Z",
+      "completedAt": "2026-03-11T11:51:54.640Z",
+      "status": "completed",
+      "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+      "canvasId": "bdbee606-21f5-4e58-8563-03d509f6566d",
+      "canvasName": "collaborative-brainstorm-haiku-4-5-collaborative-brainstorm-haiku-4-5-mmlza083",
+      "viewerPath": "/canvas?room=canvas-bdbee606-21f5-4e58-8563-03d509f6566d&id=bdbee606-21f5-4e58-8563-03d509f6566d&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__haiku-4-5-doc.json",
+      "finalShapeCount": 9,
+      "actionSummary": {
+        "total": 13,
+        "byName": {
+          "create_shape": 9,
+          "align": 2,
+          "distribute": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 38105,
+        "initialTtfbMs": 7941,
+        "totalActionCount": 13,
+        "totalMutatingActionCount": 13,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 13,
+        "avgFirstAckMs": 13602,
+        "avgScreenshotRttMs": 23
+      },
+      "steps": [
+        {
+          "stepId": "theme-clusters",
+          "label": "Theme clusters",
+          "sessionId": "1773229874875-gglcya",
+          "status": "completed",
+          "actionSummary": {
+            "total": 13,
+            "byName": {
+              "create_shape": 9,
+              "align": 2,
+              "distribute": 1,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 38105,
+            "ttfbMs": 7941,
+            "actionCount": 13,
+            "mutatingActionCount": 13,
+            "followupCount": 0,
+            "retryCount": 13,
+            "firstAckMs": 13602,
+            "screenshotRttMs": 23,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773229874875-gglcya",
+              "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+              "ts": 1773229874875,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773229874875-gglcya",
+              "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+              "ts": 1773229874906,
+              "preset": "creative",
+              "request_id": "80520b7b-82df-4729-81cf-a4c2961a1233",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 23,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773229874875-gglcya",
+              "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+              "ts": 1773229875016,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773229874875-gglcya",
+              "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+              "ts": 1773229882816,
+              "preset": "creative",
+              "ttfb": 7941,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773229874875-gglcya",
+              "roomId": "canvas-bdbee606-21f5-4e58-8563-03d509f6566d",
+              "ts": 1773229912980,
+              "preset": "creative",
+              "duration": 38105,
+              "chunkCount": 15,
+              "actionCount": 13,
+              "mutatingActionCount": 13,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 13,
+              "first_ack_ms": 13602,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 90,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 5,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 13 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 9,
+        "byType": {
+          "box": 3,
+          "note": 6
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows three equally spaced labeled blocks framed by distinct dotted border colors.",
+        "scoreRationale": "High score due to correct shape count, clear labeling, alignment, and screenshot completeness.",
+        "strengths": [
+          "Nine shapes created with appropriate labels",
+          "Good alignment and spacing of elements"
+        ],
+        "issues": [
+          "No visible preferred verbs indicated",
+          "One sync health issue noted in the embedded info box"
+        ]
+      }
+    },
+    {
+      "runId": "collaborative-brainstorm-gpt5-4-low-mmlzb2tw",
+      "scenarioId": "collaborative-brainstorm",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Collaborative Brainstorm",
+      "variantLabel": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "brainstorm",
+      "startedAt": "2026-03-11T11:51:54.946Z",
+      "completedAt": "2026-03-11T11:53:31.417Z",
+      "status": "completed",
+      "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+      "canvasId": "ef811143-885c-4f28-8f46-c7cecc629b1a",
+      "canvasName": "collaborative-brainstorm-gpt5-4-low-collaborative-brainstorm-gpt5-4-low-mmlzb2tw",
+      "viewerPath": "/canvas?room=canvas-ef811143-885c-4f28-8f46-c7cecc629b1a&id=ef811143-885c-4f28-8f46-c7cecc629b1a&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__gpt5-4-low-doc.json",
+      "finalShapeCount": 8,
+      "actionSummary": {
+        "total": 11,
+        "byName": {
+          "create_shape": 8,
+          "align": 1,
+          "stack": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 85034,
+        "initialTtfbMs": 59354,
+        "totalActionCount": 11,
+        "totalMutatingActionCount": 11,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 11,
+        "avgFirstAckMs": 64934,
+        "avgScreenshotRttMs": 25
+      },
+      "steps": [
+        {
+          "stepId": "theme-clusters",
+          "label": "Theme clusters",
+          "sessionId": "1773229924730-zangvc",
+          "status": "completed",
+          "actionSummary": {
+            "total": 11,
+            "byName": {
+              "create_shape": 8,
+              "align": 1,
+              "stack": 1,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 85034,
+            "ttfbMs": 59354,
+            "actionCount": 11,
+            "mutatingActionCount": 11,
+            "followupCount": 0,
+            "retryCount": 11,
+            "firstAckMs": 64934,
+            "screenshotRttMs": 25,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773229924730-zangvc",
+              "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+              "ts": 1773229924731,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773229924730-zangvc",
+              "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+              "ts": 1773229924761,
+              "preset": "creative",
+              "request_id": "ed2e18a1-7804-4e80-8c6a-341c323d9d76",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 25,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773229924730-zangvc",
+              "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+              "ts": 1773229924854,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773229924730-zangvc",
+              "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+              "ts": 1773229984085,
+              "preset": "creative",
+              "ttfb": 59354,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773229924730-zangvc",
+              "roomId": "canvas-ef811143-885c-4f28-8f46-c7cecc629b1a",
+              "ts": 1773230009764,
+              "preset": "creative",
+              "duration": 85033,
+              "chunkCount": 11,
+              "actionCount": 11,
+              "mutatingActionCount": 11,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 11,
+              "first_ack_ms": 64934,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 86,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 31,
+          "requiredVerbs": 35,
+          "preferredVerbs": 5,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Shape count below target (8/9).",
+          "Retries recorded 11 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 8,
+        "byType": {
+          "box": 4,
+          "note": 4
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows three groups each containing pink sticky notes with text, with some overlap in the left group and a sync health panel visible.",
+        "scoreRationale": "Good use of shapes and grouping, but some overlap and minor UI clutter likely reduced the score.",
+        "strengths": [
+          "Clear grouping of related notes",
+          "Use of different container shapes for organization"
+        ],
+        "issues": [
+          "Overlap of sticky notes in the left group",
+          "Presence of diagnostic panel cluttering workspace"
+        ]
+      }
+    },
+    {
+      "runId": "collaborative-brainstorm-cerebras-gpt-oss-120b-mmlzd5i5",
+      "scenarioId": "collaborative-brainstorm",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Collaborative Brainstorm",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "brainstorm",
+      "startedAt": "2026-03-11T11:53:31.888Z",
+      "completedAt": "2026-03-11T11:53:48.246Z",
+      "status": "completed",
+      "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+      "canvasId": "c1c8cd47-734d-48c4-9e07-2366fdce012d",
+      "canvasName": "collaborative-brainstorm-cerebras-gpt-oss-120b-collaborative-brainstorm-cerebras-gpt-oss-120b-mmlzd5i5",
+      "viewerPath": "/canvas?room=canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d&id=c1c8cd47-734d-48c4-9e07-2366fdce012d&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 6,
+      "actionSummary": {
+        "total": 6,
+        "byName": {
+          "create_shape": 6
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 5012,
+        "initialTtfbMs": 1626,
+        "totalActionCount": 6,
+        "totalMutatingActionCount": 6,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 1,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": 26
+      },
+      "steps": [
+        {
+          "stepId": "theme-clusters",
+          "label": "Theme clusters",
+          "sessionId": "1773230021573-hbbe35",
+          "status": "completed",
+          "actionSummary": {
+            "total": 6,
+            "byName": {
+              "create_shape": 6
+            }
+          },
+          "metrics": {
+            "durationMs": 5012,
+            "ttfbMs": 1626,
+            "actionCount": 6,
+            "mutatingActionCount": 6,
+            "followupCount": 0,
+            "retryCount": 1,
+            "firstAckMs": null,
+            "screenshotRttMs": 26,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230021573-hbbe35",
+              "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+              "ts": 1773230021573,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230021573-hbbe35",
+              "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+              "ts": 1773230021604,
+              "preset": "creative",
+              "request_id": "caab1b26-5ca4-48fb-9f84-c55c90f67772",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 26,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230021573-hbbe35",
+              "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+              "ts": 1773230021696,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230021573-hbbe35",
+              "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+              "ts": 1773230023199,
+              "preset": "creative",
+              "ttfb": 1626,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230021573-hbbe35",
+              "roomId": "canvas-c1c8cd47-734d-48c4-9e07-2366fdce012d",
+              "ts": 1773230026584,
+              "preset": "creative",
+              "duration": 5011,
+              "chunkCount": 1,
+              "actionCount": 6,
+              "mutatingActionCount": 6,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 1,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 77,
+        "grade": "strong",
+        "rubric": {
+          "shapes": 23,
+          "requiredVerbs": 35,
+          "preferredVerbs": 0,
+          "screenshot": 10,
+          "stability": 9
+        },
+        "notes": [
+          "Shape count below target (6/9).",
+          "Retries recorded 1 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 6,
+        "byType": {
+          "box": 3,
+          "note": 3
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows three orange sticky notes labeled Ideas, UX, and Tech with dotted red rectangles around each.",
+        "scoreRationale": "The score reflects a partial achievement due to only six shapes created out of the required 23 and moderate stability and screenshot scores.",
+        "strengths": [
+          "Clear labeling of concepts",
+          "Use of consistent styling for shapes"
+        ],
+        "issues": [
+          "Insufficient number of shapes",
+          "Presence of degraded realtime sync health"
+        ]
+      }
+    },
+    {
+      "runId": "scratchpad-systems-haiku-4-5-mmlzdihm",
+      "scenarioId": "scratchpad-systems",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Scratchpad Systems Sketch",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "scratchpad",
+      "startedAt": "2026-03-11T11:53:48.535Z",
+      "completedAt": "2026-03-11T11:54:51.864Z",
+      "status": "completed",
+      "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+      "canvasId": "734b6ed1-8517-4b6f-a251-b746c757bf42",
+      "canvasName": "scratchpad-systems-haiku-4-5-scratchpad-systems-haiku-4-5-mmlzdihm",
+      "viewerPath": "/canvas?room=canvas-734b6ed1-8517-4b6f-a251-b746c757bf42&id=734b6ed1-8517-4b6f-a251-b746c757bf42&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__haiku-4-5-doc.json",
+      "finalShapeCount": 19,
+      "actionSummary": {
+        "total": 19,
+        "byName": {
+          "create_shape": 19
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 52375,
+        "initialTtfbMs": 8841,
+        "totalActionCount": 19,
+        "totalMutatingActionCount": 19,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 19,
+        "avgFirstAckMs": 14426,
+        "avgScreenshotRttMs": 27
+      },
+      "steps": [
+        {
+          "stepId": "latency-sketch",
+          "label": "Latency sketch",
+          "sessionId": "1773230037825-zirce6",
+          "status": "completed",
+          "actionSummary": {
+            "total": 19,
+            "byName": {
+              "create_shape": 19
+            }
+          },
+          "metrics": {
+            "durationMs": 52375,
+            "ttfbMs": 8841,
+            "actionCount": 19,
+            "mutatingActionCount": 19,
+            "followupCount": 0,
+            "retryCount": 19,
+            "firstAckMs": 14426,
+            "screenshotRttMs": 27,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230037825-zirce6",
+              "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+              "ts": 1773230037826,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230037825-zirce6",
+              "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+              "ts": 1773230037863,
+              "preset": "creative",
+              "request_id": "bbeda649-8a5a-4624-af32-707305107830",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 27,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230037825-zirce6",
+              "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+              "ts": 1773230037966,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230037825-zirce6",
+              "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+              "ts": 1773230046667,
+              "preset": "creative",
+              "ttfb": 8841,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230037825-zirce6",
+              "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+              "ts": 1773230090200,
+              "preset": "creative",
+              "duration": 52374,
+              "chunkCount": 19,
+              "actionCount": 19,
+              "mutatingActionCount": 19,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 19,
+              "first_ack_ms": 14426,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 85,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 0,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 19 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 19,
+        "byType": {
+          "text": 7,
+          "box": 6,
+          "draw": 6
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows a labeled flowchart with distinct shapes and connecting lines illustrating a low-latency canvas pipeline.",
+        "scoreRationale": "The score reflects well-organized shapes and verb usage with minor issues likely related to stability or completeness.",
+        "strengths": [
+          "Clear labeling of process stages",
+          "Good use of connecting lines to show flow"
+        ],
+        "issues": [
+          "The connection from 'screenshot' to 'action stream' is curved and less consistent",
+          "Degraded realtime sync health indicator may impact stability score"
+        ]
+      }
+    },
+    {
+      "runId": "scratchpad-systems-gpt5-4-low-mmlzevkr",
+      "scenarioId": "scratchpad-systems",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Scratchpad Systems Sketch",
+      "variantLabel": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "scratchpad",
+      "startedAt": "2026-03-11T11:54:52.202Z",
+      "completedAt": "2026-03-11T11:57:41.631Z",
+      "status": "completed",
+      "roomId": "canvas-ff52cec5-664e-4ea9-a5b6-b13cc64ced8f",
+      "canvasId": "ff52cec5-664e-4ea9-a5b6-b13cc64ced8f",
+      "canvasName": "scratchpad-systems-gpt5-4-low-scratchpad-systems-gpt5-4-low-mmlzevkr",
+      "viewerPath": "/canvas?room=canvas-ff52cec5-664e-4ea9-a5b6-b13cc64ced8f&id=ff52cec5-664e-4ea9-a5b6-b13cc64ced8f&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__gpt5-4-low-doc.json",
+      "finalShapeCount": 11,
+      "actionSummary": {
+        "total": 11,
+        "byName": {
+          "create_shape": 11
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 157862,
+        "initialTtfbMs": 132119,
+        "totalActionCount": 11,
+        "totalMutatingActionCount": 11,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 11,
+        "avgFirstAckMs": 137702,
+        "avgScreenshotRttMs": 30
+      },
+      "steps": [
+        {
+          "stepId": "latency-sketch",
+          "label": "Latency sketch",
+          "sessionId": "1773230102120-kkrb4x",
+          "status": "completed",
+          "actionSummary": {
+            "total": 11,
+            "byName": {
+              "create_shape": 11
+            }
+          },
+          "metrics": {
+            "durationMs": 157862,
+            "ttfbMs": 132119,
+            "actionCount": 11,
+            "mutatingActionCount": 11,
+            "followupCount": 0,
+            "retryCount": 11,
+            "firstAckMs": 137702,
+            "screenshotRttMs": 30,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230102120-kkrb4x",
+              "roomId": "canvas-ff52cec5-664e-4ea9-a5b6-b13cc64ced8f",
+              "ts": 1773230102122,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230102120-kkrb4x",
+              "roomId": "canvas-ff52cec5-664e-4ea9-a5b6-b13cc64ced8f",
+              "ts": 1773230102163,
+              "preset": "creative",
+              "request_id": "46bfa977-0804-40bb-8bf7-69aaec8b7309",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 30,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230102120-kkrb4x",
+              "roomId": "canvas-ff52cec5-664e-4ea9-a5b6-b13cc64ced8f",
+              "ts": 1773230102252,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230102120-kkrb4x",
+              "roomId": "canvas-ff52cec5-664e-4ea9-a5b6-b13cc64ced8f",
+              "ts": 1773230234241,
+              "preset": "creative",
+              "ttfb": 132119,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230102120-kkrb4x",
+              "roomId": "canvas-ff52cec5-664e-4ea9-a5b6-b13cc64ced8f",
+              "ts": 1773230259982,
+              "preset": "creative",
+              "duration": 157860,
+              "chunkCount": 11,
+              "actionCount": 11,
+              "mutatingActionCount": 11,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 11,
+              "first_ack_ms": 137702,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 85,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 0,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 11 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 11,
+        "byType": {
+          "box": 1,
+          "note": 5,
+          "draw": 5
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas features 11 shapes forming a system flow with labeled blocks and red connectors including a screenshot overlay.",
+        "scoreRationale": "High shape count with clear verb usage and a well-structured layout likely contributed to a strong score of 85.",
+        "strengths": [
+          "Clear labeling and naming of system components",
+          "Good use of connectors to show relationships"
+        ],
+        "issues": [
+          "Some overlapping elements reduce clarity",
+          "Minor visual clutter due to screenshot overlay"
+        ]
+      }
+    },
+    {
+      "runId": "scratchpad-systems-cerebras-gpt-oss-120b-mmlziikj",
+      "scenarioId": "scratchpad-systems",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Scratchpad Systems Sketch",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "scratchpad",
+      "startedAt": "2026-03-11T11:57:42.004Z",
+      "completedAt": "2026-03-11T11:58:00.693Z",
+      "status": "completed",
+      "roomId": "canvas-287aaa94-2c63-4bdf-b5a6-21c614717ff9",
+      "canvasId": "287aaa94-2c63-4bdf-b5a6-21c614717ff9",
+      "canvasName": "scratchpad-systems-cerebras-gpt-oss-120b-scratchpad-systems-cerebras-gpt-oss-120b-mmlziikj",
+      "viewerPath": "/canvas?room=canvas-287aaa94-2c63-4bdf-b5a6-21c614717ff9&id=287aaa94-2c63-4bdf-b5a6-21c614717ff9&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 11,
+      "actionSummary": {
+        "total": 13,
+        "byName": {
+          "create_shape": 11,
+          "align": 1,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 6984,
+        "initialTtfbMs": 3585,
+        "totalActionCount": 13,
+        "totalMutatingActionCount": 13,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 1,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": 30
+      },
+      "steps": [
+        {
+          "stepId": "latency-sketch",
+          "label": "Latency sketch",
+          "sessionId": "1773230272053-5fo2db",
+          "status": "completed",
+          "actionSummary": {
+            "total": 13,
+            "byName": {
+              "create_shape": 11,
+              "align": 1,
+              "stack": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 6984,
+            "ttfbMs": 3585,
+            "actionCount": 13,
+            "mutatingActionCount": 13,
+            "followupCount": 0,
+            "retryCount": 1,
+            "firstAckMs": null,
+            "screenshotRttMs": 30,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230272053-5fo2db",
+              "roomId": "canvas-287aaa94-2c63-4bdf-b5a6-21c614717ff9",
+              "ts": 1773230272056,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230272053-5fo2db",
+              "roomId": "canvas-287aaa94-2c63-4bdf-b5a6-21c614717ff9",
+              "ts": 1773230272094,
+              "preset": "creative",
+              "request_id": "89e0c965-67b2-49bf-bfd6-c93a36b992a0",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 30,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230272053-5fo2db",
+              "roomId": "canvas-287aaa94-2c63-4bdf-b5a6-21c614717ff9",
+              "ts": 1773230272183,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230272053-5fo2db",
+              "roomId": "canvas-287aaa94-2c63-4bdf-b5a6-21c614717ff9",
+              "ts": 1773230275641,
+              "preset": "creative",
+              "ttfb": 3585,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230272053-5fo2db",
+              "roomId": "canvas-287aaa94-2c63-4bdf-b5a6-21c614717ff9",
+              "ts": 1773230279037,
+              "preset": "creative",
+              "duration": 6981,
+              "chunkCount": 1,
+              "actionCount": 13,
+              "mutatingActionCount": 13,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 1,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 94,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 5,
+          "screenshot": 10,
+          "stability": 9
+        },
+        "notes": [
+          "Retries recorded 1 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 11,
+        "byType": {
+          "note": 6,
+          "draw": 5
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas displays a horizontal sequence of labeled red gradient shapes representing a system flow.",
+        "scoreRationale": "High score likely due to correct shape count, clear labeling, and proper alignment with minor issues.",
+        "strengths": [
+          "All required shapes are present and labeled.",
+          "Shapes are neatly aligned in a row for clarity."
+        ],
+        "issues": [
+          "Realtime Sync Health overlay partially obscures content.",
+          "Visual design could use more distinct separators or connectors between shapes."
+        ]
+      }
+    },
+    {
+      "runId": "presentation-storyboard-haiku-4-5-mmlzixa2",
+      "scenarioId": "presentation-storyboard",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Presentation Storyboard",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "presentation",
+      "startedAt": "2026-03-11T11:58:00.968Z",
+      "completedAt": "2026-03-11T11:59:06.952Z",
+      "status": "completed",
+      "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+      "canvasId": "d225033e-b7d8-423b-8c29-5acb1894effd",
+      "canvasName": "presentation-storyboard-haiku-4-5-presentation-storyboard-haiku-4-5-mmlzixa2",
+      "viewerPath": "/canvas?room=canvas-d225033e-b7d8-423b-8c29-5acb1894effd&id=d225033e-b7d8-423b-8c29-5acb1894effd&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__haiku-4-5-doc.json",
+      "finalShapeCount": 12,
+      "actionSummary": {
+        "total": 14,
+        "byName": {
+          "create_shape": 11,
+          "align": 2,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 53054,
+        "initialTtfbMs": 11883,
+        "totalActionCount": 14,
+        "totalMutatingActionCount": 14,
+        "totalFollowupCount": 1,
+        "totalRetryCount": 14,
+        "avgFirstAckMs": 17473,
+        "avgScreenshotRttMs": 77
+      },
+      "steps": [
+        {
+          "stepId": "opening-slide",
+          "label": "Opening slide",
+          "sessionId": "1773230290748-8xinq9",
+          "status": "completed",
+          "actionSummary": {
+            "total": 14,
+            "byName": {
+              "create_shape": 11,
+              "align": 2,
+              "stack": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 44325,
+            "ttfbMs": 11883,
+            "actionCount": 14,
+            "mutatingActionCount": 14,
+            "followupCount": 0,
+            "retryCount": 14,
+            "firstAckMs": 17473,
+            "screenshotRttMs": 24,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230290748-8xinq9",
+              "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+              "ts": 1773230290749,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230290748-8xinq9",
+              "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+              "ts": 1773230290778,
+              "preset": "creative",
+              "request_id": "48cf9db9-7b53-40a1-bb30-4ecfbc521b47",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 24,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230290748-8xinq9",
+              "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+              "ts": 1773230290874,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230290748-8xinq9",
+              "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+              "ts": 1773230302632,
+              "preset": "creative",
+              "ttfb": 11883,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230290748-8xinq9",
+              "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+              "ts": 1773230335073,
+              "preset": "creative",
+              "duration": 44324,
+              "chunkCount": 16,
+              "actionCount": 14,
+              "mutatingActionCount": 14,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 14,
+              "first_ack_ms": 17473,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        },
+        {
+          "stepId": "continue-storyboard",
+          "label": "Continue storyboard",
+          "sessionId": "1773230336575-rfcneb",
+          "status": "completed",
+          "actionSummary": {
+            "total": 0,
+            "byName": {}
+          },
+          "metrics": {
+            "durationMs": 8729,
+            "ttfbMs": 5004,
+            "actionCount": 2,
+            "mutatingActionCount": 0,
+            "followupCount": 1,
+            "retryCount": 0,
+            "firstAckMs": null,
+            "screenshotRttMs": 130,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230336575-rfcneb",
+              "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+              "ts": 1773230336575,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230336575-rfcneb",
+              "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+              "ts": 1773230336712,
+              "preset": "creative",
+              "request_id": "6eab64e9-c221-40b0-9790-9469ef3e305a",
+              "timeout_ms": 12000,
+              "image_bytes": 71414,
+              "rtt": 130,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230336575-rfcneb",
+              "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+              "ts": 1773230336770,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230336575-rfcneb",
+              "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+              "ts": 1773230341579,
+              "preset": "creative",
+              "ttfb": 5004,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230336575-rfcneb",
+              "roomId": "canvas-d225033e-b7d8-423b-8c29-5acb1894effd",
+              "ts": 1773230345304,
+              "preset": "creative",
+              "duration": 8729,
+              "chunkCount": 1,
+              "actionCount": 2,
+              "mutatingActionCount": 0,
+              "followupCount": 1,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 0,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 87,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 3,
+          "screenshot": 10,
+          "stability": 4
+        },
+        "notes": [
+          "Followups fired 1 time(s).",
+          "Retries recorded 14 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 12,
+        "byType": {
+          "box": 4,
+          "note": 3,
+          "draw": 2,
+          "text": 3
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows a large dotted red rectangle and a debug panel, reflecting partial but clear shape creation and alignment.",
+        "scoreRationale": "The score likely reflects well-executed shape creation and alignment with minor issues and an extra debug widget.",
+        "strengths": [
+          "Clear creation of multiple shapes",
+          "Proper alignment and stacking actions"
+        ],
+        "issues": [
+          "Presence of a degraded sync health panel visible",
+          "Only one shape visibly rendered beyond the panel"
+        ]
+      }
+    },
+    {
+      "runId": "presentation-storyboard-gpt5-4-low-mmlzkcek",
+      "scenarioId": "presentation-storyboard",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Presentation Storyboard",
+      "variantLabel": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "presentation",
+      "startedAt": "2026-03-11T11:59:07.367Z",
+      "completedAt": "2026-03-11T12:02:24.172Z",
+      "status": "completed",
+      "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+      "canvasId": "2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+      "canvasName": "presentation-storyboard-gpt5-4-low-presentation-storyboard-gpt5-4-low-mmlzkcek",
+      "viewerPath": "/canvas?room=canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45&id=2b97e6b6-2ac6-4feb-8c60-06825d4ebb45&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__gpt5-4-low-doc.json",
+      "finalShapeCount": 17,
+      "actionSummary": {
+        "total": 21,
+        "byName": {
+          "create_shape": 17,
+          "align": 1,
+          "stack": 2,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 183921,
+        "initialTtfbMs": 68354,
+        "totalActionCount": 21,
+        "totalMutatingActionCount": 21,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 21,
+        "avgFirstAckMs": 72952,
+        "avgScreenshotRttMs": 88
+      },
+      "steps": [
+        {
+          "stepId": "opening-slide",
+          "label": "Opening slide",
+          "sessionId": "1773230357098-qoaq4h",
+          "status": "completed",
+          "actionSummary": {
+            "total": 16,
+            "byName": {
+              "create_shape": 13,
+              "align": 1,
+              "stack": 1,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 105217,
+            "ttfbMs": 68354,
+            "actionCount": 16,
+            "mutatingActionCount": 16,
+            "followupCount": 0,
+            "retryCount": 16,
+            "firstAckMs": 73940,
+            "screenshotRttMs": 26,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230357098-qoaq4h",
+              "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+              "ts": 1773230357099,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230357098-qoaq4h",
+              "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+              "ts": 1773230357133,
+              "preset": "creative",
+              "request_id": "506a1305-f716-48dd-8930-6b81cfb83d6b",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 26,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230357098-qoaq4h",
+              "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+              "ts": 1773230357218,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230357098-qoaq4h",
+              "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+              "ts": 1773230425453,
+              "preset": "creative",
+              "ttfb": 68354,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230357098-qoaq4h",
+              "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+              "ts": 1773230462315,
+              "preset": "creative",
+              "duration": 105216,
+              "chunkCount": 17,
+              "actionCount": 16,
+              "mutatingActionCount": 16,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 16,
+              "first_ack_ms": 73940,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        },
+        {
+          "stepId": "continue-storyboard",
+          "label": "Continue storyboard",
+          "sessionId": "1773230463817-o92jt0",
+          "status": "completed",
+          "actionSummary": {
+            "total": 5,
+            "byName": {
+              "create_shape": 4,
+              "stack": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 78704,
+            "ttfbMs": 66369,
+            "actionCount": 5,
+            "mutatingActionCount": 5,
+            "followupCount": 0,
+            "retryCount": 5,
+            "firstAckMs": 71964,
+            "screenshotRttMs": 149,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230463817-o92jt0",
+              "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+              "ts": 1773230463817,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230463817-o92jt0",
+              "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+              "ts": 1773230463971,
+              "preset": "creative",
+              "request_id": "62e20753-c5a5-428b-9dba-61c7812020db",
+              "timeout_ms": 12000,
+              "image_bytes": 80546,
+              "rtt": 149,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230463817-o92jt0",
+              "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+              "ts": 1773230464071,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230463817-o92jt0",
+              "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+              "ts": 1773230530186,
+              "preset": "creative",
+              "ttfb": 66369,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230463817-o92jt0",
+              "roomId": "canvas-2b97e6b6-2ac6-4feb-8c60-06825d4ebb45",
+              "ts": 1773230542521,
+              "preset": "creative",
+              "duration": 78704,
+              "chunkCount": 5,
+              "actionCount": 5,
+              "mutatingActionCount": 5,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 5,
+              "first_ack_ms": 71964,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 88,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 3,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 21 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 17,
+        "byType": {
+          "box": 6,
+          "note": 9,
+          "draw": 2
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows a storyboard with connected sections labeled 1, 2, and 3, plus descriptive blocks below, scoring high for shape and verb use.",
+        "scoreRationale": "The high score reflects comprehensive shape creation and effective use of required verbs, with clear layout and minimal stability issues.",
+        "strengths": [
+          "Clear sequential storyboard layout with connected labeled shapes",
+          "Effective use of action verbs and variety of shapes"
+        ],
+        "issues": [
+          "Overlapping debug overlay obscures part of the canvas",
+          "Slight inconsistency in shape alignment and spacing"
+        ]
+      }
+    },
+    {
+      "runId": "presentation-storyboard-cerebras-gpt-oss-120b-mmlzokkw",
+      "scenarioId": "presentation-storyboard",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Presentation Storyboard",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "presentation",
+      "startedAt": "2026-03-11T12:02:24.802Z",
+      "completedAt": "2026-03-11T12:03:49.531Z",
+      "status": "completed",
+      "roomId": "canvas-d250011e-d4aa-4abf-b442-20829530d5ab",
+      "canvasId": "d250011e-d4aa-4abf-b442-20829530d5ab",
+      "canvasName": "presentation-storyboard-cerebras-gpt-oss-120b-presentation-storyboard-cerebras-gpt-oss-120b-mmlzokkw",
+      "viewerPath": "/canvas?room=canvas-d250011e-d4aa-4abf-b442-20829530d5ab&id=d250011e-d4aa-4abf-b442-20829530d5ab&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 10,
+      "actionSummary": {
+        "total": 14,
+        "byName": {
+          "create_shape": 10,
+          "stack": 2,
+          "align": 2
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 72005,
+        "initialTtfbMs": 2165,
+        "totalActionCount": 14,
+        "totalMutatingActionCount": 14,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 2,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": 87
+      },
+      "steps": [
+        {
+          "stepId": "opening-slide",
+          "label": "Opening slide",
+          "sessionId": "1773230554451-rixfs0",
+          "status": "completed",
+          "actionSummary": {
+            "total": 8,
+            "byName": {
+              "create_shape": 6,
+              "stack": 1,
+              "align": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 5551,
+            "ttfbMs": 2165,
+            "actionCount": 8,
+            "mutatingActionCount": 8,
+            "followupCount": 0,
+            "retryCount": 1,
+            "firstAckMs": null,
+            "screenshotRttMs": 24,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230554451-rixfs0",
+              "roomId": "canvas-d250011e-d4aa-4abf-b442-20829530d5ab",
+              "ts": 1773230554452,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230554451-rixfs0",
+              "roomId": "canvas-d250011e-d4aa-4abf-b442-20829530d5ab",
+              "ts": 1773230554482,
+              "preset": "creative",
+              "request_id": "aa80339e-ffdc-4905-9b69-5b650f62f4ec",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 24,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230554451-rixfs0",
+              "roomId": "canvas-d250011e-d4aa-4abf-b442-20829530d5ab",
+              "ts": 1773230554582,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230554451-rixfs0",
+              "roomId": "canvas-d250011e-d4aa-4abf-b442-20829530d5ab",
+              "ts": 1773230556617,
+              "preset": "creative",
+              "ttfb": 2165,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230554451-rixfs0",
+              "roomId": "canvas-d250011e-d4aa-4abf-b442-20829530d5ab",
+              "ts": 1773230560002,
+              "preset": "creative",
+              "duration": 5550,
+              "chunkCount": 1,
+              "actionCount": 8,
+              "mutatingActionCount": 8,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 1,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        },
+        {
+          "stepId": "continue-storyboard",
+          "label": "Continue storyboard",
+          "sessionId": "1773230561505-hqdrtj",
+          "status": "completed",
+          "actionSummary": {
+            "total": 6,
+            "byName": {
+              "create_shape": 4,
+              "stack": 1,
+              "align": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 66454,
+            "ttfbMs": 63057,
+            "actionCount": 6,
+            "mutatingActionCount": 6,
+            "followupCount": 0,
+            "retryCount": 1,
+            "firstAckMs": null,
+            "screenshotRttMs": 149,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230561505-hqdrtj",
+              "roomId": "canvas-d250011e-d4aa-4abf-b442-20829530d5ab",
+              "ts": 1773230561505,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230561505-hqdrtj",
+              "roomId": "canvas-d250011e-d4aa-4abf-b442-20829530d5ab",
+              "ts": 1773230561657,
+              "preset": "creative",
+              "request_id": "170da833-4f52-442a-9c13-fee04b85fb90",
+              "timeout_ms": 12000,
+              "image_bytes": 43223,
+              "rtt": 149,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230561505-hqdrtj",
+              "roomId": "canvas-d250011e-d4aa-4abf-b442-20829530d5ab",
+              "ts": 1773230561763,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230561505-hqdrtj",
+              "roomId": "canvas-d250011e-d4aa-4abf-b442-20829530d5ab",
+              "ts": 1773230624562,
+              "preset": "creative",
+              "ttfb": 63057,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230561505-hqdrtj",
+              "roomId": "canvas-d250011e-d4aa-4abf-b442-20829530d5ab",
+              "ts": 1773230627958,
+              "preset": "creative",
+              "duration": 66453,
+              "chunkCount": 1,
+              "actionCount": 6,
+              "mutatingActionCount": 6,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 1,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 91,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 3,
+          "screenshot": 10,
+          "stability": 8
+        },
+        "notes": [
+          "Retries recorded 2 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 10,
+        "byType": {
+          "note": 8,
+          "box": 2
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows a simple storyboard with titled post-it shapes arranged in columns.",
+        "scoreRationale": "The score likely reflects correct use of required shape count and clear, labeled steps in the storyboard with effective stacking and alignment.",
+        "strengths": [
+          "Clear labeling of storyboard sections",
+          "Proper stacking of shapes enhancing clarity"
+        ],
+        "issues": [
+          "Minimal visual detail beyond basic shapes",
+          "Empty placeholder shapes limit completeness"
+        ]
+      }
+    },
+    {
+      "runId": "remote-board-game-night-haiku-4-5-mmlzqefy",
+      "scenarioId": "remote-board-game-night",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Remote Board Game Night",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "play",
+      "startedAt": "2026-03-11T12:03:49.851Z",
+      "completedAt": "2026-03-11T12:05:16.317Z",
+      "status": "completed",
+      "roomId": "canvas-2f054e76-69d8-471e-8780-c61eaf0c13aa",
+      "canvasId": "2f054e76-69d8-471e-8780-c61eaf0c13aa",
+      "canvasName": "remote-board-game-night-haiku-4-5-remote-board-game-night-haiku-4-5-mmlzqefy",
+      "viewerPath": "/canvas?room=canvas-2f054e76-69d8-471e-8780-c61eaf0c13aa&id=2f054e76-69d8-471e-8780-c61eaf0c13aa&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__haiku-4-5-doc.json",
+      "finalShapeCount": 23,
+      "actionSummary": {
+        "total": 28,
+        "byName": {
+          "create_shape": 23,
+          "align": 3,
+          "stack": 2
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 75147,
+        "initialTtfbMs": 11563,
+        "totalActionCount": 28,
+        "totalMutatingActionCount": 28,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 28,
+        "avgFirstAckMs": 17141,
+        "avgScreenshotRttMs": 28
+      },
+      "steps": [
+        {
+          "stepId": "game-state",
+          "label": "Game state board",
+          "sessionId": "1773230639531-ow0uiw",
+          "status": "completed",
+          "actionSummary": {
+            "total": 28,
+            "byName": {
+              "create_shape": 23,
+              "align": 3,
+              "stack": 2
+            }
+          },
+          "metrics": {
+            "durationMs": 75147,
+            "ttfbMs": 11563,
+            "actionCount": 28,
+            "mutatingActionCount": 28,
+            "followupCount": 0,
+            "retryCount": 28,
+            "firstAckMs": 17141,
+            "screenshotRttMs": 28,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230639531-ow0uiw",
+              "roomId": "canvas-2f054e76-69d8-471e-8780-c61eaf0c13aa",
+              "ts": 1773230639532,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230639531-ow0uiw",
+              "roomId": "canvas-2f054e76-69d8-471e-8780-c61eaf0c13aa",
+              "ts": 1773230639566,
+              "preset": "creative",
+              "request_id": "e7b1a9a8-049e-4e4a-a777-9fc9eaa71325",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 28,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230639531-ow0uiw",
+              "roomId": "canvas-2f054e76-69d8-471e-8780-c61eaf0c13aa",
+              "ts": 1773230639652,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230639531-ow0uiw",
+              "roomId": "canvas-2f054e76-69d8-471e-8780-c61eaf0c13aa",
+              "ts": 1773230651095,
+              "preset": "creative",
+              "ttfb": 11563,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230639531-ow0uiw",
+              "roomId": "canvas-2f054e76-69d8-471e-8780-c61eaf0c13aa",
+              "ts": 1773230714678,
+              "preset": "creative",
+              "duration": 75146,
+              "chunkCount": 29,
+              "actionCount": 28,
+              "mutatingActionCount": 28,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 28,
+              "first_ack_ms": 17141,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 92,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 7,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 28 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 23,
+        "byType": {
+          "note": 9,
+          "box": 13,
+          "draw": 1
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas displays a well-organized layout for a remote board game night with grouped elements and labeled sections.",
+        "scoreRationale": "High shape count, proper use of verbs, and clear screenshot capture justify the strong score of 92.",
+        "strengths": [
+          "Clear section labeling enhances understanding",
+          "Good use of alignment and stacking for organization"
+        ],
+        "issues": [
+          "Some shapes appear incomplete or unannotated",
+          "Degraded realtime sync may affect stability"
+        ]
+      }
+    },
+    {
+      "runId": "remote-board-game-night-gpt5-4-low-mmlzs9ep",
+      "scenarioId": "remote-board-game-night",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Remote Board Game Night",
+      "variantLabel": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "play",
+      "startedAt": "2026-03-11T12:05:16.645Z",
+      "completedAt": "2026-03-11T12:08:55.106Z",
+      "status": "completed",
+      "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+      "canvasId": "c69096b8-8820-4d5f-83c4-22317ca8aff5",
+      "canvasName": "remote-board-game-night-gpt5-4-low-remote-board-game-night-gpt5-4-low-mmlzs9ep",
+      "viewerPath": "/canvas?room=canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5&id=c69096b8-8820-4d5f-83c4-22317ca8aff5&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__gpt5-4-low-doc.json",
+      "finalShapeCount": 25,
+      "actionSummary": {
+        "total": 30,
+        "byName": {
+          "create_shape": 25,
+          "align": 2,
+          "stack": 2,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 206763,
+        "initialTtfbMs": 139156,
+        "totalActionCount": 30,
+        "totalMutatingActionCount": 30,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 30,
+        "avgFirstAckMs": 144750,
+        "avgScreenshotRttMs": 34
+      },
+      "steps": [
+        {
+          "stepId": "game-state",
+          "label": "Game state board",
+          "sessionId": "1773230726769-la07a0",
+          "status": "completed",
+          "actionSummary": {
+            "total": 30,
+            "byName": {
+              "create_shape": 25,
+              "align": 2,
+              "stack": 2,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 206763,
+            "ttfbMs": 139156,
+            "actionCount": 30,
+            "mutatingActionCount": 30,
+            "followupCount": 0,
+            "retryCount": 30,
+            "firstAckMs": 144750,
+            "screenshotRttMs": 34,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230726769-la07a0",
+              "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+              "ts": 1773230726772,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230726769-la07a0",
+              "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+              "ts": 1773230726816,
+              "preset": "creative",
+              "request_id": "683138ec-62ce-41f0-9455-5393d2db5ae1",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 34,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230726769-la07a0",
+              "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+              "ts": 1773230726899,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230726769-la07a0",
+              "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+              "ts": 1773230865928,
+              "preset": "creative",
+              "ttfb": 139156,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230726769-la07a0",
+              "roomId": "canvas-c69096b8-8820-4d5f-83c4-22317ca8aff5",
+              "ts": 1773230933532,
+              "preset": "creative",
+              "duration": 206760,
+              "chunkCount": 30,
+              "actionCount": 30,
+              "mutatingActionCount": 30,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 30,
+              "first_ack_ms": 144750,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 95,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 10,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 30 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 25,
+        "byType": {
+          "box": 18,
+          "note": 7
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows a structured layout with labeled sections and shapes representing game elements, demonstrating good organization and use of features.",
+        "scoreRationale": "High score due to completion of required shapes and verbs with well-aligned components and minimal issues.",
+        "strengths": [
+          "Clear labeling of game sections like 'Remote' and 'Shared Resource Pool'",
+          "Good use of shape creation and alignment actions"
+        ],
+        "issues": [
+          "Presence of a visible 'Realtime Sync Health' dialog overlapping content",
+          "Minor clutter in the lower part of the canvas with overlapping elements"
+        ]
+      }
+    },
+    {
+      "runId": "remote-board-game-night-cerebras-gpt-oss-120b-mmlzwy85",
+      "scenarioId": "remote-board-game-night",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Remote Board Game Night",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "play",
+      "startedAt": "2026-03-11T12:08:55.427Z",
+      "completedAt": "2026-03-11T12:09:12.311Z",
+      "status": "completed",
+      "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+      "canvasId": "7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+      "canvasName": "remote-board-game-night-cerebras-gpt-oss-120b-remote-board-game-night-cerebras-gpt-oss-120b-mmlzwy85",
+      "viewerPath": "/canvas?room=canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e&id=7e555b8c-fc12-4a3c-a537-6117eb360c6e&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 16,
+      "actionSummary": {
+        "total": 17,
+        "byName": {
+          "create_shape": 16,
+          "distribute": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 5400,
+        "initialTtfbMs": 2003,
+        "totalActionCount": 17,
+        "totalMutatingActionCount": 17,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 1,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": 31
+      },
+      "steps": [
+        {
+          "stepId": "game-state",
+          "label": "Game state board",
+          "sessionId": "1773230945255-p1c415",
+          "status": "completed",
+          "actionSummary": {
+            "total": 17,
+            "byName": {
+              "create_shape": 16,
+              "distribute": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 5400,
+            "ttfbMs": 2003,
+            "actionCount": 17,
+            "mutatingActionCount": 17,
+            "followupCount": 0,
+            "retryCount": 1,
+            "firstAckMs": null,
+            "screenshotRttMs": 31,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230945255-p1c415",
+              "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+              "ts": 1773230945256,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230945255-p1c415",
+              "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+              "ts": 1773230945296,
+              "preset": "creative",
+              "request_id": "95047800-a051-4fef-a2bd-ea0e4a572883",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 31,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230945255-p1c415",
+              "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+              "ts": 1773230945383,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230945255-p1c415",
+              "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+              "ts": 1773230947259,
+              "preset": "creative",
+              "ttfb": 2003,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230945255-p1c415",
+              "roomId": "canvas-7e555b8c-fc12-4a3c-a537-6117eb360c6e",
+              "ts": 1773230950655,
+              "preset": "creative",
+              "duration": 5399,
+              "chunkCount": 1,
+              "actionCount": 17,
+              "mutatingActionCount": 17,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 1,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 89,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 0,
+          "screenshot": 10,
+          "stability": 9
+        },
+        "notes": [
+          "Retries recorded 1 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 16,
+        "byType": {
+          "note": 13,
+          "box": 3
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas depicts a simple board game setup with labeled components and player scores.",
+        "scoreRationale": "The design includes all required elements with clear labels and a neat layout, earning a high score of 89.",
+        "strengths": [
+          "Clear labeling of game components and players",
+          "Balanced and organized layout"
+        ],
+        "issues": [
+          "Minimal use of verbs beyond creation and distribution",
+          "Some UI elements overlap content causing slight clutter"
+        ]
+      }
+    },
+    {
+      "runId": "collaborative-drawing-mural-haiku-4-5-mmlzxbi4",
+      "scenarioId": "collaborative-drawing-mural",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Collaborative Drawing Mural",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "collaborative-drawing",
+      "startedAt": "2026-03-11T12:09:12.588Z",
+      "completedAt": "2026-03-11T12:10:10.536Z",
+      "status": "completed",
+      "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+      "canvasId": "dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+      "canvasName": "collaborative-drawing-mural-haiku-4-5-collaborative-drawing-mural-haiku-4-5-mmlzxbi4",
+      "viewerPath": "/canvas?room=canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56&id=dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__haiku-4-5-doc.json",
+      "finalShapeCount": 12,
+      "actionSummary": {
+        "total": 15,
+        "byName": {
+          "create_shape": 12,
+          "reorder": 1,
+          "align": 1,
+          "distribute": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 46394,
+        "initialTtfbMs": 11675,
+        "totalActionCount": 15,
+        "totalMutatingActionCount": 15,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 15,
+        "avgFirstAckMs": 17308,
+        "avgScreenshotRttMs": 25
+      },
+      "steps": [
+        {
+          "stepId": "draw-mural",
+          "label": "Draw mural",
+          "sessionId": "1773230962583-mur6de",
+          "status": "completed",
+          "actionSummary": {
+            "total": 15,
+            "byName": {
+              "create_shape": 12,
+              "reorder": 1,
+              "align": 1,
+              "distribute": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 46394,
+            "ttfbMs": 11675,
+            "actionCount": 15,
+            "mutatingActionCount": 15,
+            "followupCount": 0,
+            "retryCount": 15,
+            "firstAckMs": 17308,
+            "screenshotRttMs": 25,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773230962583-mur6de",
+              "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+              "ts": 1773230962584,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773230962583-mur6de",
+              "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+              "ts": 1773230962616,
+              "preset": "creative",
+              "request_id": "a37f144e-a06d-4c90-864a-19fc36006d10",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 25,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773230962583-mur6de",
+              "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+              "ts": 1773230962700,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773230962583-mur6de",
+              "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+              "ts": 1773230974259,
+              "preset": "creative",
+              "ttfb": 11675,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773230962583-mur6de",
+              "roomId": "canvas-dc3032bd-fcc8-4e0f-b293-fc8c0cefdc56",
+              "ts": 1773231008977,
+              "preset": "creative",
+              "duration": 46393,
+              "chunkCount": 16,
+              "actionCount": 15,
+              "mutatingActionCount": 15,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 15,
+              "first_ack_ms": 17308,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 90,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 5,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 15 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 12,
+        "byType": {
+          "box": 2,
+          "draw": 5,
+          "note": 5
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows a collaborative mural with 12 colorful labeled shapes and connecting lines, earning a high score for shape count and verb usage.",
+        "scoreRationale": "High shape creation and use of required verbs with good visual organization resulted in a 90 score.",
+        "strengths": [
+          "Well-labeled, colorful shapes representing key concepts",
+          "Effective use of alignment and connecting lines"
+        ],
+        "issues": [
+          "Realtime sync health is degraded, possibly affecting collaboration",
+          "Minimal use of reorder, align, and distribute actions"
+        ]
+      }
+    },
+    {
+      "runId": "collaborative-drawing-mural-gpt5-4-low-mmlzykfe",
+      "scenarioId": "collaborative-drawing-mural",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Collaborative Drawing Mural",
+      "variantLabel": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "collaborative-drawing",
+      "startedAt": "2026-03-11T12:10:10.802Z",
+      "completedAt": "2026-03-11T12:13:11.510Z",
+      "status": "completed",
+      "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+      "canvasId": "a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+      "canvasName": "collaborative-drawing-mural-gpt5-4-low-collaborative-drawing-mural-gpt5-4-low-mmlzykfe",
+      "viewerPath": "/canvas?room=canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07&id=a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__gpt5-4-low-doc.json",
+      "finalShapeCount": 15,
+      "actionSummary": {
+        "total": 26,
+        "byName": {
+          "create_shape": 15,
+          "update_shape": 5,
+          "align": 3,
+          "stack": 3
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 169476,
+        "initialTtfbMs": 114670,
+        "totalActionCount": 26,
+        "totalMutatingActionCount": 26,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 24,
+        "avgFirstAckMs": 120257,
+        "avgScreenshotRttMs": 31
+      },
+      "steps": [
+        {
+          "stepId": "draw-mural",
+          "label": "Draw mural",
+          "sessionId": "1773231020455-tlzz9e",
+          "status": "completed",
+          "actionSummary": {
+            "total": 26,
+            "byName": {
+              "create_shape": 15,
+              "update_shape": 5,
+              "align": 3,
+              "stack": 3
+            }
+          },
+          "metrics": {
+            "durationMs": 169476,
+            "ttfbMs": 114670,
+            "actionCount": 26,
+            "mutatingActionCount": 26,
+            "followupCount": 0,
+            "retryCount": 24,
+            "firstAckMs": 120257,
+            "screenshotRttMs": 31,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773231020455-tlzz9e",
+              "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+              "ts": 1773231020456,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773231020455-tlzz9e",
+              "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+              "ts": 1773231020494,
+              "preset": "creative",
+              "request_id": "00e20028-8ed2-4ab6-b361-1719898c3e4b",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 31,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773231020455-tlzz9e",
+              "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+              "ts": 1773231020608,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773231020455-tlzz9e",
+              "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+              "ts": 1773231135126,
+              "preset": "creative",
+              "ttfb": 114670,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773231020455-tlzz9e",
+              "roomId": "canvas-a5f9d0ba-6fa8-4276-bcbe-b540f0d99e07",
+              "ts": 1773231189930,
+              "preset": "creative",
+              "duration": 169474,
+              "chunkCount": 24,
+              "actionCount": 26,
+              "mutatingActionCount": 26,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 24,
+              "first_ack_ms": 120257,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 85,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 0,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 24 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 15,
+        "byType": {
+          "box": 5,
+          "note": 5,
+          "draw": 5
+        }
+      },
+      "visualAnalysis": {
+        "summary": "Canvas shows a basic collaborative mural setup with shapes and labeled sections.",
+        "scoreRationale": "The score reflects solid shape creation and updates with minor alignment and stacking actions, but limited complexity or preferred verbs.",
+        "strengths": [
+          "Clear labeling of sections like 'COLLAB WALL' and 'Next steps'",
+          "Use of multiple shapes including rectangles and connectors"
+        ],
+        "issues": [
+          "Limited variety in shape types and drawing actions",
+          "Some lines appear disconnected or misplaced affecting clarity"
+        ]
+      }
+    },
+    {
+      "runId": "collaborative-drawing-mural-cerebras-gpt-oss-120b-mmm02g2j",
+      "scenarioId": "collaborative-drawing-mural",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Collaborative Drawing Mural",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "collaborative-drawing",
+      "startedAt": "2026-03-11T12:13:11.866Z",
+      "completedAt": "2026-03-11T12:13:30.239Z",
+      "status": "completed",
+      "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+      "canvasId": "69fa590e-6f9b-41a8-818d-a42e17550324",
+      "canvasName": "collaborative-drawing-mural-cerebras-gpt-oss-120b-collaborative-drawing-mural-cerebras-gpt-oss-120b-mmm02g2j",
+      "viewerPath": "/canvas?room=canvas-69fa590e-6f9b-41a8-818d-a42e17550324&id=69fa590e-6f9b-41a8-818d-a42e17550324&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 10,
+      "actionSummary": {
+        "total": 10,
+        "byName": {
+          "create_shape": 10
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 7014,
+        "initialTtfbMs": 3613,
+        "totalActionCount": 10,
+        "totalMutatingActionCount": 10,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 1,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": 32
+      },
+      "steps": [
+        {
+          "stepId": "draw-mural",
+          "label": "Draw mural",
+          "sessionId": "1773231201575-4mnhbb",
+          "status": "completed",
+          "actionSummary": {
+            "total": 10,
+            "byName": {
+              "create_shape": 10
+            }
+          },
+          "metrics": {
+            "durationMs": 7014,
+            "ttfbMs": 3613,
+            "actionCount": 10,
+            "mutatingActionCount": 10,
+            "followupCount": 0,
+            "retryCount": 1,
+            "firstAckMs": null,
+            "screenshotRttMs": 32,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773231201575-4mnhbb",
+              "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+              "ts": 1773231201577,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773231201575-4mnhbb",
+              "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+              "ts": 1773231201617,
+              "preset": "creative",
+              "request_id": "1a332c1f-4ef3-4757-8fc4-70e3a2f9803e",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 32,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773231201575-4mnhbb",
+              "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+              "ts": 1773231201738,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773231201575-4mnhbb",
+              "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+              "ts": 1773231205190,
+              "preset": "creative",
+              "ttfb": 3613,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773231201575-4mnhbb",
+              "roomId": "canvas-69fa590e-6f9b-41a8-818d-a42e17550324",
+              "ts": 1773231208588,
+              "preset": "creative",
+              "duration": 7011,
+              "chunkCount": 1,
+              "actionCount": 10,
+              "mutatingActionCount": 10,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 1,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 89,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 0,
+          "screenshot": 10,
+          "stability": 9
+        },
+        "notes": [
+          "Retries recorded 1 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 10,
+        "byType": {
+          "box": 1,
+          "note": 7,
+          "draw": 2
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows a central red box labeled 'Mural Center' connected by red lines to three orange boxes labeled 'Idea A,' 'Idea B,' and 'Idea C,' with a system status panel on the left.",
+        "scoreRationale": "The score reflects successful creation and connection of all required shapes with clear labeling and some visual stability despite a degraded sync status.",
+        "strengths": [
+          "All required shapes and connections are present and clearly labeled",
+          "Layout is organized with a central theme and linked ideas"
+        ],
+        "issues": [
+          "Realtime sync health shows degraded status which may impact stability",
+          "Visual design is functional but could be more polished or visually balanced"
+        ]
+      }
+    },
+    {
+      "runId": "multi-fairy-zones-haiku-4-5-mmm02uir",
+      "scenarioId": "multi-fairy-zones",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Multi-Fairy Zones",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "multi-fairy",
+      "startedAt": "2026-03-11T12:13:30.497Z",
+      "completedAt": "2026-03-11T12:14:18.740Z",
+      "status": "completed",
+      "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+      "canvasId": "75572254-fbc1-4505-91a8-0626f57b74ce",
+      "canvasName": "multi-fairy-zones-haiku-4-5-multi-fairy-zones-haiku-4-5-mmm02uir",
+      "viewerPath": "/canvas?room=canvas-75572254-fbc1-4505-91a8-0626f57b74ce&id=75572254-fbc1-4505-91a8-0626f57b74ce&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__haiku-4-5-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 12,
+        "byName": {
+          "create_shape": 12
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 36819,
+        "initialTtfbMs": 8900,
+        "totalActionCount": 12,
+        "totalMutatingActionCount": 12,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 12,
+        "avgFirstAckMs": 14472,
+        "avgScreenshotRttMs": 27
+      },
+      "steps": [
+        {
+          "stepId": "zone-layout",
+          "label": "Zone layout",
+          "sessionId": "1773231220334-7ybvyh",
+          "status": "completed",
+          "actionSummary": {
+            "total": 12,
+            "byName": {
+              "create_shape": 12
+            }
+          },
+          "metrics": {
+            "durationMs": 36819,
+            "ttfbMs": 8900,
+            "actionCount": 12,
+            "mutatingActionCount": 12,
+            "followupCount": 0,
+            "retryCount": 12,
+            "firstAckMs": 14472,
+            "screenshotRttMs": 27,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773231220334-7ybvyh",
+              "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+              "ts": 1773231220335,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773231220334-7ybvyh",
+              "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+              "ts": 1773231220375,
+              "preset": "creative",
+              "request_id": "55e119f9-0c23-4fd9-9baa-7821dd5a3df8",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 27,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773231220334-7ybvyh",
+              "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+              "ts": 1773231220471,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773231220334-7ybvyh",
+              "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+              "ts": 1773231229235,
+              "preset": "creative",
+              "ttfb": 8900,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773231220334-7ybvyh",
+              "roomId": "canvas-75572254-fbc1-4505-91a8-0626f57b74ce",
+              "ts": 1773231257152,
+              "preset": "creative",
+              "duration": 36817,
+              "chunkCount": 13,
+              "actionCount": 12,
+              "mutatingActionCount": 12,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 12,
+              "first_ack_ms": 14472,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 50,
+        "grade": "partial",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 35,
+          "preferredVerbs": 0,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Shape count below target (0/7).",
+          "Retries recorded 12 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "visualAnalysis": {
+        "summary": "The canvas displays an error message with no shapes visible.",
+        "scoreRationale": "Score is low because no shapes were successfully created and an error interrupted normal function.",
+        "strengths": [
+          "Screenshot clearly shows the error message",
+          "Some diagnostic information about sync and connection is visible"
+        ],
+        "issues": [
+          "No shapes created despite multiple create attempts",
+          "Validation error interrupts canvas functionality"
+        ]
+      }
+    },
+    {
+      "runId": "multi-fairy-zones-gpt5-4-low-mmm03vxz",
+      "scenarioId": "multi-fairy-zones",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Multi-Fairy Zones",
+      "variantLabel": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "multi-fairy",
+      "startedAt": "2026-03-11T12:14:19.184Z",
+      "completedAt": "2026-03-11T12:16:52.102Z",
+      "status": "completed",
+      "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+      "canvasId": "a0d71405-ecda-4eb8-8264-6e48210418a5",
+      "canvasName": "multi-fairy-zones-gpt5-4-low-multi-fairy-zones-gpt5-4-low-mmm03vxz",
+      "viewerPath": "/canvas?room=canvas-a0d71405-ecda-4eb8-8264-6e48210418a5&id=a0d71405-ecda-4eb8-8264-6e48210418a5&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__gpt5-4-low-doc.json",
+      "finalShapeCount": 8,
+      "actionSummary": {
+        "total": 10,
+        "byName": {
+          "create_shape": 8,
+          "align": 2
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 141732,
+        "initialTtfbMs": 118257,
+        "totalActionCount": 10,
+        "totalMutatingActionCount": 10,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 10,
+        "avgFirstAckMs": 123855,
+        "avgScreenshotRttMs": 33
+      },
+      "steps": [
+        {
+          "stepId": "zone-layout",
+          "label": "Zone layout",
+          "sessionId": "1773231268724-ztqqe1",
+          "status": "completed",
+          "actionSummary": {
+            "total": 10,
+            "byName": {
+              "create_shape": 8,
+              "align": 2
+            }
+          },
+          "metrics": {
+            "durationMs": 141732,
+            "ttfbMs": 118257,
+            "actionCount": 10,
+            "mutatingActionCount": 10,
+            "followupCount": 0,
+            "retryCount": 10,
+            "firstAckMs": 123855,
+            "screenshotRttMs": 33,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773231268724-ztqqe1",
+              "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+              "ts": 1773231268724,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773231268724-ztqqe1",
+              "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+              "ts": 1773231268766,
+              "preset": "creative",
+              "request_id": "741c1302-eef1-4b05-9acf-561a9f9a78f0",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 33,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773231268724-ztqqe1",
+              "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+              "ts": 1773231268881,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773231268724-ztqqe1",
+              "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+              "ts": 1773231386981,
+              "preset": "creative",
+              "ttfb": 118257,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773231268724-ztqqe1",
+              "roomId": "canvas-a0d71405-ecda-4eb8-8264-6e48210418a5",
+              "ts": 1773231410455,
+              "preset": "creative",
+              "duration": 141731,
+              "chunkCount": 10,
+              "actionCount": 10,
+              "mutatingActionCount": 10,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 10,
+              "first_ack_ms": 123855,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 90,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 5,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 10 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 8,
+        "byType": {
+          "box": 4,
+          "note": 4
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows four labeled zones with distinct boundary colors and a central shared zone, demonstrating clear organization.",
+        "scoreRationale": "The score likely reflects good shape usage, the inclusion of required and preferred verbs, clear screenshots, and stable layout with minor issues.",
+        "strengths": [
+          "Clear labeling of distinct fairy zones",
+          "Use of colored borders to separate zones visually"
+        ],
+        "issues": [
+          "Some imbalance in zone sizes and shape alignment",
+          "Realtime Sync Health showing degraded status"
+        ]
+      }
+    },
+    {
+      "runId": "multi-fairy-zones-cerebras-gpt-oss-120b-mmm076a2",
+      "scenarioId": "multi-fairy-zones",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Multi-Fairy Zones",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "multi-fairy",
+      "startedAt": "2026-03-11T12:16:52.474Z",
+      "completedAt": "2026-03-11T12:17:10.924Z",
+      "status": "completed",
+      "roomId": "canvas-47907f41-c56c-4333-bc49-5a7f671d1a7f",
+      "canvasId": "47907f41-c56c-4333-bc49-5a7f671d1a7f",
+      "canvasName": "multi-fairy-zones-cerebras-gpt-oss-120b-multi-fairy-zones-cerebras-gpt-oss-120b-mmm076a2",
+      "viewerPath": "/canvas?room=canvas-47907f41-c56c-4333-bc49-5a7f671d1a7f&id=47907f41-c56c-4333-bc49-5a7f671d1a7f&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 8,
+      "actionSummary": {
+        "total": 11,
+        "byName": {
+          "create_shape": 8,
+          "align": 1,
+          "distribute": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 6950,
+        "initialTtfbMs": 3559,
+        "totalActionCount": 11,
+        "totalMutatingActionCount": 11,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 1,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": 31
+      },
+      "steps": [
+        {
+          "stepId": "zone-layout",
+          "label": "Zone layout",
+          "sessionId": "1773231422310-fghas1",
+          "status": "completed",
+          "actionSummary": {
+            "total": 11,
+            "byName": {
+              "create_shape": 8,
+              "align": 1,
+              "distribute": 1,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 6950,
+            "ttfbMs": 3559,
+            "actionCount": 11,
+            "mutatingActionCount": 11,
+            "followupCount": 0,
+            "retryCount": 1,
+            "firstAckMs": null,
+            "screenshotRttMs": 31,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773231422310-fghas1",
+              "roomId": "canvas-47907f41-c56c-4333-bc49-5a7f671d1a7f",
+              "ts": 1773231422311,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773231422310-fghas1",
+              "roomId": "canvas-47907f41-c56c-4333-bc49-5a7f671d1a7f",
+              "ts": 1773231422349,
+              "preset": "creative",
+              "request_id": "518a0967-85bd-43a2-a194-b01a99b8b9e8",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 31,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773231422310-fghas1",
+              "roomId": "canvas-47907f41-c56c-4333-bc49-5a7f671d1a7f",
+              "ts": 1773231422453,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773231422310-fghas1",
+              "roomId": "canvas-47907f41-c56c-4333-bc49-5a7f671d1a7f",
+              "ts": 1773231425870,
+              "preset": "creative",
+              "ttfb": 3559,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773231422310-fghas1",
+              "roomId": "canvas-47907f41-c56c-4333-bc49-5a7f671d1a7f",
+              "ts": 1773231429260,
+              "preset": "creative",
+              "duration": 6949,
+              "chunkCount": 1,
+              "actionCount": 11,
+              "mutatingActionCount": 11,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 1,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 99,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 10,
+          "screenshot": 10,
+          "stability": 9
+        },
+        "notes": [
+          "Retries recorded 1 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 8,
+        "byType": {
+          "box": 4,
+          "note": 4
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas has three dotted red zones each containing sticky notes with clear labels and some overlap in the middle zone.",
+        "scoreRationale": "High score due to the correct number of shapes, effective use of verbs, clear zones, and good stability despite a minor sync issue.",
+        "strengths": [
+          "Clear labeling with distinct zones",
+          "Proper use of shapes and alignment verbs"
+        ],
+        "issues": [
+          "Overlapping sticky notes in the middle zone may affect clarity",
+          "Realtime sync status is degraded, indicating minor stability issues"
+        ]
+      }
+    },
+    {
+      "runId": "meeting-retro-board-haiku-4-5-mmm07ksv",
+      "scenarioId": "meeting-retro-board",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Meeting Retro Board",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "collaboration",
+      "startedAt": "2026-03-11T12:17:11.195Z",
+      "completedAt": "2026-03-11T12:18:28.369Z",
+      "status": "completed",
+      "roomId": "canvas-3769cabd-8eb3-40f2-a78a-5b0d6e819ccd",
+      "canvasId": "3769cabd-8eb3-40f2-a78a-5b0d6e819ccd",
+      "canvasName": "meeting-retro-board-haiku-4-5-meeting-retro-board-haiku-4-5-mmm07ksv",
+      "viewerPath": "/canvas?room=canvas-3769cabd-8eb3-40f2-a78a-5b0d6e819ccd&id=3769cabd-8eb3-40f2-a78a-5b0d6e819ccd&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__haiku-4-5-doc.json",
+      "finalShapeCount": 15,
+      "actionSummary": {
+        "total": 23,
+        "byName": {
+          "create_shape": 15,
+          "align": 3,
+          "stack": 3,
+          "distribute": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 65153,
+        "initialTtfbMs": 12704,
+        "totalActionCount": 23,
+        "totalMutatingActionCount": 23,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 23,
+        "avgFirstAckMs": 18354,
+        "avgScreenshotRttMs": 25
+      },
+      "steps": [
+        {
+          "stepId": "retro-columns",
+          "label": "Retro columns",
+          "sessionId": "1773231441549-36xolg",
+          "status": "completed",
+          "actionSummary": {
+            "total": 23,
+            "byName": {
+              "create_shape": 15,
+              "align": 3,
+              "stack": 3,
+              "distribute": 1,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 65153,
+            "ttfbMs": 12704,
+            "actionCount": 23,
+            "mutatingActionCount": 23,
+            "followupCount": 0,
+            "retryCount": 23,
+            "firstAckMs": 18354,
+            "screenshotRttMs": 25,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773231441549-36xolg",
+              "roomId": "canvas-3769cabd-8eb3-40f2-a78a-5b0d6e819ccd",
+              "ts": 1773231441550,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773231441549-36xolg",
+              "roomId": "canvas-3769cabd-8eb3-40f2-a78a-5b0d6e819ccd",
+              "ts": 1773231441586,
+              "preset": "creative",
+              "request_id": "2068895b-2eab-4c67-934a-f885859fcade",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 25,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773231441549-36xolg",
+              "roomId": "canvas-3769cabd-8eb3-40f2-a78a-5b0d6e819ccd",
+              "ts": 1773231441691,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773231441549-36xolg",
+              "roomId": "canvas-3769cabd-8eb3-40f2-a78a-5b0d6e819ccd",
+              "ts": 1773231454254,
+              "preset": "creative",
+              "ttfb": 12704,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773231441549-36xolg",
+              "roomId": "canvas-3769cabd-8eb3-40f2-a78a-5b0d6e819ccd",
+              "ts": 1773231506701,
+              "preset": "creative",
+              "duration": 65151,
+              "chunkCount": 24,
+              "actionCount": 23,
+              "mutatingActionCount": 23,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 23,
+              "first_ack_ms": 18354,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 95,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 10,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 23 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 15,
+        "byType": {
+          "box": 1,
+          "note": 11,
+          "text": 3
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas presents a clear and organized team retro board with well-labeled sections and shapes.",
+        "scoreRationale": "High score due to clear use of shapes, proper labeling with required verbs, and a good screenshot capture with stable layout.",
+        "strengths": [
+          "Clear section labeling with distinct colors",
+          "Good use of multiple shapes and text alignments"
+        ],
+        "issues": [
+          "Minor sync issue indicated, but does not affect visual quality",
+          "Some text spacing or alignment could be more polished"
+        ]
+      }
+    },
+    {
+      "runId": "meeting-retro-board-gpt5-4-low-mmm098k5",
+      "scenarioId": "meeting-retro-board",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Meeting Retro Board",
+      "variantLabel": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "collaboration",
+      "startedAt": "2026-03-11T12:18:28.663Z",
+      "completedAt": "2026-03-11T12:21:16.315Z",
+      "status": "completed",
+      "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+      "canvasId": "30a9c7a0-c866-429c-9618-bd536a5cba64",
+      "canvasName": "meeting-retro-board-gpt5-4-low-meeting-retro-board-gpt5-4-low-mmm098k5",
+      "viewerPath": "/canvas?room=canvas-30a9c7a0-c866-429c-9618-bd536a5cba64&id=30a9c7a0-c866-429c-9618-bd536a5cba64&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__gpt5-4-low-doc.json",
+      "finalShapeCount": 23,
+      "actionSummary": {
+        "total": 32,
+        "byName": {
+          "create_shape": 23,
+          "align": 4,
+          "distribute": 1,
+          "stack": 3,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 155986,
+        "initialTtfbMs": 83342,
+        "totalActionCount": 32,
+        "totalMutatingActionCount": 32,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 32,
+        "avgFirstAckMs": 88925,
+        "avgScreenshotRttMs": 31
+      },
+      "steps": [
+        {
+          "stepId": "retro-columns",
+          "label": "Retro columns",
+          "sessionId": "1773231518671-zs2s0e",
+          "status": "completed",
+          "actionSummary": {
+            "total": 32,
+            "byName": {
+              "create_shape": 23,
+              "align": 4,
+              "distribute": 1,
+              "stack": 3,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 155986,
+            "ttfbMs": 83342,
+            "actionCount": 32,
+            "mutatingActionCount": 32,
+            "followupCount": 0,
+            "retryCount": 32,
+            "firstAckMs": 88925,
+            "screenshotRttMs": 31,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773231518671-zs2s0e",
+              "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+              "ts": 1773231518672,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773231518671-zs2s0e",
+              "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+              "ts": 1773231518707,
+              "preset": "creative",
+              "request_id": "85f8f694-a6ce-475c-ac91-37ab49e8c453",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 31,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773231518671-zs2s0e",
+              "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+              "ts": 1773231518805,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773231518671-zs2s0e",
+              "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+              "ts": 1773231602014,
+              "preset": "creative",
+              "ttfb": 83342,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773231518671-zs2s0e",
+              "roomId": "canvas-30a9c7a0-c866-429c-9618-bd536a5cba64",
+              "ts": 1773231674657,
+              "preset": "creative",
+              "duration": 155985,
+              "chunkCount": 32,
+              "actionCount": 32,
+              "mutatingActionCount": 32,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 32,
+              "first_ack_ms": 88925,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 95,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 10,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 32 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 23,
+        "byType": {
+          "box": 4,
+          "note": 19
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows a well-organized retro board with three columns, each having 3 sticky notes stacked neatly and labeled with relevant text.",
+        "scoreRationale": "High score due to correct shape count, clear use of required verbs, and good layout stability with minor issues in screenshot clarity.",
+        "strengths": [
+          "Good alignment and stacking of sticky notes",
+          "Clear labeling of retro points"
+        ],
+        "issues": [
+          "Screenshot shows degraded realtime sync health panel overlapping content",
+          "Some sticky notes have overlapping text making it harder to read"
+        ]
+      }
+    },
+    {
+      "runId": "meeting-retro-board-cerebras-gpt-oss-120b-mmm0cu5b",
+      "scenarioId": "meeting-retro-board",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Meeting Retro Board",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "collaboration",
+      "startedAt": "2026-03-11T12:21:16.710Z",
+      "completedAt": "2026-03-11T12:21:30.588Z",
+      "status": "failed",
+      "roomId": "canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+      "canvasId": "0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+      "canvasName": "meeting-retro-board-cerebras-gpt-oss-120b-meeting-retro-board-cerebras-gpt-oss-120b-mmm0cu5b",
+      "viewerPath": "/canvas?room=canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02&id=0d859f86-3dd8-4e7b-98d2-8be80eeacf02&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 0,
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "metrics": {
+        "totalDurationMs": 2374,
+        "initialTtfbMs": null,
+        "totalActionCount": 0,
+        "totalMutatingActionCount": 0,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 0,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": null
+      },
+      "steps": [
+        {
+          "stepId": "retro-columns",
+          "label": "Retro columns",
+          "sessionId": "1773231686646-wqpytv",
+          "status": "failed",
+          "actionSummary": {
+            "total": 0,
+            "byName": {}
+          },
+          "metrics": {
+            "durationMs": 2374,
+            "ttfbMs": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773231686646-wqpytv",
+              "roomId": "canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+              "ts": 1773231686648,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773231686646-wqpytv",
+              "roomId": "canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+              "ts": 1773231686686,
+              "preset": "creative",
+              "request_id": "13106a6d-be1f-43a2-ae46-7194704e2c5d",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 29,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773231686646-wqpytv",
+              "roomId": "canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+              "ts": 1773231686780,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "error",
+              "sessionId": "1773231686646-wqpytv",
+              "roomId": "canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+              "ts": 1773231689015,
+              "preset": "creative",
+              "error": "Error: Cerebras canvas response was not valid JSON for gpt-oss-120b"
+            }
+          ],
+          "error": "Cerebras canvas response was not valid JSON for gpt-oss-120b"
+        }
+      ],
+      "score": {
+        "overall": 10,
+        "grade": "weak",
+        "rubric": {
+          "shapes": 0,
+          "requiredVerbs": 0,
+          "preferredVerbs": 0,
+          "screenshot": 10,
+          "stability": 0
+        },
+        "notes": [
+          "Shape count below target (0/9).",
+          "Missing required verbs: create_shape."
+        ]
+      },
+      "error": "Cerebras canvas response was not valid JSON for gpt-oss-120b",
+      "shapeSummary": {
+        "total": 0,
+        "byType": {}
+      },
+      "visualAnalysis": {
+        "summary": "The canvas is completely empty with no shapes or annotations.",
+        "scoreRationale": "It earned a low score due to absence of any visual content or required elements on the canvas.",
+        "strengths": [
+          "Canvas is clean and uncluttered",
+          "No conflicting or extraneous elements present"
+        ],
+        "issues": [
+          "No shapes or verbs included",
+          "Failed to add any content to the canvas"
+        ]
+      }
+    },
+    {
+      "runId": "call-ready-hero-board-haiku-4-5-mmm0d55r",
+      "scenarioId": "call-ready-hero-board",
+      "variantId": "haiku-4-5",
+      "scenarioLabel": "Call-Ready Hero Board",
+      "variantLabel": "Claude Haiku 4.5",
+      "comparisonLabel": "haiku-4.5",
+      "category": "realtime",
+      "startedAt": "2026-03-11T12:21:31.197Z",
+      "completedAt": "2026-03-11T12:22:10.722Z",
+      "status": "completed",
+      "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+      "canvasId": "7cd2359a-8112-4697-9889-a65f6969cbb2",
+      "canvasName": "call-ready-hero-board-haiku-4-5-call-ready-hero-board-haiku-4-5-mmm0d55r",
+      "viewerPath": "/canvas?room=canvas-7cd2359a-8112-4697-9889-a65f6969cbb2&id=7cd2359a-8112-4697-9889-a65f6969cbb2&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__haiku-4-5.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__haiku-4-5.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__haiku-4-5-doc.json",
+      "finalShapeCount": 5,
+      "actionSummary": {
+        "total": 9,
+        "byName": {
+          "create_shape": 5,
+          "align": 2,
+          "stack": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 28572,
+        "initialTtfbMs": 7122,
+        "totalActionCount": 9,
+        "totalMutatingActionCount": 9,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 9,
+        "avgFirstAckMs": 12887,
+        "avgScreenshotRttMs": 25
+      },
+      "steps": [
+        {
+          "stepId": "hero-board",
+          "label": "Hero board",
+          "sessionId": "1773231700580-4b928l",
+          "status": "completed",
+          "actionSummary": {
+            "total": 9,
+            "byName": {
+              "create_shape": 5,
+              "align": 2,
+              "stack": 1,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 28572,
+            "ttfbMs": 7122,
+            "actionCount": 9,
+            "mutatingActionCount": 9,
+            "followupCount": 0,
+            "retryCount": 9,
+            "firstAckMs": 12887,
+            "screenshotRttMs": 25,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773231700580-4b928l",
+              "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+              "ts": 1773231700581,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773231700580-4b928l",
+              "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+              "ts": 1773231700612,
+              "preset": "creative",
+              "request_id": "4e25b635-fd65-4423-b8b6-34d9ab3161f4",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 25,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773231700580-4b928l",
+              "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+              "ts": 1773231700717,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773231700580-4b928l",
+              "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+              "ts": 1773231707703,
+              "preset": "creative",
+              "ttfb": 7122,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773231700580-4b928l",
+              "roomId": "canvas-7cd2359a-8112-4697-9889-a65f6969cbb2",
+              "ts": 1773231729152,
+              "preset": "creative",
+              "duration": 28571,
+              "chunkCount": 10,
+              "actionCount": 9,
+              "mutatingActionCount": 9,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 9,
+              "first_ack_ms": 12887,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 89,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 29,
+          "requiredVerbs": 35,
+          "preferredVerbs": 10,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Shape count below target (5/6).",
+          "Retries recorded 9 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 5,
+        "byType": {
+          "box": 1,
+          "note": 4
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas shows two sticky notes, one red labeled 'LIVE REVIEW' with a red outline, and one orange with 'Key insight' and 'Next step'.",
+        "scoreRationale": "The score reflects a mostly complete and stable layout with proper shape creation and basic alignment, but limited complexity and actions.",
+        "strengths": [
+          "Clear labeling with relevant keywords",
+          "Neat alignment of shapes with a visible outline"
+        ],
+        "issues": [
+          "Low shape count compared to rubric target",
+          "Limited variety of actions and interactions"
+        ]
+      }
+    },
+    {
+      "runId": "call-ready-hero-board-gpt5-4-low-mmm0e04l",
+      "scenarioId": "call-ready-hero-board",
+      "variantId": "gpt5-4-low",
+      "scenarioLabel": "Call-Ready Hero Board",
+      "variantLabel": "GPT-5 Low",
+      "comparisonLabel": "gpt5.4-low",
+      "category": "realtime",
+      "startedAt": "2026-03-11T12:22:12.296Z",
+      "completedAt": "2026-03-11T12:24:56.964Z",
+      "status": "completed",
+      "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+      "canvasId": "3f55f027-2815-4036-aeac-7be1a2786f29",
+      "canvasName": "call-ready-hero-board-gpt5-4-low-call-ready-hero-board-gpt5-4-low-mmm0e04l",
+      "viewerPath": "/canvas?room=canvas-3f55f027-2815-4036-aeac-7be1a2786f29&id=3f55f027-2815-4036-aeac-7be1a2786f29&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__gpt5-4-low.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__gpt5-4-low.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__gpt5-4-low-doc.json",
+      "finalShapeCount": 8,
+      "actionSummary": {
+        "total": 11,
+        "byName": {
+          "create_shape": 8,
+          "align": 1,
+          "stack": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 153620,
+        "initialTtfbMs": 127874,
+        "totalActionCount": 11,
+        "totalMutatingActionCount": 11,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 11,
+        "avgFirstAckMs": 133469,
+        "avgScreenshotRttMs": 30
+      },
+      "steps": [
+        {
+          "stepId": "hero-board",
+          "label": "Hero board",
+          "sessionId": "1773231741689-y82ft7",
+          "status": "completed",
+          "actionSummary": {
+            "total": 11,
+            "byName": {
+              "create_shape": 8,
+              "align": 1,
+              "stack": 1,
+              "reorder": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 153620,
+            "ttfbMs": 127874,
+            "actionCount": 11,
+            "mutatingActionCount": 11,
+            "followupCount": 0,
+            "retryCount": 11,
+            "firstAckMs": 133469,
+            "screenshotRttMs": 30,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773231741689-y82ft7",
+              "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+              "ts": 1773231741692,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773231741689-y82ft7",
+              "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+              "ts": 1773231741732,
+              "preset": "creative",
+              "request_id": "baa73955-822a-4a48-aee7-fa4b994eb919",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 30,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773231741689-y82ft7",
+              "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+              "ts": 1773231741833,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773231741689-y82ft7",
+              "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+              "ts": 1773231869566,
+              "preset": "creative",
+              "ttfb": 127874,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773231741689-y82ft7",
+              "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+              "ts": 1773231895309,
+              "preset": "creative",
+              "duration": 153617,
+              "chunkCount": 11,
+              "actionCount": 11,
+              "mutatingActionCount": 11,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 11,
+              "first_ack_ms": 133469,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 95,
+        "grade": "excellent",
+        "rubric": {
+          "shapes": 35,
+          "requiredVerbs": 35,
+          "preferredVerbs": 10,
+          "screenshot": 10,
+          "stability": 5
+        },
+        "notes": [
+          "Retries recorded 11 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 8,
+        "byType": {
+          "box": 3,
+          "text": 1,
+          "note": 3,
+          "draw": 1
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas features a prominently outlined 'Dominant Idea' section with underlined text and a sticky note labeled 'Open questions.'",
+        "scoreRationale": "The image likely earned a high score due to clear shape usage, presence of required verbs, and well-aligned elements.",
+        "strengths": [
+          "Clear and distinct shapes used",
+          "Effective use of text and alignment"
+        ],
+        "issues": [
+          "One issue indicated in the realtime sync health",
+          "Minimal action variety beyond shape creation"
+        ]
+      }
+    },
+    {
+      "runId": "call-ready-hero-board-cerebras-gpt-oss-120b-mmm0hkeg",
+      "scenarioId": "call-ready-hero-board",
+      "variantId": "cerebras-gpt-oss-120b",
+      "scenarioLabel": "Call-Ready Hero Board",
+      "variantLabel": "Cerebras GPT OSS 120B",
+      "comparisonLabel": "openai OSS 120B cerebras",
+      "category": "realtime",
+      "startedAt": "2026-03-11T12:24:57.374Z",
+      "completedAt": "2026-03-11T12:25:14.057Z",
+      "status": "completed",
+      "roomId": "canvas-b7db237d-3bf6-44c4-917d-024125beb6f2",
+      "canvasId": "b7db237d-3bf6-44c4-917d-024125beb6f2",
+      "canvasName": "call-ready-hero-board-cerebras-gpt-oss-120b-call-ready-hero-board-cerebras-gpt-oss-120b-mmm0hkeg",
+      "viewerPath": "/canvas?room=canvas-b7db237d-3bf6-44c4-917d-024125beb6f2&id=b7db237d-3bf6-44c4-917d-024125beb6f2&parity=1",
+      "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__cerebras-gpt-oss-120b.png",
+      "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__cerebras-gpt-oss-120b.json",
+      "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__cerebras-gpt-oss-120b-doc.json",
+      "finalShapeCount": 4,
+      "actionSummary": {
+        "total": 10,
+        "byName": {
+          "create_shape": 4,
+          "update_shape": 4,
+          "align": 1,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "totalDurationMs": 4748,
+        "initialTtfbMs": 1351,
+        "totalActionCount": 10,
+        "totalMutatingActionCount": 10,
+        "totalFollowupCount": 0,
+        "totalRetryCount": 1,
+        "avgFirstAckMs": null,
+        "avgScreenshotRttMs": 32
+      },
+      "steps": [
+        {
+          "stepId": "hero-board",
+          "label": "Hero board",
+          "sessionId": "1773231907649-4go17l",
+          "status": "completed",
+          "actionSummary": {
+            "total": 10,
+            "byName": {
+              "create_shape": 4,
+              "update_shape": 4,
+              "align": 1,
+              "stack": 1
+            }
+          },
+          "metrics": {
+            "durationMs": 4748,
+            "ttfbMs": 1351,
+            "actionCount": 10,
+            "mutatingActionCount": 10,
+            "followupCount": 0,
+            "retryCount": 1,
+            "firstAckMs": null,
+            "screenshotRttMs": 32,
+            "screenshotResult": null
+          },
+          "metricEvents": [
+            {
+              "event": "start",
+              "sessionId": "1773231907649-4go17l",
+              "roomId": "canvas-b7db237d-3bf6-44c4-917d-024125beb6f2",
+              "ts": 1773231907651,
+              "preset": "creative"
+            },
+            {
+              "event": "screenshot",
+              "sessionId": "1773231907649-4go17l",
+              "roomId": "canvas-b7db237d-3bf6-44c4-917d-024125beb6f2",
+              "ts": 1773231907691,
+              "preset": "creative",
+              "request_id": "b5e8230d-ff21-48d6-a1fe-9cd428df55a9",
+              "timeout_ms": 12000,
+              "image_bytes": 14678,
+              "rtt": 32,
+              "result": "received"
+            },
+            {
+              "event": "context",
+              "sessionId": "1773231907649-4go17l",
+              "roomId": "canvas-b7db237d-3bf6-44c4-917d-024125beb6f2",
+              "ts": 1773231907784,
+              "preset": "creative",
+              "blurry_count": 0,
+              "peripheral_count": 0,
+              "token_budget_max": 38000,
+              "transcript_tokens": 0,
+              "selected_count": 0,
+              "examples_count": 10
+            },
+            {
+              "event": "ttfb",
+              "sessionId": "1773231907649-4go17l",
+              "roomId": "canvas-b7db237d-3bf6-44c4-917d-024125beb6f2",
+              "ts": 1773231909002,
+              "preset": "creative",
+              "ttfb": 1351,
+              "slo_met": false,
+              "slo_target": 200
+            },
+            {
+              "event": "complete",
+              "sessionId": "1773231907649-4go17l",
+              "roomId": "canvas-b7db237d-3bf6-44c4-917d-024125beb6f2",
+              "ts": 1773231912397,
+              "preset": "creative",
+              "duration": 4746,
+              "chunkCount": 1,
+              "actionCount": 10,
+              "mutatingActionCount": 10,
+              "followupCount": 0,
+              "shapeCount": 0,
+              "transcriptLines": 0,
+              "retryCount": 1,
+              "blurry_count": 0,
+              "peripheral_count": 0
+            }
+          ]
+        }
+      ],
+      "score": {
+        "overall": 82,
+        "grade": "strong",
+        "rubric": {
+          "shapes": 23,
+          "requiredVerbs": 35,
+          "preferredVerbs": 5,
+          "screenshot": 10,
+          "stability": 9
+        },
+        "notes": [
+          "Shape count below target (4/6).",
+          "Retries recorded 1 time(s)."
+        ]
+      },
+      "shapeSummary": {
+        "total": 4,
+        "byType": {
+          "box": 1,
+          "note": 3
+        }
+      },
+      "visualAnalysis": {
+        "summary": "The canvas has a large red-outlined square on the left and a peach-colored stacked list with text on the right.",
+        "scoreRationale": "The score reflects decent shape creation and updates but limited alignment and stacking actions with fewer shapes than required.",
+        "strengths": [
+          "Clear distinction between shapes",
+          "Legible text elements"
+        ],
+        "issues": [
+          "Insufficient total shape count",
+          "Minimal use of alignment and stacking actions"
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "totalRuns": 30,
+    "completedRuns": 29,
+    "successRatePct": 97,
+    "byVariant": [
+      {
+        "variantId": "haiku-4-5",
+        "label": "Claude Haiku 4.5",
+        "avgScore": 87,
+        "avgDurationMs": 53427,
+        "avgTtfbMs": 10757,
+        "successRatePct": 100
+      },
+      {
+        "variantId": "gpt5-4-low",
+        "label": "GPT-5 Low",
+        "avgScore": 91,
+        "avgDurationMs": 165543,
+        "avgTtfbMs": 107885,
+        "successRatePct": 100
+      },
+      {
+        "variantId": "cerebras-gpt-oss-120b",
+        "label": "Cerebras GPT OSS 120B",
+        "avgScore": 88,
+        "avgDurationMs": 14319,
+        "avgTtfbMs": 2816,
+        "successRatePct": 90
+      }
+    ]
+  },
+  "paths": {
+    "rootDir": "docs/benchmarks/canvas-agent",
+    "assetDir": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11",
+    "latestJson": "docs/benchmarks/canvas-agent/latest.json",
+    "latestHtml": "docs/benchmarks/canvas-agent/latest.html"
+  }
+}

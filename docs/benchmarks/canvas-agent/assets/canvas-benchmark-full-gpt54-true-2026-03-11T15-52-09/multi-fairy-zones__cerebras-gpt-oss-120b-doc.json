@@ -1,0 +1,94 @@
+{
+  "roomId": "canvas-d562e7cd-6701-4f08-aa3a-8334c51d9b98",
+  "canvasId": "d562e7cd-6701-4f08-aa3a-8334c51d9b98",
+  "canvasName": "multi-fairy-zones-cerebras-gpt-oss-120b-multi-fairy-zones-cerebras-gpt-oss-120b-mmmo2de5",
+  "source": "viewer",
+  "shapeCount": 8,
+  "shapes": [
+    {
+      "id": "shape:zone-1",
+      "type": "geo",
+      "x": 220,
+      "y": 280,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:zone-2",
+      "type": "geo",
+      "x": 220,
+      "y": 280,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:zone-3",
+      "type": "geo",
+      "x": 220,
+      "y": 280,
+      "props": {
+        "geo": "rectangle",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo2mi4-891",
+      "type": "note",
+      "x": 370,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo2mi5-228",
+      "type": "note",
+      "x": 702,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo2mi5-438",
+      "type": "note",
+      "x": 1034,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:synthesis-center",
+      "type": "geo",
+      "x": 720,
+      "y": 480,
+      "props": {
+        "geo": "ellipse",
+        "text": "[richText]"
+      }
+    },
+    {
+      "id": "shape:preset-mmmo2mi5-606",
+      "type": "note",
+      "x": 720,
+      "y": 480,
+      "props": {
+        "geo": null,
+        "text": "[richText]"
+      }
+    }
+  ],
+  "persisted": {
+    "version": 1,
+    "shapes": [],
+    "lastUpdated": 1773271515684
+  }
+}

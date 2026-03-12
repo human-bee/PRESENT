@@ -1,0 +1,125 @@
+{
+  "runId": "meeting-retro-board-cerebras-gpt-oss-120b-mmm0cu5b",
+  "scenarioId": "meeting-retro-board",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Meeting Retro Board",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "collaboration",
+  "startedAt": "2026-03-11T12:21:16.710Z",
+  "completedAt": "2026-03-11T12:21:30.588Z",
+  "status": "failed",
+  "roomId": "canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+  "canvasId": "0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+  "canvasName": "meeting-retro-board-cerebras-gpt-oss-120b-meeting-retro-board-cerebras-gpt-oss-120b-mmm0cu5b",
+  "viewerPath": "/canvas?room=canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02&id=0d859f86-3dd8-4e7b-98d2-8be80eeacf02&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 0,
+  "actionSummary": {
+    "total": 0,
+    "byName": {}
+  },
+  "metrics": {
+    "totalDurationMs": 2374,
+    "initialTtfbMs": null,
+    "totalActionCount": 0,
+    "totalMutatingActionCount": 0,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 0,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": null
+  },
+  "steps": [
+    {
+      "stepId": "retro-columns",
+      "label": "Retro columns",
+      "sessionId": "1773231686646-wqpytv",
+      "status": "failed",
+      "actionSummary": {
+        "total": 0,
+        "byName": {}
+      },
+      "metrics": {
+        "durationMs": 2374,
+        "ttfbMs": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773231686646-wqpytv",
+          "roomId": "canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+          "ts": 1773231686648,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773231686646-wqpytv",
+          "roomId": "canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+          "ts": 1773231686686,
+          "preset": "creative",
+          "request_id": "13106a6d-be1f-43a2-ae46-7194704e2c5d",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 29,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773231686646-wqpytv",
+          "roomId": "canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+          "ts": 1773231686780,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "error",
+          "sessionId": "1773231686646-wqpytv",
+          "roomId": "canvas-0d859f86-3dd8-4e7b-98d2-8be80eeacf02",
+          "ts": 1773231689015,
+          "preset": "creative",
+          "error": "Error: Cerebras canvas response was not valid JSON for gpt-oss-120b"
+        }
+      ],
+      "error": "Cerebras canvas response was not valid JSON for gpt-oss-120b"
+    }
+  ],
+  "score": {
+    "overall": 10,
+    "grade": "weak",
+    "rubric": {
+      "shapes": 0,
+      "requiredVerbs": 0,
+      "preferredVerbs": 0,
+      "screenshot": 10,
+      "stability": 0
+    },
+    "notes": [
+      "Shape count below target (0/9).",
+      "Missing required verbs: create_shape."
+    ]
+  },
+  "error": "Cerebras canvas response was not valid JSON for gpt-oss-120b",
+  "shapeSummary": {
+    "total": 0,
+    "byType": {}
+  },
+  "visualAnalysis": {
+    "summary": "The canvas is completely empty with no shapes or annotations.",
+    "scoreRationale": "It earned a low score due to absence of any visual content or required elements on the canvas.",
+    "strengths": [
+      "Canvas is clean and uncluttered",
+      "No conflicting or extraneous elements present"
+    ],
+    "issues": [
+      "No shapes or verbs included",
+      "Failed to add any content to the canvas"
+    ]
+  }
+}

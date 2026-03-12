@@ -1,0 +1,164 @@
+{
+  "runId": "call-ready-hero-board-gpt5-4-low-mmm0e04l",
+  "scenarioId": "call-ready-hero-board",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Call-Ready Hero Board",
+  "variantLabel": "GPT-5 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "realtime",
+  "startedAt": "2026-03-11T12:22:12.296Z",
+  "completedAt": "2026-03-11T12:24:56.964Z",
+  "status": "completed",
+  "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+  "canvasId": "3f55f027-2815-4036-aeac-7be1a2786f29",
+  "canvasName": "call-ready-hero-board-gpt5-4-low-call-ready-hero-board-gpt5-4-low-mmm0e04l",
+  "viewerPath": "/canvas?room=canvas-3f55f027-2815-4036-aeac-7be1a2786f29&id=3f55f027-2815-4036-aeac-7be1a2786f29&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__gpt5-4-low-doc.json",
+  "finalShapeCount": 8,
+  "actionSummary": {
+    "total": 11,
+    "byName": {
+      "create_shape": 8,
+      "align": 1,
+      "stack": 1,
+      "reorder": 1
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 153620,
+    "initialTtfbMs": 127874,
+    "totalActionCount": 11,
+    "totalMutatingActionCount": 11,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 11,
+    "avgFirstAckMs": 133469,
+    "avgScreenshotRttMs": 30
+  },
+  "steps": [
+    {
+      "stepId": "hero-board",
+      "label": "Hero board",
+      "sessionId": "1773231741689-y82ft7",
+      "status": "completed",
+      "actionSummary": {
+        "total": 11,
+        "byName": {
+          "create_shape": 8,
+          "align": 1,
+          "stack": 1,
+          "reorder": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 153620,
+        "ttfbMs": 127874,
+        "actionCount": 11,
+        "mutatingActionCount": 11,
+        "followupCount": 0,
+        "retryCount": 11,
+        "firstAckMs": 133469,
+        "screenshotRttMs": 30,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773231741689-y82ft7",
+          "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+          "ts": 1773231741692,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773231741689-y82ft7",
+          "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+          "ts": 1773231741732,
+          "preset": "creative",
+          "request_id": "baa73955-822a-4a48-aee7-fa4b994eb919",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 30,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773231741689-y82ft7",
+          "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+          "ts": 1773231741833,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773231741689-y82ft7",
+          "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+          "ts": 1773231869566,
+          "preset": "creative",
+          "ttfb": 127874,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773231741689-y82ft7",
+          "roomId": "canvas-3f55f027-2815-4036-aeac-7be1a2786f29",
+          "ts": 1773231895309,
+          "preset": "creative",
+          "duration": 153617,
+          "chunkCount": 11,
+          "actionCount": 11,
+          "mutatingActionCount": 11,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 11,
+          "first_ack_ms": 133469,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 95,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 10,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 11 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 8,
+    "byType": {
+      "box": 3,
+      "text": 1,
+      "note": 3,
+      "draw": 1
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas features a prominently outlined 'Dominant Idea' section with underlined text and a sticky note labeled 'Open questions.'",
+    "scoreRationale": "The image likely earned a high score due to clear shape usage, presence of required verbs, and well-aligned elements.",
+    "strengths": [
+      "Clear and distinct shapes used",
+      "Effective use of text and alignment"
+    ],
+    "issues": [
+      "One issue indicated in the realtime sync health",
+      "Minimal action variety beyond shape creation"
+    ]
+  }
+}

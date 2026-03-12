@@ -1,0 +1,157 @@
+{
+  "runId": "scratchpad-systems-haiku-4-5-mmlzdihm",
+  "scenarioId": "scratchpad-systems",
+  "variantId": "haiku-4-5",
+  "scenarioLabel": "Scratchpad Systems Sketch",
+  "variantLabel": "Claude Haiku 4.5",
+  "comparisonLabel": "haiku-4.5",
+  "category": "scratchpad",
+  "startedAt": "2026-03-11T11:53:48.535Z",
+  "completedAt": "2026-03-11T11:54:51.864Z",
+  "status": "completed",
+  "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+  "canvasId": "734b6ed1-8517-4b6f-a251-b746c757bf42",
+  "canvasName": "scratchpad-systems-haiku-4-5-scratchpad-systems-haiku-4-5-mmlzdihm",
+  "viewerPath": "/canvas?room=canvas-734b6ed1-8517-4b6f-a251-b746c757bf42&id=734b6ed1-8517-4b6f-a251-b746c757bf42&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__haiku-4-5.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__haiku-4-5.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__haiku-4-5-doc.json",
+  "finalShapeCount": 19,
+  "actionSummary": {
+    "total": 19,
+    "byName": {
+      "create_shape": 19
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 52375,
+    "initialTtfbMs": 8841,
+    "totalActionCount": 19,
+    "totalMutatingActionCount": 19,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 19,
+    "avgFirstAckMs": 14426,
+    "avgScreenshotRttMs": 27
+  },
+  "steps": [
+    {
+      "stepId": "latency-sketch",
+      "label": "Latency sketch",
+      "sessionId": "1773230037825-zirce6",
+      "status": "completed",
+      "actionSummary": {
+        "total": 19,
+        "byName": {
+          "create_shape": 19
+        }
+      },
+      "metrics": {
+        "durationMs": 52375,
+        "ttfbMs": 8841,
+        "actionCount": 19,
+        "mutatingActionCount": 19,
+        "followupCount": 0,
+        "retryCount": 19,
+        "firstAckMs": 14426,
+        "screenshotRttMs": 27,
+        "screenshotResult": null
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773230037825-zirce6",
+          "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+          "ts": 1773230037826,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773230037825-zirce6",
+          "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+          "ts": 1773230037863,
+          "preset": "creative",
+          "request_id": "bbeda649-8a5a-4624-af32-707305107830",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 27,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773230037825-zirce6",
+          "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+          "ts": 1773230037966,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773230037825-zirce6",
+          "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+          "ts": 1773230046667,
+          "preset": "creative",
+          "ttfb": 8841,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773230037825-zirce6",
+          "roomId": "canvas-734b6ed1-8517-4b6f-a251-b746c757bf42",
+          "ts": 1773230090200,
+          "preset": "creative",
+          "duration": 52374,
+          "chunkCount": 19,
+          "actionCount": 19,
+          "mutatingActionCount": 19,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 19,
+          "first_ack_ms": 14426,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 85,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 0,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 19 time(s)."
+    ]
+  },
+  "shapeSummary": {
+    "total": 19,
+    "byType": {
+      "text": 7,
+      "box": 6,
+      "draw": 6
+    }
+  },
+  "visualAnalysis": {
+    "summary": "The canvas shows a labeled flowchart with distinct shapes and connecting lines illustrating a low-latency canvas pipeline.",
+    "scoreRationale": "The score reflects well-organized shapes and verb usage with minor issues likely related to stability or completeness.",
+    "strengths": [
+      "Clear labeling of process stages",
+      "Good use of connecting lines to show flow"
+    ],
+    "issues": [
+      "The connection from 'screenshot' to 'action stream' is curved and less consistent",
+      "Degraded realtime sync health indicator may impact stability score"
+    ]
+  }
+}

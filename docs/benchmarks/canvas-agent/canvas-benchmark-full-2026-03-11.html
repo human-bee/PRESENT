@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Canvas Benchmark Suite</title>
+  <style>
+    :root {
+      --bg: #f2ede2;
+      --paper: rgba(255,255,255,0.78);
+      --ink: #14110f;
+      --muted: #6c655f;
+      --accent: #9d3f0c;
+      --line: rgba(20,17,15,0.12);
+      --shadow: 0 24px 60px rgba(58, 43, 28, 0.14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(157,63,12,0.12), transparent 28%),
+        linear-gradient(180deg, #fbf7ef 0%, var(--bg) 55%, #ece2d1 100%);
+      padding: 40px 28px 80px;
+    }
+    .shell { max-width: 1500px; margin: 0 auto; }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+    .hero-card, .scenario-section, .summary-card {
+      background: var(--paper);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      border-radius: 28px;
+    }
+    .hero-card { padding: 30px; }
+    .hero-card h1 { margin: 0 0 10px; font-size: 3.2rem; line-height: 0.95; }
+    .hero-card p { margin: 0; color: var(--muted); font-size: 1.02rem; line-height: 1.5; }
+    .summary-card { padding: 24px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .summary-grid div { border-top: 1px solid var(--line); padding-top: 10px; }
+    .summary-grid span, .stat-grid span { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+    .summary-grid strong, .stat-grid strong { font-size: 1.1rem; }
+    .scenario-section { padding: 24px; margin-top: 26px; }
+    .section-head { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 18px; align-items: end; margin-bottom: 18px; }
+    .section-head h2 { margin: 4px 0 0; font-size: 2rem; }
+    .section-head p { margin: 0; color: var(--muted); line-height: 1.5; }
+    .eyebrow { font-family: "SFMono-Regular", Menlo, monospace; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--accent); }
+    .run-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .run-card { border: 1px solid var(--line); border-radius: 24px; background: rgba(255,255,255,0.72); padding: 16px; }
+    .run-card.failed { border-color: rgba(157,63,12,0.3); }
+    .run-topline { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    .run-topline h3 { margin: 4px 0 0; font-size: 1.3rem; }
+    .score-badge {
+      min-width: 48px; height: 48px; border-radius: 999px; display: grid; place-items: center;
+      background: #1f1b18; color: #f7f3ed; font-family: "SFMono-Regular", Menlo, monospace; font-size: 1rem;
+    }
+    .shot-wrap { margin-top: 14px; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 18px; border: 1px solid var(--line); background: #ece4d6; }
+    .shot-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .missing-shot { width: 100%; height: 100%; display: grid; place-items: center; color: var(--muted); font-style: italic; }
+    .stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .model-line, .notes { color: var(--muted); line-height: 1.45; }
+    .model-line { font-family: "SFMono-Regular", Menlo, monospace; font-size: 0.8rem; margin-top: 12px; }
+    .analysis { margin: 14px 0 0; font-size: 0.96rem; line-height: 1.5; }
+    .analysis-subtle { margin: 8px 0 0; font-size: 0.84rem; color: var(--muted); line-height: 1.5; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .chip {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(20,17,15,0.06);
+      border: 1px solid rgba(20,17,15,0.08);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 0.72rem;
+    }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+    @media (max-width: 1120px) {
+      .hero, .section-head, .run-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <article class="hero-card">
+        <div class="eyebrow">Canvas Benchmark Suite</div>
+        <h1>Side-by-side model evidence for the fairy canvas stack.</h1>
+        <p>Generated 3/11/2026, 5:25:14 AM. This suite compares model outputs across the same scenario catalog, with screenshots, latency, action counts, and rubric scoring held in one manifest.</p>
+      </article>
+      <aside class="summary-card">
+        <div class="eyebrow">Suite Summary</div>
+        <div class="summary-grid">
+          <div><span>Suite ID</span><strong>canvas-benchmark-full-2026-03-11</strong></div>
+          <div><span>Execution</span><strong>livekit-viewer-direct-runner</strong></div>
+          <div><span>Runs</span><strong>29/30</strong></div>
+          <div><span>Success</span><strong>97%</strong></div>
+        </div>
+        <table>
+          <thead><tr><th>Variant</th><th>Score</th><th>TTFB</th><th>Total</th><th>Success</th></tr></thead>
+          <tbody>
+        <tr>
+          <td>Claude Haiku 4.5</td>
+          <td>87</td>
+          <td>10.76s</td>
+          <td>53.43s</td>
+          <td>100%</td>
+        </tr>
+      
+
+        <tr>
+          <td>GPT-5 Low</td>
+          <td>91</td>
+          <td>107.89s</td>
+          <td>165.54s</td>
+          <td>100%</td>
+        </tr>
+      
+
+        <tr>
+          <td>Cerebras GPT OSS 120B</td>
+          <td>88</td>
+          <td>2.82s</td>
+          <td>14.32s</td>
+          <td>90%</td>
+        </tr>
+      </tbody>
+        </table>
+      </aside>
+    </section>
+    
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">business</div>
+              <h2>Business Operating Plan</h2>
+            </div>
+            <p>A structured planning board with objectives, owners, and risks.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">92</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/business-operating-plan__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>14.08s</strong></div>
+                <div><span>Total</span><strong>75.58s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>20</strong></div>
+                <div><span>Actions</span><strong>27</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 20</span><span class="chip">align 3</span><span class="chip">stack 3</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 16</span><span class="chip">box 4</span></div>
+              <p class="analysis">The canvas is a partially developed business operating plan with 20 shapes, some overlapping and misaligned elements, and visible interface artifacts.</p>
+              <p class="analysis-subtle">The score likely reflects adequate shape usage and verb inclusion but is reduced by cluttered layout, overlapping shapes, and screenshot distractions.</p>
+              <p class="notes">Retries recorded 27 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5 Low</h3>
+                </div>
+                <div class="score-badge">92</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/business-operating-plan__gpt5-4-low.png" alt="GPT-5 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>125.06s</strong></div>
+                <div><span>Total</span><strong>199.89s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>23</strong></div>
+                <div><span>Actions</span><strong>33</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5</p>
+              <div class="chip-row"><span class="chip">create_shape 23</span><span class="chip">align 4</span><span class="chip">stack 4</span><span class="chip">reorder 2</span></div>
+              <div class="chip-row"><span class="chip">note 19</span><span class="chip">box 4</span></div>
+              <p class="analysis">The canvas shows three columns of colored cards under a main operating plan heading with some overlap in the top-left area.</p>
+              <p class="analysis-subtle">High score due to substantial shape count, clear structure, and mostly aligned elements despite minor overlap.</p>
+              <p class="notes">Retries recorded 33 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">99</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/business-operating-plan__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>5.83s</strong></div>
+                <div><span>Total</span><strong>9.22s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>19</strong></div>
+                <div><span>Actions</span><strong>24</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 19</span><span class="chip">stack 3</span><span class="chip">align 1</span><span class="chip">distribute 1</span></div>
+              <div class="chip-row"><span class="chip">note 16</span><span class="chip">box 3</span></div>
+              <p class="analysis">The canvas displays a structured business operating plan with clear sections for objectives, owners, and risks connected hierarchically under a central title.</p>
+              <p class="analysis-subtle">High score due to comprehensive shape use, well-organized layout, and proper inclusion of required and preferred verbs with a stable and clear screenshot.</p>
+              <p class="notes">Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">podcast</div>
+              <h2>Podcast Episode Map</h2>
+            </div>
+            <p>An episode board with segment sequencing and sponsor placement.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>12.86s</strong></div>
+                <div><span>Total</span><strong>63.07s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>18</strong></div>
+                <div><span>Actions</span><strong>22</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 18</span><span class="chip">distribute 1</span><span class="chip">align 1</span><span class="chip">stack 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">box 7</span><span class="chip">note 6</span><span class="chip">text 5</span></div>
+              <p class="analysis">The canvas displays a clear podcast episode plan with organized sections and labeled shapes, earning a high score for structure and verb usage.</p>
+              <p class="analysis-subtle">High score due to complete shape creation, inclusion of required and preferred verbs, and a clear screenshot demonstrating stable layout.</p>
+              <p class="notes">Retries recorded 22 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5 Low</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__gpt5-4-low.png" alt="GPT-5 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>110.66s</strong></div>
+                <div><span>Total</span><strong>201.15s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>28</strong></div>
+                <div><span>Actions</span><strong>40</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5</p>
+              <div class="chip-row"><span class="chip">create_shape 28</span><span class="chip">align 6</span><span class="chip">stack 5</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 22</span><span class="chip">box 6</span></div>
+              <p class="analysis">The canvas shows a well-organized podcast episode map with multiple color-coded cards and clear section titles.</p>
+              <p class="analysis-subtle">High shape count with comprehensive content and structured layout likely contributed to a high score.</p>
+              <p class="notes">Retries recorded 40 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">72</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/podcast-episode-map__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.62s</strong></div>
+                <div><span>Total</span><strong>11.54s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>2</strong></div>
+                <div><span>Actions</span><strong>13</strong></div>
+                <div><span>Followups</span><strong>1</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 7</span><span class="chip">reorder 2</span><span class="chip">align 2</span><span class="chip">update_shape 1</span><span class="chip">stack 1</span></div>
+              <div class="chip-row"><span class="chip">box 2</span></div>
+              <p class="analysis">The canvas shows two simple shapes, a red rectangle inside a larger dotted boundary, with minimal content.</p>
+              <p class="analysis-subtle">The score of 72 reflects limited shape usage and basic actions with a mostly empty canvas.</p>
+              <p class="notes">Shape count below target (2/7). Followups fired 1 time(s). Retries recorded 2 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">brainstorm</div>
+              <h2>Collaborative Brainstorm</h2>
+            </div>
+            <p>A cluster-based ideation board with grouped themes.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">90</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>7.94s</strong></div>
+                <div><span>Total</span><strong>38.10s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>9</strong></div>
+                <div><span>Actions</span><strong>13</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 9</span><span class="chip">align 2</span><span class="chip">distribute 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 6</span><span class="chip">box 3</span></div>
+              <p class="analysis">The canvas shows three equally spaced labeled blocks framed by distinct dotted border colors.</p>
+              <p class="analysis-subtle">High score due to correct shape count, clear labeling, alignment, and screenshot completeness.</p>
+              <p class="notes">Retries recorded 13 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5 Low</h3>
+                </div>
+                <div class="score-badge">86</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__gpt5-4-low.png" alt="GPT-5 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>59.35s</strong></div>
+                <div><span>Total</span><strong>85.03s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>8</strong></div>
+                <div><span>Actions</span><strong>11</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5</p>
+              <div class="chip-row"><span class="chip">create_shape 8</span><span class="chip">align 1</span><span class="chip">stack 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">box 4</span><span class="chip">note 4</span></div>
+              <p class="analysis">The canvas shows three groups each containing pink sticky notes with text, with some overlap in the left group and a sync health panel visible.</p>
+              <p class="analysis-subtle">Good use of shapes and grouping, but some overlap and minor UI clutter likely reduced the score.</p>
+              <p class="notes">Shape count below target (8/9). Retries recorded 11 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">77</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/collaborative-brainstorm__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.63s</strong></div>
+                <div><span>Total</span><strong>5.01s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>6</strong></div>
+                <div><span>Actions</span><strong>6</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 6</span></div>
+              <div class="chip-row"><span class="chip">box 3</span><span class="chip">note 3</span></div>
+              <p class="analysis">The canvas shows three orange sticky notes labeled Ideas, UX, and Tech with dotted red rectangles around each.</p>
+              <p class="analysis-subtle">The score reflects a partial achievement due to only six shapes created out of the required 23 and moderate stability and screenshot scores.</p>
+              <p class="notes">Shape count below target (6/9). Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">scratchpad</div>
+              <h2>Scratchpad Systems Sketch</h2>
+            </div>
+            <p>An informal but legible systems sketch with arrows and annotations.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">85</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>8.84s</strong></div>
+                <div><span>Total</span><strong>52.38s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>19</strong></div>
+                <div><span>Actions</span><strong>19</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 19</span></div>
+              <div class="chip-row"><span class="chip">text 7</span><span class="chip">box 6</span><span class="chip">draw 6</span></div>
+              <p class="analysis">The canvas shows a labeled flowchart with distinct shapes and connecting lines illustrating a low-latency canvas pipeline.</p>
+              <p class="analysis-subtle">The score reflects well-organized shapes and verb usage with minor issues likely related to stability or completeness.</p>
+              <p class="notes">Retries recorded 19 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5 Low</h3>
+                </div>
+                <div class="score-badge">85</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__gpt5-4-low.png" alt="GPT-5 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>132.12s</strong></div>
+                <div><span>Total</span><strong>157.86s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>11</strong></div>
+                <div><span>Actions</span><strong>11</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5</p>
+              <div class="chip-row"><span class="chip">create_shape 11</span></div>
+              <div class="chip-row"><span class="chip">note 5</span><span class="chip">draw 5</span><span class="chip">box 1</span></div>
+              <p class="analysis">The canvas features 11 shapes forming a system flow with labeled blocks and red connectors including a screenshot overlay.</p>
+              <p class="analysis-subtle">High shape count with clear verb usage and a well-structured layout likely contributed to a strong score of 85.</p>
+              <p class="notes">Retries recorded 11 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">94</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/scratchpad-systems__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>3.58s</strong></div>
+                <div><span>Total</span><strong>6.98s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>11</strong></div>
+                <div><span>Actions</span><strong>13</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 11</span><span class="chip">align 1</span><span class="chip">stack 1</span></div>
+              <div class="chip-row"><span class="chip">note 6</span><span class="chip">draw 5</span></div>
+              <p class="analysis">The canvas displays a horizontal sequence of labeled red gradient shapes representing a system flow.</p>
+              <p class="analysis-subtle">High score likely due to correct shape count, clear labeling, and proper alignment with minor issues.</p>
+              <p class="notes">Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">presentation</div>
+              <h2>Presentation Storyboard</h2>
+            </div>
+            <p>A visually strong presentation board that continues over two turns.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">87</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>11.88s</strong></div>
+                <div><span>Total</span><strong>53.05s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>12</strong></div>
+                <div><span>Actions</span><strong>14</strong></div>
+                <div><span>Followups</span><strong>1</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 11</span><span class="chip">align 2</span><span class="chip">stack 1</span></div>
+              <div class="chip-row"><span class="chip">box 4</span><span class="chip">note 3</span><span class="chip">text 3</span><span class="chip">draw 2</span></div>
+              <p class="analysis">The canvas shows a large dotted red rectangle and a debug panel, reflecting partial but clear shape creation and alignment.</p>
+              <p class="analysis-subtle">The score likely reflects well-executed shape creation and alignment with minor issues and an extra debug widget.</p>
+              <p class="notes">Followups fired 1 time(s). Retries recorded 14 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5 Low</h3>
+                </div>
+                <div class="score-badge">88</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__gpt5-4-low.png" alt="GPT-5 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>68.35s</strong></div>
+                <div><span>Total</span><strong>183.92s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>17</strong></div>
+                <div><span>Actions</span><strong>21</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5</p>
+              <div class="chip-row"><span class="chip">create_shape 17</span><span class="chip">stack 2</span><span class="chip">align 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 9</span><span class="chip">box 6</span><span class="chip">draw 2</span></div>
+              <p class="analysis">The canvas shows a storyboard with connected sections labeled 1, 2, and 3, plus descriptive blocks below, scoring high for shape and verb use.</p>
+              <p class="analysis-subtle">The high score reflects comprehensive shape creation and effective use of required verbs, with clear layout and minimal stability issues.</p>
+              <p class="notes">Retries recorded 21 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">91</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/presentation-storyboard__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>2.17s</strong></div>
+                <div><span>Total</span><strong>72.00s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>10</strong></div>
+                <div><span>Actions</span><strong>14</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 10</span><span class="chip">stack 2</span><span class="chip">align 2</span></div>
+              <div class="chip-row"><span class="chip">note 8</span><span class="chip">box 2</span></div>
+              <p class="analysis">The canvas shows a simple storyboard with titled post-it shapes arranged in columns.</p>
+              <p class="analysis-subtle">The score likely reflects correct use of required shape count and clear, labeled steps in the storyboard with effective stacking and alignment.</p>
+              <p class="notes">Retries recorded 2 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">play</div>
+              <h2>Remote Board Game Night</h2>
+            </div>
+            <p>A playful board for turn order, score, and shared game state.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">92</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>11.56s</strong></div>
+                <div><span>Total</span><strong>75.15s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>23</strong></div>
+                <div><span>Actions</span><strong>28</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 23</span><span class="chip">align 3</span><span class="chip">stack 2</span></div>
+              <div class="chip-row"><span class="chip">box 13</span><span class="chip">note 9</span><span class="chip">draw 1</span></div>
+              <p class="analysis">The canvas displays a well-organized layout for a remote board game night with grouped elements and labeled sections.</p>
+              <p class="analysis-subtle">High shape count, proper use of verbs, and clear screenshot capture justify the strong score of 92.</p>
+              <p class="notes">Retries recorded 28 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5 Low</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__gpt5-4-low.png" alt="GPT-5 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>139.16s</strong></div>
+                <div><span>Total</span><strong>206.76s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>25</strong></div>
+                <div><span>Actions</span><strong>30</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5</p>
+              <div class="chip-row"><span class="chip">create_shape 25</span><span class="chip">align 2</span><span class="chip">stack 2</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">box 18</span><span class="chip">note 7</span></div>
+              <p class="analysis">The canvas shows a structured layout with labeled sections and shapes representing game elements, demonstrating good organization and use of features.</p>
+              <p class="analysis-subtle">High score due to completion of required shapes and verbs with well-aligned components and minimal issues.</p>
+              <p class="notes">Retries recorded 30 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">89</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/remote-board-game-night__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>2.00s</strong></div>
+                <div><span>Total</span><strong>5.40s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>16</strong></div>
+                <div><span>Actions</span><strong>17</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 16</span><span class="chip">distribute 1</span></div>
+              <div class="chip-row"><span class="chip">note 13</span><span class="chip">box 3</span></div>
+              <p class="analysis">The canvas depicts a simple board game setup with labeled components and player scores.</p>
+              <p class="analysis-subtle">The design includes all required elements with clear labels and a neat layout, earning a high score of 89.</p>
+              <p class="notes">Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">collaborative-drawing</div>
+              <h2>Collaborative Drawing Mural</h2>
+            </div>
+            <p>A freer canvas that pressures the pen and spatial-composition path.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">90</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>11.68s</strong></div>
+                <div><span>Total</span><strong>46.39s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>12</strong></div>
+                <div><span>Actions</span><strong>15</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 12</span><span class="chip">reorder 1</span><span class="chip">align 1</span><span class="chip">distribute 1</span></div>
+              <div class="chip-row"><span class="chip">draw 5</span><span class="chip">note 5</span><span class="chip">box 2</span></div>
+              <p class="analysis">The canvas shows a collaborative mural with 12 colorful labeled shapes and connecting lines, earning a high score for shape count and verb usage.</p>
+              <p class="analysis-subtle">High shape creation and use of required verbs with good visual organization resulted in a 90 score.</p>
+              <p class="notes">Retries recorded 15 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5 Low</h3>
+                </div>
+                <div class="score-badge">85</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__gpt5-4-low.png" alt="GPT-5 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>114.67s</strong></div>
+                <div><span>Total</span><strong>169.48s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>15</strong></div>
+                <div><span>Actions</span><strong>26</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5</p>
+              <div class="chip-row"><span class="chip">create_shape 15</span><span class="chip">update_shape 5</span><span class="chip">align 3</span><span class="chip">stack 3</span></div>
+              <div class="chip-row"><span class="chip">box 5</span><span class="chip">note 5</span><span class="chip">draw 5</span></div>
+              <p class="analysis">Canvas shows a basic collaborative mural setup with shapes and labeled sections.</p>
+              <p class="analysis-subtle">The score reflects solid shape creation and updates with minor alignment and stacking actions, but limited complexity or preferred verbs.</p>
+              <p class="notes">Retries recorded 24 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">89</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/collaborative-drawing-mural__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>3.61s</strong></div>
+                <div><span>Total</span><strong>7.01s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>10</strong></div>
+                <div><span>Actions</span><strong>10</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 10</span></div>
+              <div class="chip-row"><span class="chip">note 7</span><span class="chip">draw 2</span><span class="chip">box 1</span></div>
+              <p class="analysis">The canvas shows a central red box labeled 'Mural Center' connected by red lines to three orange boxes labeled 'Idea A,' 'Idea B,' and 'Idea C,' with a system status panel on the left.</p>
+              <p class="analysis-subtle">The score reflects successful creation and connection of all required shapes with clear labeling and some visual stability despite a degraded sync status.</p>
+              <p class="notes">Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">multi-fairy</div>
+              <h2>Multi-Fairy Zones</h2>
+            </div>
+            <p>A board divided into clearly separated work zones to mimic swarm collaboration.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">50</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>8.90s</strong></div>
+                <div><span>Total</span><strong>36.82s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>0</strong></div>
+                <div><span>Actions</span><strong>12</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 12</span></div>
+              <div class="chip-row"><span class="chip">No shape inventory</span></div>
+              <p class="analysis">The canvas displays an error message with no shapes visible.</p>
+              <p class="analysis-subtle">Score is low because no shapes were successfully created and an error interrupted normal function.</p>
+              <p class="notes">Shape count below target (0/7). Retries recorded 12 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5 Low</h3>
+                </div>
+                <div class="score-badge">90</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__gpt5-4-low.png" alt="GPT-5 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>118.26s</strong></div>
+                <div><span>Total</span><strong>141.73s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>8</strong></div>
+                <div><span>Actions</span><strong>10</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5</p>
+              <div class="chip-row"><span class="chip">create_shape 8</span><span class="chip">align 2</span></div>
+              <div class="chip-row"><span class="chip">box 4</span><span class="chip">note 4</span></div>
+              <p class="analysis">The canvas shows four labeled zones with distinct boundary colors and a central shared zone, demonstrating clear organization.</p>
+              <p class="analysis-subtle">The score likely reflects good shape usage, the inclusion of required and preferred verbs, clear screenshots, and stable layout with minor issues.</p>
+              <p class="notes">Retries recorded 10 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">99</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/multi-fairy-zones__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>3.56s</strong></div>
+                <div><span>Total</span><strong>6.95s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>8</strong></div>
+                <div><span>Actions</span><strong>11</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 8</span><span class="chip">align 1</span><span class="chip">distribute 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">box 4</span><span class="chip">note 4</span></div>
+              <p class="analysis">The canvas has three dotted red zones each containing sticky notes with clear labels and some overlap in the middle zone.</p>
+              <p class="analysis-subtle">High score due to the correct number of shapes, effective use of verbs, clear zones, and good stability despite a minor sync issue.</p>
+              <p class="notes">Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">collaboration</div>
+              <h2>Meeting Retro Board</h2>
+            </div>
+            <p>A classic retro board with structure and enough density to test organization.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>12.70s</strong></div>
+                <div><span>Total</span><strong>65.15s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>15</strong></div>
+                <div><span>Actions</span><strong>23</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 15</span><span class="chip">align 3</span><span class="chip">stack 3</span><span class="chip">distribute 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 11</span><span class="chip">text 3</span><span class="chip">box 1</span></div>
+              <p class="analysis">The canvas presents a clear and organized team retro board with well-labeled sections and shapes.</p>
+              <p class="analysis-subtle">High score due to clear use of shapes, proper labeling with required verbs, and a good screenshot capture with stable layout.</p>
+              <p class="notes">Retries recorded 23 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5 Low</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__gpt5-4-low.png" alt="GPT-5 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>83.34s</strong></div>
+                <div><span>Total</span><strong>155.99s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>23</strong></div>
+                <div><span>Actions</span><strong>32</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5</p>
+              <div class="chip-row"><span class="chip">create_shape 23</span><span class="chip">align 4</span><span class="chip">stack 3</span><span class="chip">distribute 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 19</span><span class="chip">box 4</span></div>
+              <p class="analysis">The canvas shows a well-organized retro board with three columns, each having 3 sticky notes stacked neatly and labeled with relevant text.</p>
+              <p class="analysis-subtle">High score due to correct shape count, clear use of required verbs, and good layout stability with minor issues in screenshot clarity.</p>
+              <p class="notes">Retries recorded 32 time(s).</p>
+            </article>
+          
+
+            <article class="run-card failed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">10</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/meeting-retro-board__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>failed</strong></div>
+                <div><span>TTFB</span><strong>n/a</strong></div>
+                <div><span>Total</span><strong>2.37s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>0</strong></div>
+                <div><span>Actions</span><strong>0</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">No actions</span></div>
+              <div class="chip-row"><span class="chip">No shape inventory</span></div>
+              <p class="analysis">The canvas is completely empty with no shapes or annotations.</p>
+              <p class="analysis-subtle">It earned a low score due to absence of any visual content or required elements on the canvas.</p>
+              <p class="notes">Shape count below target (0/9). Missing required verbs: create_shape.</p>
+            </article>
+          </div>
+        </section>
+      
+
+        <section class="scenario-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">realtime</div>
+              <h2>Call-Ready Hero Board</h2>
+            </div>
+            <p>A high-signal board optimized for being reviewed live on a video call.</p>
+          </div>
+          <div class="run-grid">
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">haiku-4.5</div>
+                  <h3>Claude Haiku 4.5</h3>
+                </div>
+                <div class="score-badge">89</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__haiku-4-5.png" alt="Claude Haiku 4.5 final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>7.12s</strong></div>
+                <div><span>Total</span><strong>28.57s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>5</strong></div>
+                <div><span>Actions</span><strong>9</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">anthropic:claude-haiku-4-5</p>
+              <div class="chip-row"><span class="chip">create_shape 5</span><span class="chip">align 2</span><span class="chip">stack 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">note 4</span><span class="chip">box 1</span></div>
+              <p class="analysis">The canvas shows two sticky notes, one red labeled 'LIVE REVIEW' with a red outline, and one orange with 'Key insight' and 'Next step'.</p>
+              <p class="analysis-subtle">The score reflects a mostly complete and stable layout with proper shape creation and basic alignment, but limited complexity and actions.</p>
+              <p class="notes">Shape count below target (5/6). Retries recorded 9 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">gpt5.4-low</div>
+                  <h3>GPT-5 Low</h3>
+                </div>
+                <div class="score-badge">95</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__gpt5-4-low.png" alt="GPT-5 Low final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>127.87s</strong></div>
+                <div><span>Total</span><strong>153.62s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>8</strong></div>
+                <div><span>Actions</span><strong>11</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">openai:gpt-5</p>
+              <div class="chip-row"><span class="chip">create_shape 8</span><span class="chip">align 1</span><span class="chip">stack 1</span><span class="chip">reorder 1</span></div>
+              <div class="chip-row"><span class="chip">box 3</span><span class="chip">note 3</span><span class="chip">text 1</span><span class="chip">draw 1</span></div>
+              <p class="analysis">The canvas features a prominently outlined 'Dominant Idea' section with underlined text and a sticky note labeled 'Open questions.'</p>
+              <p class="analysis-subtle">The image likely earned a high score due to clear shape usage, presence of required verbs, and well-aligned elements.</p>
+              <p class="notes">Retries recorded 11 time(s).</p>
+            </article>
+          
+
+            <article class="run-card completed">
+              <div class="run-topline">
+                <div>
+                  <div class="eyebrow">openai OSS 120B cerebras</div>
+                  <h3>Cerebras GPT OSS 120B</h3>
+                </div>
+                <div class="score-badge">82</div>
+              </div>
+              <div class="shot-wrap"><img src="assets/canvas-benchmark-full-2026-03-11/call-ready-hero-board__cerebras-gpt-oss-120b.png" alt="Cerebras GPT OSS 120B final canvas" /></div>
+              <div class="stat-grid">
+                <div><span>Status</span><strong>completed</strong></div>
+                <div><span>TTFB</span><strong>1.35s</strong></div>
+                <div><span>Total</span><strong>4.75s</strong></div>
+                <div><span>Tokens</span><strong>n/a</strong></div>
+                <div><span>Cost</span><strong>n/a</strong></div>
+                <div><span>Shapes</span><strong>4</strong></div>
+                <div><span>Actions</span><strong>10</strong></div>
+                <div><span>Followups</span><strong>0</strong></div>
+              </div>
+              <p class="model-line">cerebras:gpt-oss-120b</p>
+              <div class="chip-row"><span class="chip">create_shape 4</span><span class="chip">update_shape 4</span><span class="chip">align 1</span><span class="chip">stack 1</span></div>
+              <div class="chip-row"><span class="chip">note 3</span><span class="chip">box 1</span></div>
+              <p class="analysis">The canvas has a large red-outlined square on the left and a peach-colored stacked list with text on the right.</p>
+              <p class="analysis-subtle">The score reflects decent shape creation and updates but limited alignment and stacking actions with fewer shapes than required.</p>
+              <p class="notes">Shape count below target (4/6). Retries recorded 1 time(s).</p>
+            </article>
+          </div>
+        </section>
+      
+  </main>
+</body>
+</html>

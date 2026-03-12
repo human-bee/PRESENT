@@ -1,0 +1,173 @@
+{
+  "runId": "scratchpad-systems-gpt5-4-low-mmmnbi80",
+  "scenarioId": "scratchpad-systems",
+  "variantId": "gpt5-4-low",
+  "scenarioLabel": "Scratchpad Systems Sketch",
+  "variantLabel": "GPT-5.4 Low",
+  "comparisonLabel": "gpt5.4-low",
+  "category": "scratchpad",
+  "startedAt": "2026-03-11T23:04:05.725Z",
+  "completedAt": "2026-03-11T23:04:54.171Z",
+  "status": "completed",
+  "roomId": "canvas-8f4f3fe5-f2a8-472f-8361-e2c80197f510",
+  "canvasId": "8f4f3fe5-f2a8-472f-8361-e2c80197f510",
+  "canvasName": "scratchpad-systems-gpt5-4-low-scratchpad-systems-gpt5-4-low-mmmnbi80",
+  "viewerPath": "/canvas?room=canvas-8f4f3fe5-f2a8-472f-8361-e2c80197f510&id=8f4f3fe5-f2a8-472f-8361-e2c80197f510&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/scratchpad-systems__gpt5-4-low.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/scratchpad-systems__gpt5-4-low.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/scratchpad-systems__gpt5-4-low-doc.json",
+  "finalShapeCount": 14,
+  "actionSummary": {
+    "total": 15,
+    "byName": {
+      "create_shape": 14,
+      "align": 1
+    }
+  },
+  "shapeSummary": {
+    "total": 14,
+    "byType": {
+      "note": 3,
+      "rectangle": 3,
+      "draw": 6,
+      "text": 2
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 37384,
+    "initialTtfbMs": 1826,
+    "totalActionCount": 15,
+    "totalMutatingActionCount": 15,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 15,
+    "avgFirstAckMs": 8248,
+    "avgScreenshotRttMs": 32
+  },
+  "usage": {
+    "inputTokens": 18874,
+    "outputTokens": 1379,
+    "reasoningTokens": 0,
+    "cachedInputTokens": 0,
+    "totalTokens": 20253
+  },
+  "estimatedCost": {
+    "inputUsd": 0.047185,
+    "outputUsd": 0.020685000000000002,
+    "totalUsd": 0.06787,
+    "notes": "OpenAI GPT-5.4 text-token pricing.",
+    "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4"
+  },
+  "provider": "openai",
+  "model": "openai:gpt-5.4",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "latency-sketch",
+      "label": "Latency sketch",
+      "sessionId": "1773270255130-p12m95",
+      "status": "completed",
+      "actionSummary": {
+        "total": 15,
+        "byName": {
+          "create_shape": 14,
+          "align": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 37384,
+        "ttfbMs": 1826,
+        "actionCount": 15,
+        "mutatingActionCount": 15,
+        "followupCount": 0,
+        "retryCount": 15,
+        "firstAckMs": 8248,
+        "screenshotRttMs": 32,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 18874,
+          "outputTokens": 1379,
+          "reasoningTokens": 0,
+          "cachedInputTokens": 0,
+          "totalTokens": 20253
+        },
+        "estimatedCostUsd": 0.06787
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773270255130-p12m95",
+          "roomId": "canvas-8f4f3fe5-f2a8-472f-8361-e2c80197f510",
+          "ts": 1773270255131,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773270255130-p12m95",
+          "roomId": "canvas-8f4f3fe5-f2a8-472f-8361-e2c80197f510",
+          "ts": 1773270255170,
+          "preset": "creative",
+          "request_id": "7c2a1671-38a2-4997-9516-46cf0ff86f88",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 32,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773270255130-p12m95",
+          "roomId": "canvas-8f4f3fe5-f2a8-472f-8361-e2c80197f510",
+          "ts": 1773270255261,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773270255130-p12m95",
+          "roomId": "canvas-8f4f3fe5-f2a8-472f-8361-e2c80197f510",
+          "ts": 1773270256957,
+          "preset": "creative",
+          "ttfb": 1826,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773270255130-p12m95",
+          "roomId": "canvas-8f4f3fe5-f2a8-472f-8361-e2c80197f510",
+          "ts": 1773270292514,
+          "preset": "creative",
+          "duration": 37383,
+          "chunkCount": 16,
+          "actionCount": 15,
+          "mutatingActionCount": 15,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 15,
+          "first_ack_ms": 8248,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 90,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 35,
+      "requiredVerbs": 35,
+      "preferredVerbs": 5,
+      "screenshot": 10,
+      "stability": 5
+    },
+    "notes": [
+      "Retries recorded 15 time(s)."
+    ]
+  }
+}

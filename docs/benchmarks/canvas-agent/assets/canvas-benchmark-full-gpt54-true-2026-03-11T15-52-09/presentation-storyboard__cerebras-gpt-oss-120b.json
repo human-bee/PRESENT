@@ -1,0 +1,267 @@
+{
+  "runId": "presentation-storyboard-cerebras-gpt-oss-120b-mmmnhjrx",
+  "scenarioId": "presentation-storyboard",
+  "variantId": "cerebras-gpt-oss-120b",
+  "scenarioLabel": "Presentation Storyboard",
+  "variantLabel": "Cerebras GPT OSS 120B",
+  "comparisonLabel": "openai OSS 120B cerebras",
+  "category": "presentation",
+  "startedAt": "2026-03-11T23:08:47.659Z",
+  "completedAt": "2026-03-11T23:09:14.740Z",
+  "status": "completed",
+  "roomId": "canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c",
+  "canvasId": "1cb228bd-73b3-402f-a27c-d926cb2a378c",
+  "canvasName": "presentation-storyboard-cerebras-gpt-oss-120b-presentation-storyboard-cerebras-gpt-oss-120b-mmmnhjrx",
+  "viewerPath": "/canvas?room=canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c&id=1cb228bd-73b3-402f-a27c-d926cb2a378c&parity=1",
+  "screenshotPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/presentation-storyboard__cerebras-gpt-oss-120b.png",
+  "artifactPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/presentation-storyboard__cerebras-gpt-oss-120b.json",
+  "docPath": "docs/benchmarks/canvas-agent/assets/canvas-benchmark-full-gpt54-true-2026-03-11T15-52-09/presentation-storyboard__cerebras-gpt-oss-120b-doc.json",
+  "finalShapeCount": 7,
+  "actionSummary": {
+    "total": 11,
+    "byName": {
+      "create_shape": 7,
+      "align": 2,
+      "stack": 2
+    }
+  },
+  "shapeSummary": {
+    "total": 7,
+    "byType": {
+      "note": 5,
+      "rectangle": 2
+    }
+  },
+  "metrics": {
+    "totalDurationMs": 14241,
+    "initialTtfbMs": 2387,
+    "totalActionCount": 11,
+    "totalMutatingActionCount": 11,
+    "totalFollowupCount": 0,
+    "totalRetryCount": 2,
+    "avgFirstAckMs": null,
+    "avgScreenshotRttMs": 115
+  },
+  "usage": {
+    "inputTokens": 73281,
+    "outputTokens": 3120,
+    "reasoningTokens": null,
+    "cachedInputTokens": null,
+    "totalTokens": 76401
+  },
+  "estimatedCost": {
+    "inputUsd": 0.01832025,
+    "outputUsd": 0.0021528,
+    "totalUsd": 0.02047305,
+    "notes": "Cerebras Cloud gpt-oss-120b list pricing.",
+    "sourceUrl": "https://www.cerebras.ai/blog/cerebras-launches-openai-s-gpt-oss-120b-at-a-blistering-3-000-tokens-sec"
+  },
+  "provider": "cerebras",
+  "model": "cerebras:gpt-oss-120b",
+  "visualAnalysis": null,
+  "steps": [
+    {
+      "stepId": "opening-slide",
+      "label": "Opening slide",
+      "sessionId": "1773270537388-jmbfho",
+      "status": "completed",
+      "actionSummary": {
+        "total": 5,
+        "byName": {
+          "create_shape": 3,
+          "align": 1,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 4845,
+        "ttfbMs": 2387,
+        "actionCount": 5,
+        "mutatingActionCount": 5,
+        "followupCount": 0,
+        "retryCount": 1,
+        "firstAckMs": null,
+        "screenshotRttMs": 33,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 18862,
+          "outputTokens": 2304,
+          "reasoningTokens": null,
+          "cachedInputTokens": null,
+          "totalTokens": 21166
+        },
+        "estimatedCostUsd": 0.00630526
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773270537388-jmbfho",
+          "roomId": "canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c",
+          "ts": 1773270537388,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773270537388-jmbfho",
+          "roomId": "canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c",
+          "ts": 1773270537432,
+          "preset": "creative",
+          "request_id": "69bcdd38-6e62-49d1-879b-197730460f3f",
+          "timeout_ms": 12000,
+          "image_bytes": 14678,
+          "rtt": 33,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773270537388-jmbfho",
+          "roomId": "canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c",
+          "ts": 1773270537560,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773270537388-jmbfho",
+          "roomId": "canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c",
+          "ts": 1773270539775,
+          "preset": "creative",
+          "ttfb": 2387,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773270537388-jmbfho",
+          "roomId": "canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c",
+          "ts": 1773270542231,
+          "preset": "creative",
+          "duration": 4843,
+          "chunkCount": 1,
+          "actionCount": 5,
+          "mutatingActionCount": 5,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 1,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    },
+    {
+      "stepId": "continue-storyboard",
+      "label": "Continue storyboard",
+      "sessionId": "1773270543734-zpphfl",
+      "status": "completed",
+      "actionSummary": {
+        "total": 6,
+        "byName": {
+          "create_shape": 4,
+          "align": 1,
+          "stack": 1
+        }
+      },
+      "metrics": {
+        "durationMs": 9396,
+        "ttfbMs": 6011,
+        "actionCount": 6,
+        "mutatingActionCount": 6,
+        "followupCount": 0,
+        "retryCount": 1,
+        "firstAckMs": null,
+        "screenshotRttMs": 197,
+        "screenshotResult": null,
+        "usage": {
+          "inputTokens": 54419,
+          "outputTokens": 816,
+          "reasoningTokens": null,
+          "cachedInputTokens": null,
+          "totalTokens": 55235
+        },
+        "estimatedCostUsd": 0.014167790000000001
+      },
+      "metricEvents": [
+        {
+          "event": "start",
+          "sessionId": "1773270543734-zpphfl",
+          "roomId": "canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c",
+          "ts": 1773270543735,
+          "preset": "creative"
+        },
+        {
+          "event": "screenshot",
+          "sessionId": "1773270543734-zpphfl",
+          "roomId": "canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c",
+          "ts": 1773270543943,
+          "preset": "creative",
+          "request_id": "0ffadc2f-2c19-4e57-9d3e-b3aaca50dbde",
+          "timeout_ms": 12000,
+          "image_bytes": 56285,
+          "rtt": 197,
+          "result": "received"
+        },
+        {
+          "event": "context",
+          "sessionId": "1773270543734-zpphfl",
+          "roomId": "canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c",
+          "ts": 1773270544058,
+          "preset": "creative",
+          "blurry_count": 0,
+          "peripheral_count": 0,
+          "token_budget_max": 38000,
+          "transcript_tokens": 0,
+          "selected_count": 0,
+          "examples_count": 10
+        },
+        {
+          "event": "ttfb",
+          "sessionId": "1773270543734-zpphfl",
+          "roomId": "canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c",
+          "ts": 1773270549746,
+          "preset": "creative",
+          "ttfb": 6011,
+          "slo_met": false,
+          "slo_target": 200
+        },
+        {
+          "event": "complete",
+          "sessionId": "1773270543734-zpphfl",
+          "roomId": "canvas-1cb228bd-73b3-402f-a27c-d926cb2a378c",
+          "ts": 1773270553130,
+          "preset": "creative",
+          "duration": 9395,
+          "chunkCount": 1,
+          "actionCount": 6,
+          "mutatingActionCount": 6,
+          "followupCount": 0,
+          "shapeCount": 0,
+          "transcriptLines": 0,
+          "retryCount": 1,
+          "blurry_count": 0,
+          "peripheral_count": 0
+        }
+      ]
+    }
+  ],
+  "score": {
+    "overall": 87,
+    "grade": "excellent",
+    "rubric": {
+      "shapes": 31,
+      "requiredVerbs": 35,
+      "preferredVerbs": 3,
+      "screenshot": 10,
+      "stability": 8
+    },
+    "notes": [
+      "Shape count below target (7/8).",
+      "Retries recorded 2 time(s)."
+    ]
+  }
+}
