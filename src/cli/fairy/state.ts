@@ -7,11 +7,15 @@ export type FairyCliSession = {
   room: string;
   name?: string;
   baseUrl: string;
+  mode?: 'legacy_canvas' | 'reset_workspace';
+  workspaceSessionId?: string | null;
+  workspacePath?: string | null;
   createdAt: string;
   updatedAt: string;
   lastTaskId?: string | null;
   lastTraceId?: string | null;
   lastRequestId?: string | null;
+  lastArtifactId?: string | null;
 };
 
 export type FairyCliSpawnTask = {
@@ -53,7 +57,16 @@ export async function loadState(cwd: string): Promise<FairyCliState> {
     const parsed = JSON.parse(raw) as FairyCliState;
     return {
       currentSessionId: typeof parsed.currentSessionId === 'string' ? parsed.currentSessionId : undefined,
-      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+      sessions: Array.isArray(parsed.sessions)
+        ? parsed.sessions.map((session) => ({
+            ...session,
+            mode: session?.mode === 'reset_workspace' ? 'reset_workspace' : 'legacy_canvas',
+            workspaceSessionId:
+              typeof session?.workspaceSessionId === 'string' ? session.workspaceSessionId : null,
+            workspacePath: typeof session?.workspacePath === 'string' ? session.workspacePath : null,
+            lastArtifactId: typeof session?.lastArtifactId === 'string' ? session.lastArtifactId : null,
+          }))
+        : [],
       subagentRuns: Array.isArray(parsed.subagentRuns) ? parsed.subagentRuns : [],
     };
   } catch {
@@ -67,18 +80,29 @@ export async function saveState(cwd: string, state: FairyCliState): Promise<void
   await fs.writeFile(stateFilePath(cwd), `${JSON.stringify(state, null, 2)}\n`, 'utf8');
 }
 
-export function createSession(input: { room: string; name?: string; baseUrl: string }): FairyCliSession {
+export function createSession(input: {
+  room: string;
+  name?: string;
+  baseUrl: string;
+  mode?: 'legacy_canvas' | 'reset_workspace';
+  workspaceSessionId?: string | null;
+  workspacePath?: string | null;
+}): FairyCliSession {
   const now = new Date().toISOString();
   return {
     id: `session-${randomUUID().slice(0, 12)}`,
     room: input.room,
     name: input.name,
     baseUrl: input.baseUrl,
+    mode: input.mode ?? 'legacy_canvas',
+    workspaceSessionId: input.workspaceSessionId ?? null,
+    workspacePath: input.workspacePath ?? null,
     createdAt: now,
     updatedAt: now,
     lastTaskId: null,
     lastTraceId: null,
     lastRequestId: null,
+    lastArtifactId: null,
   };
 }
 

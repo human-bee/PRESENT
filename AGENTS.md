@@ -17,7 +17,16 @@
 
 ## Build, Test, and Development Commands
 
-### Development
+### Reset Runtime (Default)
+
+- `npm install`: Install dependencies.
+- `npm run dev:reset`: Run the reset mission-control shell at `http://localhost:3000`.
+- `npm run present:mcp`: Start the PRESENT MCP server for BYO-agent flows.
+- `npm run codex:manifest`: Print the current Codex app-server manifest assumptions.
+- `npm run typecheck`: Run the default local quality gate, including the reset compile surface.
+- `npm run test:reset`: Run the reset kernel/API/UI verification bundle.
+
+### Legacy Runtime (Archived)
 
 - `npm install`: Install dependencies.
 - `npm run agent:realtime`: Run the LiveKit Realtime voice agent (terminal 1 - start first).
@@ -25,7 +34,7 @@
 - `npm run dev`: Run the web app at `http://localhost:3000` (terminal 3).
 - `npm run sync:dev`: Run the TLDraw sync server locally.
 
-> 💡 **Tip:** For quick local testing (including Chrome DevTools automation), you can launch the entire stack in the background with log files via `npm run stack:start`. The helper script starts `lk:server:dev` (runs `livekit-server --dev`), `sync:dev`, `agent:conductor`, `agent:realtime`, and `npm run dev`, writing to `logs/*.log` so you can tail them while driving the canvas.
+> 💡 **Tip:** For quick local testing of the archived runtime, launch the old stack in the background with `npm run legacy:stack:start`. The helper script starts `lk:server:dev` (runs `livekit-server --dev`), `sync:dev`, `agent:conductor`, `agent:realtime`, and `npm run dev`, writing to `logs/*.log` so you can tail them while driving the canvas.
 
 ### Production
 
@@ -63,7 +72,7 @@
 - Commits: Imperative ("fix: handle LiveKit reconnect").
 - PRs: Include summary, linked issues, screenshots/logs for agent changes.
 - Requirements: Passing `npm test`, `npm run lint`; no uncommitted changes.
-- Railway prod deploys run on `main` via `.github/workflows/deploy-railway-prod.yml`; changed paths under `src/lib/agents/**` will redeploy `present-conductor` and `present-realtime` as needed, based on path filters.
+- Railway prod deploys run on `main` via `.github/workflows/deploy-railway-prod.yml`; archived realtime/conductor deploys are now scoped to legacy runtime paths instead of reset-shell/package changes.
 - Manual workflow dispatch is supported for env updates (`force_conductor`, `force_realtime`) and is ignored unless triggered from `main` (non-main manual triggers are a no-op).
 
 ## Data Compatibility & Persistence

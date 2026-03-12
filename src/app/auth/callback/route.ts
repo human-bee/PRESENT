@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     if (!error) {
       const next = requestUrl.searchParams.get('next');
       // Only allow internal redirects
-      const safeNext = next && next.startsWith('/') ? next : '/canvas';
+      const safeNext = next && next.startsWith('/') ? next : '/';
       return NextResponse.redirect(`${origin}${safeNext}`);
     }
   }
