@@ -1,10 +1,8 @@
 import type { NoiseCancellationOptions } from '@livekit/rtc-node';
-import {
-  DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
-  normalizeOpenAiTranscriptionModel,
-} from '@/lib/openai/transcription-model';
 
 export type MicProfile = 'near_field' | 'far_field' | 'noisy_room';
+export type VoiceRealtimeModelStrategy = 'fixed' | 'adaptive_profile';
+export type VoiceModelTransportMode = 'realtime' | 'responses_ws';
 
 export type RealtimeNoiseReductionOption = {
   type: 'near_field' | 'far_field';
@@ -30,7 +28,12 @@ export type VoiceRealtimeConfig = {
   micProfile: MicProfile;
   transcriptionEnabled: boolean;
   multiParticipantTranscriptionEnabled: boolean;
+  realtimeModelStrategy: VoiceRealtimeModelStrategy;
+  resolvedRealtimeModelPrimary: string;
+  resolvedRealtimeModelSecondary: string;
   resolvedRealtimeModel: string;
+  resolvedResponsesModel: string;
+  resolvedModelTransport: VoiceModelTransportMode;
   resolvedRouterModel: string;
   resolvedSttModel: string;
   resolvedTranscriptionLanguage: string;
@@ -56,6 +59,12 @@ export type VoiceRealtimeConfig = {
 
 export type VoiceRealtimeConfigOverrides = {
   realtimeModel?: string;
+  realtimeModelPrimary?: string;
+  realtimeModelSecondary?: string;
+  realtimeModelStrategy?: VoiceRealtimeModelStrategy;
+  capabilityProfile?: string;
+  responsesModel?: string;
+  modelTransport?: VoiceModelTransportMode;
   routerModel?: string;
   sttModel?: string;
   transcriptionEnabled?: boolean;
@@ -65,8 +74,6 @@ export type VoiceRealtimeConfigOverrides = {
   interruptTimeoutMs?: number;
   transcriptionReadyTimeoutMs?: number;
 };
-
-export const DEFAULT_VOICE_REALTIME_MODEL = 'gpt-realtime-1.5';
 
 const ROOM_AUDIO_SAMPLE_RATE = 24_000;
 const ROOM_AUDIO_NUM_CHANNELS = 1;
@@ -121,21 +128,18 @@ const parseMicProfile = (value?: string | null): MicProfile => {
   return 'noisy_room';
 };
 
-const shouldDefaultRoomNoiseCancellation = (livekitUrl?: string | null): boolean => {
-  const trimmed = livekitUrl?.trim();
-  if (!trimmed) return true;
-  try {
-    const parsed = new URL(trimmed);
-    const host = parsed.hostname.toLowerCase();
-    if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
-      return false;
-    }
-  } catch {
-    if (/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(trimmed)) {
-      return false;
-    }
-  }
-  return true;
+const parseRealtimeModelStrategy = (value?: string | null): VoiceRealtimeModelStrategy | undefined => {
+  const normalized = (value || '').trim().toLowerCase();
+  if (normalized === 'fixed') return 'fixed';
+  if (normalized === 'adaptive_profile') return 'adaptive_profile';
+  return undefined;
+};
+
+const parseVoiceModelTransportMode = (value?: string | null): VoiceModelTransportMode | undefined => {
+  const normalized = (value || '').trim().toLowerCase();
+  if (normalized === 'realtime') return 'realtime';
+  if (normalized === 'responses_ws') return 'responses_ws';
+  return undefined;
 };
 
 const resolveNoiseReduction = ({
@@ -220,11 +224,7 @@ const resolveTurnDetection = ({
 const resolveRoomNoiseCancellation = (
   env: NodeJS.ProcessEnv,
 ): NoiseCancellationOptions | undefined => {
-  const enabled =
-    parseBoolean(env.VOICE_AGENT_ROOM_NOISE_CANCELLATION_ENABLED) ??
-    shouldDefaultRoomNoiseCancellation(
-      env.LIVEKIT_URL || env.NEXT_PUBLIC_LIVEKIT_URL || env.NEXT_PUBLIC_LK_SERVER_URL,
-    );
+  const enabled = parseBoolean(env.VOICE_AGENT_ROOM_NOISE_CANCELLATION_ENABLED) ?? true;
   if (!enabled) return undefined;
 
   const moduleId = (env.VOICE_AGENT_ROOM_NOISE_CANCELLATION_MODULE_ID || 'bvc').trim();
@@ -238,10 +238,35 @@ export const resolveVoiceRealtimeConfig = (
   env: NodeJS.ProcessEnv = process.env,
   overrides: VoiceRealtimeConfigOverrides = {},
 ): VoiceRealtimeConfig => {
-  const resolvedRealtimeModel =
-    overrides.realtimeModel?.trim() ||
-    env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-    DEFAULT_VOICE_REALTIME_MODEL;
+  const explicitRealtimeModel = overrides.realtimeModel?.trim() || env.VOICE_AGENT_REALTIME_MODEL?.trim() || '';
+  const resolvedRealtimeModelPrimary =
+    overrides.realtimeModelPrimary?.trim() ||
+    env.VOICE_AGENT_REALTIME_MODEL_PRIMARY?.trim() ||
+    explicitRealtimeModel ||
+    'gpt-realtime-1.5';
+  const resolvedRealtimeModelSecondary =
+    overrides.realtimeModelSecondary?.trim() ||
+    env.VOICE_AGENT_REALTIME_MODEL_SECONDARY?.trim() ||
+    'gpt-realtime-mini';
+  const realtimeModelStrategy =
+    parseRealtimeModelStrategy(overrides.realtimeModelStrategy) ??
+    parseRealtimeModelStrategy(env.VOICE_AGENT_REALTIME_MODEL_STRATEGY) ??
+    'adaptive_profile';
+  const capabilityProfileHint = (overrides.capabilityProfile || env.VOICE_AGENT_CAPABILITY_PROFILE || 'full')
+    .trim()
+    .toLowerCase();
+  const isLiteProfile = /(lite|lean|minimal|low)/.test(capabilityProfileHint);
+  const resolvedRealtimeModel = explicitRealtimeModel
+    ? explicitRealtimeModel
+    : realtimeModelStrategy === 'adaptive_profile'
+      ? (isLiteProfile ? resolvedRealtimeModelSecondary : resolvedRealtimeModelPrimary)
+      : resolvedRealtimeModelPrimary;
+  const resolvedResponsesModel =
+    overrides.responsesModel?.trim() || env.VOICE_AGENT_RESPONSES_MODEL?.trim() || 'gpt-audio-1.5';
+  const resolvedModelTransport =
+    parseVoiceModelTransportMode(overrides.modelTransport) ??
+    parseVoiceModelTransportMode(env.VOICE_AGENT_MODEL_TRANSPORT) ??
+    'responses_ws';
   const resolvedRouterModel =
     overrides.routerModel?.trim() || env.VOICE_AGENT_ROUTER_MODEL?.trim() || 'claude-haiku-4-5';
   const envInputTranscriptionModel = env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL?.trim();
@@ -250,17 +275,9 @@ export const resolveVoiceRealtimeConfig = (
   const envTranscriptionLanguage = env.VOICE_AGENT_TRANSCRIPTION_LANGUAGE?.trim();
   const fallbackTranscriptionLanguage = env.AGENT_STT_LANGUAGE?.trim();
   const resolvedInputTranscriptionModel =
-    envInputTranscriptionModel || fallbackInputTranscriptionModel
-      ? normalizeOpenAiTranscriptionModel(
-          envInputTranscriptionModel || fallbackInputTranscriptionModel,
-          DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
-        )
-      : undefined;
+    envInputTranscriptionModel || fallbackInputTranscriptionModel || undefined;
   const resolvedSttModel =
-    normalizeOpenAiTranscriptionModel(
-      overrides.sttModel?.trim() || envSttModel || resolvedInputTranscriptionModel,
-      DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
-    );
+    overrides.sttModel?.trim() || envSttModel || resolvedInputTranscriptionModel || 'gpt-4o-mini-transcribe';
   const transcriptionEnabledFlag = parseBoolean(env.VOICE_AGENT_TRANSCRIPTION_ENABLED);
   const multiParticipantTranscriptionEnabled =
     parseBoolean(env.VOICE_AGENT_MULTI_PARTICIPANT_TRANSCRIPTION) ?? false;
@@ -287,6 +304,13 @@ export const resolveVoiceRealtimeConfig = (
     mode: overrides.turnDetection ?? env.VOICE_AGENT_TURN_DETECTION,
     env,
   });
+  const turnDetectionForSession =
+    turnDetectionOption && resolvedModelTransport === 'responses_ws'
+      ? {
+          ...turnDetectionOption,
+          create_response: false,
+        }
+      : turnDetectionOption;
   const transcriptionMaxParticipants = parsePositiveInt(
     env.VOICE_AGENT_TRANSCRIPTION_MAX_PARTICIPANTS ?? env.VOICE_AGENT_TRANSCRIBER_MAX_PARTICIPANTS,
     8,
@@ -298,13 +322,18 @@ export const resolveVoiceRealtimeConfig = (
     micProfile,
     transcriptionEnabled,
     multiParticipantTranscriptionEnabled,
+    realtimeModelStrategy,
+    resolvedRealtimeModelPrimary,
+    resolvedRealtimeModelSecondary,
     resolvedRealtimeModel,
+    resolvedResponsesModel,
+    resolvedModelTransport,
     resolvedRouterModel,
     resolvedSttModel,
     resolvedTranscriptionLanguage,
     inputAudioTranscription,
     inputAudioNoiseReduction,
-    turnDetectionOption,
+    turnDetectionOption: turnDetectionForSession,
     transcriptionMaxParticipants,
     replyTimeoutMs: parsePositiveInt(
       overrides.replyTimeoutMs ?? env.VOICE_AGENT_REPLY_TIMEOUT_MS,
