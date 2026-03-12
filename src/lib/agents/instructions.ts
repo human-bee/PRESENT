@@ -92,15 +92,16 @@ Capability-explicit mode (experiment)
   const fullGuidance = `
 
 Routing priority (balance correctness with usefulness)
-1) Visual work (draw/place/edit/style/layout) → dispatch_to_conductor({ task: 'fairy.intent', params: { id: '<uuid>', room: CURRENT_ROOM, message: '<user request>', source: 'voice', selectionIds?: CURRENT_SELECTION_IDS, bounds?: {x,y,w,h} } }). This is the default for visual requests; the conductor will route to canvas or a widget.
+1) Explicit canvas/fairy requests only ("Canvas: ...", "/canvas ...", "Fairy: ...", "/fairy ...", or clear wording like "use the fairy to ...") → dispatch_to_conductor({ task: 'fairy.intent', params: { id: '<uuid>', room: CURRENT_ROOM, message: '<user request>', source: 'voice', selectionIds?: CURRENT_SELECTION_IDS, bounds?: {x,y,w,h} } }).
   - If the user explicitly asks for multiple fairies ("use 2 fairies", "bring 3 fairies", "have 5 fairies collaborate"), include metadata.fairy.count:
     dispatch_to_conductor({ task: 'fairy.intent', params: { ..., metadata: { fairy: { count: 3 } } } })
 2) Domain tasks with clear intent → call the matching steward/component (e.g., RetroTimerEnhanced for timers; ResearchPanel/search for research; YouTube embed for explicit video asks).
 3) LiveCaptions only when explicitly requested (keywords: "live captions", "captions on", "transcribe", "subtitles"). Never use LiveCaptions to satisfy drawing/styling/layout requests.
-4) If uncertain and the request references visuals/shapes/style/layout, default to (1) rather than component creation.
+4) If the user describes visuals/shapes/style/layout without an explicit canvas/fairy invocation, do not auto-dispatch the fairy lane.
 
 Literal prefixes (treat these as strong routing hints)
 - "Canvas: <message>" or "/canvas <message>" → dispatch_to_conductor('fairy.intent', { message: "<message>" })
+- "Fairy: <message>" or "/fairy <message>" → dispatch_to_conductor('fairy.intent', { message: "<message>" })
 - "On the kanban board: <instruction>" → update_component({ componentId: KANBAN_ID, patch: { instruction: "<instruction>" } })
 
 Canvas lexicon (triggers priority #1)
@@ -192,8 +193,8 @@ OTHER STEWARDS:
 - Flowchart: "flowchart", "diagram", "nodes/edges" → flowchart steward.
 
 Few‑shot Do / Don't
-- DO: "Create a mono dotted deep orange shape" → dispatch_to_conductor('fairy.intent', { message: 'Create a mono dotted deep orange shape' })
-- DO: "Align the selected rectangles to the left" → dispatch_to_conductor('fairy.intent', { message: 'Align the selected rectangles to the left', selectionIds: CURRENT_SELECTION_IDS })
+- DO: "Canvas: create a mono dotted deep orange shape" → dispatch_to_conductor('fairy.intent', { message: 'create a mono dotted deep orange shape' })
+- DO: "Use the fairy to align the selected rectangles to the left" → dispatch_to_conductor('fairy.intent', { message: 'align the selected rectangles to the left', selectionIds: CURRENT_SELECTION_IDS })
 - DO: "Start a 5 minute timer" → create_component({ type: 'RetroTimerEnhanced', spec: { initialMinutes: 5, initialSeconds: 0, autoStart: true } })
 - DO: "Create a timer" → create_component({ type: 'RetroTimerEnhanced', spec: {} })
 - DO: "Create dice widget" → create_component({ type: 'DiceWidget', spec: {} })
@@ -216,7 +217,7 @@ Few‑shot Do / Don't
 - DO: "Update crowd pulse: question X, hands up 12, confidence 85" → update_component({ componentId: CROWD_PULSE_ID, patch: { prompt: "X", status: "counting", handCount: 12, confidence: 85, lastUpdated: <timestamp> } })
 - DO: "Show help" → create_component({ type: 'OnboardingGuide', spec: {} })
 - DO: "Let's keep talking before we update the canvas" → do_nothing({ reason: "gathering_context" })
-- DON'T: For the drawing/align requests above, do not create LiveCaptions—dispatch fairy.intent instead.
+- DON'T: Auto-dispatch fairy.intent for ordinary drawing chatter unless the user explicitly invoked canvas/fairy mode.
 
 Utility tools
 - transcript_search: retrieve recent turns (windowed) instead of keeping full history in your prompt.
@@ -286,10 +287,10 @@ Always respond with tool calls. For Q&A outside action, keep confirmations minim
   const leanGuidance = `
 
 Lean routing policy (speed + parity)
-1) Visual requests (draw/layout/style/place/edit) -> dispatch_to_conductor({ task: 'fairy.intent', params: { id: '<uuid>', room: CURRENT_ROOM, message: '<user request>', source: 'voice' } }).
+1) Explicit canvas/fairy requests -> dispatch_to_conductor({ task: 'fairy.intent', params: { id: '<uuid>', room: CURRENT_ROOM, message: '<user request>', source: 'voice' } }).
 2) Widget lifecycle requests -> create_component / update_component / remove_component / resolve_component.
 3) Research + transcript context -> research_search / transcript_search, then update or create the target widget.
-4) Unknown intent -> dispatch_to_conductor first, then fallback to component tools.
+4) Unknown intent -> prefer non-canvas tools; do not auto-enter fairy mode.
 5) Conversation-growth / no-mutation turns -> do_nothing({ reason: 'gathering_context' }).
 
 Mutation safety contract

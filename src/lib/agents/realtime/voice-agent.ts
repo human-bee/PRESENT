@@ -829,15 +829,15 @@ export default defineAgent({
     let instructions = `You are a UI automation agent. You NEVER speak—you only act by calling tools.
 
 CRITICAL RULES:
-1. For canvas work (draw, sticky note, shapes): call dispatch_to_conductor({ task: "fairy.intent", params: { id: "<uuid>", room: CURRENT_ROOM, message: "<user request>", source: "voice", bounds?, selectionIds? } }). Generate a fresh UUID when you create id.
+1. Only route to canvas/fairy when the user explicitly invokes it with "Canvas:", "/canvas", "Fairy:", "/fairy", or clear wording like "use the fairy to ...". For those explicit canvas requests, call dispatch_to_conductor({ task: "fairy.intent", params: { id: "<uuid>", room: CURRENT_ROOM, message: "<user request>", source: "voice", bounds?, selectionIds? } }). Generate a fresh UUID when you create id.
 2. For component creation/updates: call create_component or update_component.
 3. Never claim a mutation is complete until you have apply evidence. If apply is pending, say it is queued/in progress.
 4. NEVER respond with conversational text. If uncertain, call a tool anyway.
 5. Do not greet, explain, or narrate. Tool calls only.
 
 Examples:
-- User: "draw a cat" → dispatch_to_conductor({ task: "fairy.intent", params: { id: "...", room: CURRENT_ROOM, message: "draw a cat", source: "voice" } })
-- User: "focus on the selected rectangles" → dispatch_to_conductor({ task: "fairy.intent", params: { id: "...", room: CURRENT_ROOM, message: "focus on the selected rectangles", source: "voice", selectionIds: CURRENT_SELECTION_IDS } })
+- User: "Canvas: draw a cat" → dispatch_to_conductor({ task: "fairy.intent", params: { id: "...", room: CURRENT_ROOM, message: "draw a cat", source: "voice" } })
+- User: "Use the fairy to focus on the selected rectangles" → dispatch_to_conductor({ task: "fairy.intent", params: { id: "...", room: CURRENT_ROOM, message: "focus on the selected rectangles", source: "voice", selectionIds: CURRENT_SELECTION_IDS } })
 - User: "add a timer" → create_component({ type: "RetroTimerEnhanced", spec: "{}" })
 - User: "hi" → (no tool needed, stay silent)
 
@@ -866,6 +866,21 @@ Your only output is function calls. Never use plain text unless absolutely neces
           assignmentTs: sessionAssignmentTs,
         })
       : null;
+
+    const isExplicitFairyInvocation = (message: string) => {
+      const trimmed = message.trim().toLowerCase();
+      if (!trimmed) return false;
+      return (
+        trimmed.startsWith('canvas:') ||
+        trimmed.startsWith('/canvas') ||
+        trimmed.startsWith('fairy:') ||
+        trimmed.startsWith('/fairy') ||
+        trimmed.includes('use the fairy') ||
+        trimmed.includes('ask the fairy') ||
+        trimmed.includes('have the fairy') ||
+        trimmed.includes('call the fairy')
+      );
+    };
 
     const configuredCapabilityProfileFromEnv = capabilityProfileHint;
     const configuredCapabilityProfile = resolveCapabilityProfile(
@@ -2239,6 +2254,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
         const message = typeof taskParams.message === 'string' ? taskParams.message.trim().toLowerCase() : '';
         if (!message || message.length < 2) {
           return { allow: false, confidence: 0.12, reason: 'canvas intent too short' };
+        }
+        if (!isExplicitFairyInvocation(message)) {
+          return { allow: false, confidence: 0.08, reason: 'canvas intent requires explicit invocation' };
         }
         const keywordHits = canvasIntentKeywords.reduce(
           (count, keyword) => (message.includes(keyword) ? count + 1 : count),
@@ -4281,13 +4299,23 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
       // Explicit "Canvas:" prefix routes directly to the Canvas steward (no extra LLM roundtrip).
       // This is an opt-in command style used by the demo harness and the transcript UI hint.
-      const isCanvasPrefixed = lower.startsWith('canvas:') || lower.startsWith('/canvas');
-      if (isCanvasPrefixed) {
-        const message = trimmed.includes(':')
-          ? trimmed.slice(trimmed.indexOf(':') + 1).trim()
-          : lower.startsWith('/canvas')
-            ? trimmed.slice('/canvas'.length).trim()
-            : trimmed;
+      const hasExplicitFairyInvocation = isExplicitFairyInvocation(trimmed);
+      if (hasExplicitFairyInvocation) {
+        let message = trimmed;
+        if (lower.startsWith('canvas:') || lower.startsWith('fairy:')) {
+          message = trimmed.slice(trimmed.indexOf(':') + 1).trim();
+        } else if (lower.startsWith('/canvas')) {
+          message = trimmed.slice('/canvas'.length).trim();
+        } else if (lower.startsWith('/fairy')) {
+          message = trimmed.slice('/fairy'.length).trim();
+        } else {
+          message = trimmed
+            .replace(/^use the fairy to\s+/i, '')
+            .replace(/^ask the fairy to\s+/i, '')
+            .replace(/^have the fairy\s+/i, '')
+            .replace(/^call the fairy to\s+/i, '')
+            .trim();
+        }
         await sendToolCall('dispatch_to_conductor', {
           task: 'fairy.intent',
           params: {
@@ -4430,22 +4458,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
         lower.includes('infographic') && (lower.startsWith('generate') || lower.startsWith('create'));
       if (looksLikeInfographicCommand) {
         await (toolContext as any).create_infographic.execute({});
-        return;
-      }
-
-      const looksLikeCanvasDrawCommand =
-        /\b(draw|sketch|illustrate|diagram|roadmap|sticky(?:\s+note)?|shape|arrow|rectangle|circle|ellipse|line|text box|callout)\b/.test(lower) &&
-        !/\b(scorecard|debate|crowd\s*pulse|research|timer|kanban|infographic)\b/.test(lower);
-      if (looksLikeCanvasDrawCommand) {
-        await sendToolCall('dispatch_to_conductor', {
-          task: 'fairy.intent',
-          params: {
-            id: randomUUID(),
-            room,
-            message: trimmed,
-            source: 'voice',
-          },
-        });
         return;
       }
 
@@ -4593,7 +4605,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           const routed = await routeManualInput(text, {
             model: realtimeConfig.resolvedRouterModel,
           });
-          if (routed?.route === 'canvas') {
+          if (routed?.route === 'canvas' && isExplicitFairyInvocation(text)) {
             await sendToolCall('dispatch_to_conductor', {
               task: 'fairy.intent',
               params: {
