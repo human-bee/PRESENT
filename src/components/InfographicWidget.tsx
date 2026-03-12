@@ -1017,8 +1017,8 @@ export function InfographicWidget({
   );
 
   const renderContent = () => (
-    <div className="flex h-full flex-col overflow-y-auto bg-[radial-gradient(circle_at_top,#2d190d_0%,#140d08_48%,#0b0908_100%)] text-white">
-      <div className="border-b border-white/10 px-4 py-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#2d190d_0%,#140d08_48%,#0b0908_100%)] text-white">
+      <div className="shrink-0 border-b border-white/10 px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -1177,7 +1177,7 @@ export function InfographicWidget({
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-4 p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
         <div className="rounded-[26px] border border-white/12 bg-white/[0.06] p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -1194,7 +1194,10 @@ export function InfographicWidget({
             value={directionText}
             onChange={(event) => setDirectionText(event.target.value)}
             placeholder="Emphasize the verdict, strongest evidence, and where AFF/NEG diverged..."
-            className="mt-3 h-28 w-full resize-none rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none placeholder:text-white/36"
+            className={cn(
+              'mt-3 w-full resize-none rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none placeholder:text-white/36',
+              isShape ? 'h-24' : 'h-28',
+            )}
           />
           <div className="mt-3 flex flex-wrap gap-2">
             {quickAngles.map((angle) => (
@@ -1290,7 +1293,12 @@ export function InfographicWidget({
           ) : null}
         </div>
 
-        <div className="relative flex min-h-[360px] flex-1 flex-col overflow-hidden rounded-[30px] border border-white/12 bg-black/25">
+        <div
+          className={cn(
+            'relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[30px] border border-white/12 bg-black/25',
+            isShape ? 'basis-[280px]' : 'min-h-[360px]',
+          )}
+        >
           {isGenerating ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
               <div className="relative">
@@ -1420,7 +1428,9 @@ export function InfographicWidget({
 
   return (
     <div className="fixed bottom-4 right-4 z-50 w-[390px] max-w-[calc(100vw-2rem)] shadow-2xl">
-      <Card className="h-[760px] overflow-hidden border-0 bg-transparent p-0">{renderContent()}</Card>
+      <Card className="h-[min(760px,calc(100vh-2rem))] overflow-hidden border-0 bg-transparent p-0">
+        {renderContent()}
+      </Card>
     </div>
   );
 }
