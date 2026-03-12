@@ -79,6 +79,9 @@ const DEFAULT_IMAGE_MIME_TYPE = 'image/png';
 const normalizeImageMimeType = (value: unknown): string =>
   typeof value === 'string' && value.startsWith('image/') ? value : DEFAULT_IMAGE_MIME_TYPE;
 
+const readFirstArrayRecord = (value: unknown): Record<string, unknown> | null =>
+  Array.isArray(value) ? asRecord(value[0]) : null;
+
 const providerEnvKey = (provider: 'google' | 'openai' | 'xai' | 'fal'): string | undefined => {
   switch (provider) {
     case 'google':
@@ -177,10 +180,19 @@ async function generateWithGoogle(apiKey: string, request: GenerateRequest, fina
     throw new Error('google_image_missing_payload');
   }
 
-  const imagePart = payload?.candidates?.[0]?.content?.parts?.find(
-    (part: Record<string, unknown>) => typeof part?.inlineData?.data === 'string',
-  );
-  const b64 = imagePart?.inlineData?.data;
+  const candidate = readFirstArrayRecord(payload?.candidates);
+  const content = readRecord(candidate?.content);
+  const imagePart =
+    Array.isArray(content?.parts)
+      ? content.parts.find((part) => {
+          const partRecord = readRecord(part);
+          const inlineData = readRecord(partRecord?.inlineData);
+          return readString(inlineData?.data) !== null;
+        })
+      : null;
+  const imagePartRecord = readRecord(imagePart);
+  const inlineData = readRecord(imagePartRecord?.inlineData);
+  const b64 = readString(inlineData?.data);
   if (typeof b64 !== 'string' || !b64.length) {
     throw new Error('google_image_missing_payload');
   }
@@ -247,12 +259,15 @@ async function generateWithXai(apiKey: string, request: GenerateRequest, finalPr
   if (!response.ok) {
     throw new Error(readProviderErrorMessage(payload, `xai_image_error:${response.status}`));
   }
+  const firstImage = readFirstArrayRecord(payload?.data);
   let b64: string | null = null;
   let mimeType = DEFAULT_IMAGE_MIME_TYPE;
-  if (typeof payload?.data?.[0]?.b64_json === 'string' && payload.data[0].b64_json.length) {
-    b64 = payload.data[0].b64_json;
-  } else if (typeof payload?.data?.[0]?.url === 'string' && payload.data[0].url.length) {
-    const fetched = await fetchAsBase64(payload.data[0].url);
+  const inlineB64 = readString(firstImage?.b64_json);
+  const imageUrl = readString(firstImage?.url);
+  if (inlineB64) {
+    b64 = inlineB64;
+  } else if (imageUrl) {
+    const fetched = await fetchAsBase64(imageUrl);
     b64 = fetched.b64;
     mimeType = fetched.mimeType;
   }
@@ -291,7 +306,8 @@ async function generateWithFal(apiKey: string, request: GenerateRequest, finalPr
   if (!response.ok) {
     throw new Error(readProviderErrorMessage(payload, `fal_image_error:${response.status}`));
   }
-  const url = payload?.images?.[0]?.url;
+  const firstImage = readFirstArrayRecord(payload?.images);
+  const url = readString(firstImage?.url);
   if (typeof url !== 'string' || !url.length) {
     throw new Error('fal_image_missing_url');
   }
@@ -303,8 +319,8 @@ async function generateWithFal(apiKey: string, request: GenerateRequest, finalPr
     providerUsed: 'fal:flux-2-flash',
     modelId: request.model,
     modelLabel: getImageModelDefinition(request.model).label,
-    width: payload?.images?.[0]?.width,
-    height: payload?.images?.[0]?.height,
+    width: typeof firstImage?.width === 'number' ? firstImage.width : undefined,
+    height: typeof firstImage?.height === 'number' ? firstImage.height : undefined,
   };
 }
 
