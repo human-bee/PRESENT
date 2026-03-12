@@ -222,10 +222,10 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     sizingPolicy: 'always_fit', // Always adapt to dynamic content
   },
   InfographicWidget: {
-    naturalWidth: 400,
-    naturalHeight: 500,
-    minWidth: 300,
-    minHeight: 350,
+    naturalWidth: 460,
+    naturalHeight: 820,
+    minWidth: 360,
+    minHeight: 620,
     resizeMode: 'free',
     sizingPolicy: 'always_fit', // Generated images vary in size
   },
