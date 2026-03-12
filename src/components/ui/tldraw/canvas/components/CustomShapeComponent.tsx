@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, {
   Component,
@@ -42,6 +42,32 @@ export class ComponentErrorBoundary extends Component<
   }
 }
 
+const readFiniteNumber = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const readBoolean = (value: unknown): boolean | undefined =>
+  typeof value === 'boolean' ? value : undefined;
+
+const readSizingPolicy = (
+  value: unknown,
+): 'always_fit' | 'fit_until_user_resize' | 'scale_only' | undefined =>
+  value === 'always_fit' || value === 'fit_until_user_resize' || value === 'scale_only'
+    ? value
+    : undefined;
+
+const extractStoredProps = (stored: ReactNode | undefined): Record<string, unknown> => {
+  if (React.isValidElement(stored) && stored.props && typeof stored.props === 'object') {
+    return stored.props as Record<string, unknown>;
+  }
+  if (stored && typeof stored === 'object' && 'props' in (stored as any)) {
+    const props = (stored as any).props;
+    if (props && typeof props === 'object' && !Array.isArray(props)) {
+      return props as Record<string, unknown>;
+    }
+  }
+  return {};
+};
+
 export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scaleWrapperRef = useRef<HTMLDivElement>(null);
@@ -49,7 +75,7 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const rehydrateRequestRef = useRef<string | null>(null);
   const componentStore = useContext(ComponentStoreContext);
   const editor = useEditor();
-  const [, setRenderTick] = useState(0);
+  const [renderTick, setRenderTick] = useState(0);
   const roomName = useContextKey() || 'canvas';
   const [localPin, setLocalPinState] = useState<LocalPinData | null>(null);
 
@@ -59,9 +85,33 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const lastMeasuredSizeRef = useRef<{ w: number; h: number } | null>(null);
 
   const sizeInfo = getComponentSizeInfo(shape.props.name);
-  const sizingPolicy = sizeInfo.sizingPolicy || 'fit_until_user_resize';
   const isFixedLivekitTile =
     shape.props.name === 'LivekitParticipantTile' || shape.props.name === 'LivekitScreenShareTile';
+  const storedComponent =
+    shape.props.customComponent && componentStore
+      ? componentStore.get(shape.props.customComponent)
+      : undefined;
+  const storedProps = extractStoredProps(storedComponent);
+  const shapeState =
+    shape.props.state && typeof shape.props.state === 'object' && !Array.isArray(shape.props.state)
+      ? (shape.props.state as Record<string, unknown>)
+      : {};
+  const sizingProps = { ...shapeState, ...storedProps };
+  const sizingPolicy =
+    readSizingPolicy(sizingProps.sizingPolicyOverride) ??
+    (sizeInfo.sizingPolicy || 'fit_until_user_resize');
+  const preferredWidth = readFiniteNumber(sizingProps.preferredWidth);
+  const preferredHeight = readFiniteNumber(sizingProps.preferredHeight);
+  const reportedWidth = readFiniteNumber(
+    sizingProps.reportedContentWidth ?? sizingProps.contentWidth,
+  );
+  const reportedHeight = readFiniteNumber(
+    sizingProps.reportedContentHeight ?? sizingProps.contentHeight,
+  );
+  const minWidthOverride = readFiniteNumber(sizingProps.minWidth);
+  const minHeightOverride = readFiniteNumber(sizingProps.minHeight);
+  const autoFitWidth = readBoolean(sizingProps.autoFitWidth) ?? false;
+  const autoFitHeight = readBoolean(sizingProps.autoFitHeight) ?? true;
 
   useEffect(() => {
     if (sizingPolicy === 'scale_only' || localPin || isFixedLivekitTile) return;
@@ -95,7 +145,16 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
       if (frame !== null) cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [sizingPolicy, localPin, isFixedLivekitTile]);
+  }, [
+    autoFitHeight,
+    autoFitWidth,
+    isFixedLivekitTile,
+    localPin,
+    preferredHeight,
+    preferredWidth,
+    renderTick,
+    sizingPolicy,
+  ]);
 
   useEffect(() => {
     lastMeasuredSizeRef.current = null;
@@ -106,7 +165,11 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
     if (localPin) {
       setPinnedNaturalSize((prev) => {
         if (naturalSize) {
-          if (!prev || Math.abs(prev.w - naturalSize.w) > 1 || Math.abs(prev.h - naturalSize.h) > 1) {
+          if (
+            !prev ||
+            Math.abs(prev.w - naturalSize.w) > 1 ||
+            Math.abs(prev.h - naturalSize.h) > 1
+          ) {
             return naturalSize;
           }
           return prev;
@@ -163,7 +226,16 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
 
   useEffect(() => {
     autoFittedRef.current = false;
-  }, [shape.props.name]);
+  }, [
+    shape.props.name,
+    preferredHeight,
+    preferredWidth,
+    reportedHeight,
+    reportedWidth,
+    autoFitHeight,
+    autoFitWidth,
+    sizingPolicy,
+  ]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -185,7 +257,17 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   }, [roomName, shape.id]);
 
   useEffect(() => {
-    if (!editor || !naturalSize || localPin || isFixedLivekitTile) return;
+    if (
+      !editor ||
+      (!naturalSize &&
+        preferredWidth == null &&
+        preferredHeight == null &&
+        reportedWidth == null &&
+        reportedHeight == null) ||
+      localPin ||
+      isFixedLivekitTile
+    )
+      return;
     const unsafeEditor = editor as any;
 
     const policy = sizingPolicy;
@@ -195,16 +277,27 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
       policy === 'always_fit' || (policy === 'fit_until_user_resize' && !userHasResized);
 
     if (shouldAutoFit) {
-      const { h: rawH } = naturalSize;
+      const rawW = autoFitWidth
+        ? (reportedWidth ?? preferredWidth ?? naturalSize?.w ?? sizeInfo.naturalWidth)
+        : (preferredWidth ?? reportedWidth ?? sizeInfo.naturalWidth);
+      const rawH = autoFitHeight
+        ? (reportedHeight ?? preferredHeight ?? naturalSize?.h ?? sizeInfo.naturalHeight)
+        : (preferredHeight ?? reportedHeight ?? naturalSize?.h ?? sizeInfo.naturalHeight);
+      const effectiveMinWidth = Math.max(sizeInfo.minWidth, minWidthOverride ?? sizeInfo.minWidth);
+      const effectiveMinHeight = Math.max(
+        sizeInfo.minHeight,
+        minHeightOverride ?? sizeInfo.minHeight,
+      );
       // Guard: some components can transiently report 0 during first layout
-      const minH = Math.max(32, sizeInfo.minHeight * 0.5);
+      const minH = Math.max(32, effectiveMinHeight * 0.5);
       if (!Number.isFinite(rawH) || rawH < minH) {
         return;
       }
-      // Width: always use design width from sizeInfo (components have fixed design widths)
-      // Height: use measured height for dynamic content
-      const nw = sizeInfo.naturalWidth;
-      const nh = rawH;
+      const nw = Math.max(
+        effectiveMinWidth,
+        Math.ceil(Number.isFinite(rawW) ? rawW : sizeInfo.naturalWidth),
+      );
+      const nh = Math.max(effectiveMinHeight, Math.ceil(rawH));
       const widthChanged = Math.abs(shape.props.w - nw) > 1;
       const heightChanged = Math.abs(shape.props.h - nh) > 1;
       const allowMultiple = policy === 'always_fit';
@@ -215,18 +308,57 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
         if (!allowMultiple) autoFittedRef.current = true;
       }
     }
-  }, [editor, naturalSize, shape.id, shape.props.name, shape.props.userResized, shape.props.w, shape.props.h, sizingPolicy, sizeInfo.naturalWidth, sizeInfo.minHeight, localPin, isFixedLivekitTile]);
+  }, [
+    autoFitHeight,
+    autoFitWidth,
+    editor,
+    isFixedLivekitTile,
+    localPin,
+    minHeightOverride,
+    minWidthOverride,
+    naturalSize,
+    reportedHeight,
+    reportedWidth,
+    preferredHeight,
+    preferredWidth,
+    shape.id,
+    shape.props.h,
+    shape.props.name,
+    shape.props.userResized,
+    shape.props.w,
+    sizeInfo.minHeight,
+    sizeInfo.minWidth,
+    sizeInfo.naturalHeight,
+    sizeInfo.naturalWidth,
+    sizingPolicy,
+  ]);
 
-  // For width: Always use the component's design width to avoid feedback loops
-  // (components like DebateScorecard have fixed widths like w-[1200px])
-  // For height: Use measured height for dynamic content, or natural height for scale_only
-  const baseW = sizeInfo.naturalWidth;
+  // Width defaults to the component design width, but some widgets publish intrinsic frame hints.
+  const baseW = autoFitWidth
+    ? Math.max(
+        sizeInfo.minWidth,
+        Math.ceil(reportedWidth ?? preferredWidth ?? naturalSize?.w ?? sizeInfo.naturalWidth),
+      )
+    : Math.max(
+        sizeInfo.minWidth,
+        Math.ceil(preferredWidth ?? reportedWidth ?? sizeInfo.naturalWidth),
+      );
   const measuredHeight = isFixedLivekitTile
     ? sizeInfo.naturalHeight
     : localPin
-      ? (pinnedNaturalSize?.h ?? naturalSize?.h ?? sizeInfo.naturalHeight)
-      : (naturalSize?.h ?? sizeInfo.naturalHeight);
-  const baseH = sizingPolicy === 'scale_only' ? sizeInfo.naturalHeight : measuredHeight;
+      ? (pinnedNaturalSize?.h ??
+        reportedHeight ??
+        preferredHeight ??
+        naturalSize?.h ??
+        sizeInfo.naturalHeight)
+      : (reportedHeight ?? preferredHeight ?? naturalSize?.h ?? sizeInfo.naturalHeight);
+  const baseH =
+    sizingPolicy === 'scale_only'
+      ? sizeInfo.naturalHeight
+      : Math.max(
+          sizeInfo.minHeight,
+          Math.ceil(autoFitHeight ? measuredHeight : (naturalSize?.h ?? sizeInfo.naturalHeight)),
+        );
 
   const pinnedShapeW =
     localPin && Number.isFinite(localPin.shapeW) && (localPin.shapeW as number) > 0
@@ -296,7 +428,9 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
           style={{ width: `${baseW}px`, height: `${baseH}px`, display: 'block' }}
         >
           <ComponentErrorBoundary
-            fallback={<div style={{ padding: 10, color: 'var(--color-text-muted)' }}>Component error</div>}
+            fallback={
+              <div style={{ padding: 10, color: 'var(--color-text-muted)' }}>Component error</div>
+            }
           >
             {shape.props.customComponent && componentStore ? (
               renderStoredComponent({
@@ -306,7 +440,9 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
                 editor,
               })
             ) : (
-              <div style={{ padding: 10, color: 'var(--color-text-muted)' }}>No component loaded</div>
+              <div style={{ padding: 10, color: 'var(--color-text-muted)' }}>
+                No component loaded
+              </div>
             )}
           </ComponentErrorBoundary>
         </div>
@@ -323,15 +459,17 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
     const viewportX = Number.isFinite(viewportXRaw) ? viewportXRaw : 0;
     const viewportY = Number.isFinite(viewportYRaw) ? viewportYRaw : 0;
     const viewportW =
-      Number.isFinite(viewportWRaw) && viewportWRaw > 0 ? viewportWRaw : Math.max(1, window.innerWidth || 1);
+      Number.isFinite(viewportWRaw) && viewportWRaw > 0
+        ? viewportWRaw
+        : Math.max(1, window.innerWidth || 1);
     const viewportH =
-      Number.isFinite(viewportHRaw) && viewportHRaw > 0 ? viewportHRaw : Math.max(1, window.innerHeight || 1);
+      Number.isFinite(viewportHRaw) && viewportHRaw > 0
+        ? viewportHRaw
+        : Math.max(1, window.innerHeight || 1);
     const hasTopLeftAnchor =
-      Number.isFinite(localPin.pinnedLeft) &&
-      Number.isFinite(localPin.pinnedTop);
+      Number.isFinite(localPin.pinnedLeft) && Number.isFinite(localPin.pinnedTop);
     const hasLegacyScreenAnchor =
-      Number.isFinite(localPin.screenLeft) &&
-      Number.isFinite(localPin.screenTop);
+      Number.isFinite(localPin.screenLeft) && Number.isFinite(localPin.screenTop);
     const leftPx = hasTopLeftAnchor
       ? viewportX + (localPin.pinnedLeft as number) * viewportW
       : hasLegacyScreenAnchor
@@ -345,12 +483,14 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
     const left = `${leftPx}px`;
     const top = `${topPx}px`;
     const useCenterTranslate = !hasTopLeftAnchor && !hasLegacyScreenAnchor;
-    const pinnedW = Number.isFinite(localPin.screenW) && (localPin.screenW as number) > 0
-      ? (localPin.screenW as number)
-      : shape.props.w;
-    const pinnedH = Number.isFinite(localPin.screenH) && (localPin.screenH as number) > 0
-      ? (localPin.screenH as number)
-      : shape.props.h;
+    const pinnedW =
+      Number.isFinite(localPin.screenW) && (localPin.screenW as number) > 0
+        ? (localPin.screenW as number)
+        : shape.props.w;
+    const pinnedH =
+      Number.isFinite(localPin.screenH) && (localPin.screenH as number) > 0
+        ? (localPin.screenH as number)
+        : shape.props.h;
     const pinnedBaseW = pinnedShapeW ?? shape.props.w;
     const pinnedBaseH = pinnedShapeH ?? shape.props.h;
     const scaleX = pinnedBaseW > 0 ? pinnedW / pinnedBaseW : 1;
@@ -439,7 +579,8 @@ function renderStoredComponent({
     if (!editor) return;
     const unsafeEditor = editor as any;
     const prevState = (shapeProps.state as Record<string, unknown>) || {};
-    const nextState = typeof patch === 'function' ? (patch as any)(prevState) : { ...prevState, ...patch };
+    const nextState =
+      typeof patch === 'function' ? (patch as any)(prevState) : { ...prevState, ...patch };
     unsafeEditor.updateShapes?.([
       {
         id: shapeId as any,

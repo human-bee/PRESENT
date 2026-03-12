@@ -12,6 +12,8 @@ export interface ComponentSizeInfo {
   sizingPolicy?: 'always_fit' | 'fit_until_user_resize' | 'scale_only'; // Auto-fit behavior for dynamic content
 }
 
+type ComponentSizingOverrideState = Record<string, unknown> | undefined;
+
 // Size metadata for each component - based on UI design and content needs
 export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
   WeatherForecast: {
@@ -245,12 +247,74 @@ export function getComponentSizeInfo(componentName: string): ComponentSizeInfo {
   return componentSizeInfo[componentName] || componentSizeInfo.Default;
 }
 
+const coercePositiveNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return undefined;
+};
+
+const coerceSizingPolicy = (value: unknown): ComponentSizeInfo['sizingPolicy'] | undefined => {
+  if (value === 'always_fit' || value === 'fit_until_user_resize' || value === 'scale_only') {
+    return value;
+  }
+  return undefined;
+};
+
+const coerceResizeMode = (value: unknown): ComponentSizeInfo['resizeMode'] | undefined => {
+  if (value === 'free' || value === 'aspect-locked' || value === 'fixed') {
+    return value;
+  }
+  return undefined;
+};
+
+export function resolveComponentSizeInfo(
+  componentName: string,
+  state?: ComponentSizingOverrideState,
+): ComponentSizeInfo {
+  const base = getComponentSizeInfo(componentName);
+  const source = state && typeof state === 'object' && !Array.isArray(state) ? state : undefined;
+
+  const naturalWidth =
+    coercePositiveNumber(source?.canvasNaturalWidth ?? source?.naturalWidth) ?? base.naturalWidth;
+  const naturalHeight =
+    coercePositiveNumber(source?.canvasNaturalHeight ?? source?.naturalHeight) ?? base.naturalHeight;
+  const minWidth =
+    coercePositiveNumber(source?.canvasMinWidth ?? source?.minWidth) ?? base.minWidth;
+  const minHeight =
+    coercePositiveNumber(source?.canvasMinHeight ?? source?.minHeight) ?? base.minHeight;
+  const aspectRatio =
+    coercePositiveNumber(source?.canvasAspectRatio ?? source?.aspectRatio) ?? base.aspectRatio;
+  const resizeMode =
+    coerceResizeMode(source?.canvasResizeMode ?? source?.resizeMode) ?? base.resizeMode;
+  const sizingPolicy =
+    coerceSizingPolicy(source?.canvasSizingPolicy ?? source?.sizingPolicy) ?? base.sizingPolicy;
+
+  return {
+    ...base,
+    naturalWidth: Math.max(naturalWidth, minWidth),
+    naturalHeight: Math.max(naturalHeight, minHeight),
+    minWidth,
+    minHeight,
+    aspectRatio,
+    resizeMode,
+    sizingPolicy,
+  };
+}
+
 // Helper to calculate initial size based on viewport or defaults
 export function calculateInitialSize(
   componentName: string,
   viewport?: { width: number; height: number },
+  state?: ComponentSizingOverrideState,
 ) {
-  const info = getComponentSizeInfo(componentName);
+  const info = resolveComponentSizeInfo(componentName, state);
 
   if (viewport) {
     // Scale to 40% of viewport or natural size, whichever is smaller

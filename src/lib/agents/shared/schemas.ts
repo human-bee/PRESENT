@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { jsonObjectSchema, jsonValueSchema } from '@/lib/utils/json-schema';
+import { timelineOpSchema, timelineSourceEnum } from '@/lib/agents/timeline-schema';
 
 export const JsonValueSchema = jsonValueSchema;
 export const JsonObjectSchema = jsonObjectSchema;
@@ -59,6 +60,26 @@ export const stewardRunScorecardRequestSchema = z
     topic: z.string().optional(),
     task: z.string().optional(),
     requestId: z.string().optional(),
+  })
+  .merge(orchestrationEnvelopeSchema.partial())
+  .passthrough();
+
+export const stewardRunTimelineRequestSchema = z
+  .object({
+    room: z.string().min(1),
+    componentId: z.string().min(1),
+    task: z.enum(['timeline.run', 'timeline.patch', 'timeline.turn']).optional(),
+    instruction: z.string().optional(),
+    prompt: z.string().optional(),
+    summary: z.string().optional(),
+    source: timelineSourceEnum.optional(),
+    title: z.string().optional(),
+    subtitle: z.string().optional(),
+    horizonLabel: z.string().optional(),
+    ops: z.array(timelineOpSchema).optional(),
+    requestId: z.string().optional(),
+    traceId: z.string().optional(),
+    intentId: z.string().optional(),
   })
   .merge(orchestrationEnvelopeSchema.partial())
   .passthrough();

@@ -79,8 +79,13 @@ const DEFAULT_IMAGE_MIME_TYPE = 'image/png';
 const normalizeImageMimeType = (value: unknown): string =>
   typeof value === 'string' && value.startsWith('image/') ? value : DEFAULT_IMAGE_MIME_TYPE;
 
-const readFirstArrayRecord = (value: unknown): Record<string, unknown> | null =>
-  Array.isArray(value) ? asRecord(value[0]) : null;
+const readFirstArrayRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!Array.isArray(value)) return null;
+  const first = value[0];
+  return first && typeof first === 'object' && !Array.isArray(first)
+    ? (first as Record<string, unknown>)
+    : null;
+};
 
 const providerEnvKey = (provider: 'google' | 'openai' | 'xai' | 'fal'): string | undefined => {
   switch (provider) {

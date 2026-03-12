@@ -1,0 +1,896 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PRESENT Timeline MCP Widget</title>
+    <style>
+      :root {
+        --page: #ece5d8;
+        --page-wash: rgba(241, 234, 222, 0.94);
+        --panel: rgba(252, 249, 243, 0.92);
+        --panel-strong: #fffdf9;
+        --ink: #17211d;
+        --muted: #66736b;
+        --line: rgba(23, 33, 29, 0.12);
+        --line-strong: rgba(23, 33, 29, 0.2);
+        --shadow: 0 22px 60px rgba(36, 49, 42, 0.12);
+        --accent: #0f7d67;
+        --accent-soft: rgba(15, 125, 103, 0.1);
+        --warning: #a9671e;
+        --warning-soft: rgba(169, 103, 30, 0.12);
+        --danger: #ae4a3a;
+        --danger-soft: rgba(174, 74, 58, 0.12);
+        --success: #49733d;
+        --success-soft: rgba(73, 115, 61, 0.12);
+        --neutral-soft: rgba(23, 33, 29, 0.05);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+      }
+
+      body {
+        color: var(--ink);
+        font-family: 'Avenir Next', 'Manrope', 'Segoe UI', sans-serif;
+        overflow: visible;
+        background:
+          radial-gradient(1000px 400px at 0% 0%, rgba(126, 159, 143, 0.18), transparent 58%),
+          radial-gradient(900px 340px at 100% 0%, rgba(208, 176, 118, 0.18), transparent 56%),
+          linear-gradient(180deg, #f1ebdf 0%, var(--page) 100%);
+      }
+
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+          radial-gradient(rgba(23, 33, 29, 0.035) 0.6px, transparent 0.6px);
+        background-size: auto, 12px 12px;
+        mix-blend-mode: multiply;
+        opacity: 0.65;
+      }
+
+      main {
+        position: relative;
+        width: min(1240px, 100%);
+        margin: 0 auto;
+        padding: 14px;
+      }
+
+      .shell {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        overflow: visible;
+        border: 1px solid rgba(23, 33, 29, 0.08);
+        border-radius: 28px;
+        background:
+          linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(244, 239, 229, 0.94)),
+          var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .shell::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 28%),
+          linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.16) 100%);
+      }
+
+      .masthead {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        padding: 22px 22px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+        font-size: clamp(30px, 4.2vw, 46px);
+        line-height: 0.96;
+        letter-spacing: -0.045em;
+        font-weight: 700;
+        text-wrap: balance;
+      }
+
+      .subtitle {
+        max-width: 68ch;
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .meta-column {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-content: flex-start;
+        gap: 8px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 34px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.58);
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+      }
+
+      .chip::before {
+        content: '';
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: currentColor;
+        opacity: 0.8;
+      }
+
+      .chip.sync-live {
+        color: var(--accent);
+        border-color: rgba(15, 125, 103, 0.26);
+        background: var(--accent-soft);
+      }
+
+      .chip.sync-staged,
+      .chip.sync-pending,
+      .chip.sync-queued {
+        color: var(--warning);
+        border-color: rgba(169, 103, 30, 0.28);
+        background: var(--warning-soft);
+      }
+
+      .chip.sync-error,
+      .chip.sync-blocked {
+        color: var(--danger);
+        border-color: rgba(174, 74, 58, 0.28);
+        background: var(--danger-soft);
+      }
+
+      .chip.sync-idle {
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.48);
+      }
+
+      .summary-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        padding: 0 22px 18px;
+      }
+
+      .stat {
+        min-width: 0;
+        padding: 13px 14px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.48);
+        backdrop-filter: blur(8px);
+      }
+
+      .stat-label {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .stat-value {
+        margin-top: 8px;
+        font-size: clamp(16px, 2vw, 20px);
+        font-weight: 800;
+        line-height: 1.1;
+      }
+
+      .lane-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 14px;
+        flex: 1 1 auto;
+        min-height: min-content;
+        overflow: visible;
+        align-content: start;
+        padding: 0 22px 18px;
+      }
+
+      .lane {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(249, 246, 239, 0.9));
+        padding: 16px;
+      }
+
+      .lane-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: start;
+        margin-bottom: 14px;
+      }
+
+      .lane-title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.1;
+      }
+
+      .lane-sub {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .lane-kind {
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        padding: 5px 9px;
+        border-radius: 999px;
+        background: var(--neutral-soft);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .lane-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .lane-empty {
+        padding: 12px 2px 2px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .card {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(23, 33, 29, 0.08);
+        border-radius: 18px;
+        background: var(--panel-strong);
+        box-shadow: 0 10px 24px rgba(25, 34, 30, 0.05);
+      }
+
+      .card::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: var(--card-rail, rgba(23, 33, 29, 0.12));
+      }
+
+      .card[open] {
+        border-color: var(--line-strong);
+      }
+
+      .card[open]::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      }
+
+      .card-summary {
+        display: grid;
+        gap: 10px;
+        padding: 13px 14px 12px 16px;
+        cursor: pointer;
+        list-style: none;
+      }
+
+      .card-summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .card-summary::marker {
+        content: '';
+      }
+
+      .card-top {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: start;
+      }
+
+      .card-title {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.24;
+        font-weight: 800;
+      }
+
+      .card-toggle {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .card[open] .card-toggle {
+        color: var(--ink);
+      }
+
+      .card-meta {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .badge-row,
+      .dependency-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .badge,
+      .dependency-chip,
+      .marker {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .badge,
+      .dependency-chip {
+        color: var(--muted);
+        background: rgba(23, 33, 29, 0.04);
+      }
+
+      .badge.type-milestone,
+      .badge.status-in_progress,
+      .badge.status-live,
+      .marker.dependency {
+        color: var(--accent);
+        border-color: rgba(15, 125, 103, 0.24);
+        background: var(--accent-soft);
+      }
+
+      .badge.type-blocker,
+      .badge.status-blocked,
+      .marker.blocker {
+        color: var(--danger);
+        border-color: rgba(174, 74, 58, 0.24);
+        background: var(--danger-soft);
+      }
+
+      .badge.type-handoff,
+      .badge.status-at_risk,
+      .badge.status-staged,
+      .marker.risk {
+        color: var(--warning);
+        border-color: rgba(169, 103, 30, 0.24);
+        background: var(--warning-soft);
+      }
+
+      .badge.status-done,
+      .badge.status-complete,
+      .marker.done {
+        color: var(--success);
+        border-color: rgba(73, 115, 61, 0.24);
+        background: var(--success-soft);
+      }
+
+      .card-detail {
+        padding: 0 14px 14px 16px;
+        color: var(--ink);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .card-detail::before {
+        content: '';
+        display: block;
+        margin-bottom: 12px;
+        border-top: 1px dashed rgba(23, 33, 29, 0.14);
+      }
+
+      .detail-block + .detail-block {
+        margin-top: 12px;
+      }
+
+      .detail-label {
+        margin: 0 0 5px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .detail-copy {
+        margin: 0;
+      }
+
+      .empty {
+        padding: 14px 22px 24px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .footer {
+        display: flex;
+        flex: 0 0 auto;
+        flex-wrap: wrap;
+        gap: 10px 18px;
+        padding: 15px 22px 20px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      @media (max-width: 980px) {
+        .masthead {
+          grid-template-columns: 1fr;
+        }
+
+        .meta-column {
+          justify-content: flex-start;
+        }
+
+        .summary-strip {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 680px) {
+        main {
+          height: 100%;
+          padding: 12px;
+        }
+
+        .shell {
+          border-radius: 22px;
+        }
+
+        .masthead,
+        .summary-strip,
+        .lane-grid,
+        .empty,
+        .footer {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+
+        .summary-strip {
+          grid-template-columns: 1fr;
+        }
+
+        .lane-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <article class="shell" aria-live="polite">
+        <header class="masthead">
+          <div>
+            <p class="eyebrow">Timeline Widget</p>
+            <h1 id="timeline-title" data-testid="timeline-title">Waiting for timeline sync</h1>
+            <p class="subtitle" id="timeline-subtitle">Realtime roadmap for teams, milestones, and shipping pressure.</p>
+          </div>
+          <div class="meta-column">
+            <div class="chip sync-idle" id="timeline-sync-chip" data-testid="timeline-sync-chip">Sync idle</div>
+            <div class="chip sync-idle" id="timeline-export-chip" data-testid="timeline-export-chip">Export idle</div>
+          </div>
+        </header>
+
+        <section class="summary-strip" aria-label="Roadmap overview">
+          <div class="stat">
+            <div class="stat-label">Horizon</div>
+            <div class="stat-value" id="timeline-horizon">Current planning horizon</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Coverage</div>
+            <div class="stat-value" id="timeline-coverage">0 lanes / 0 items</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Dependencies</div>
+            <div class="stat-value" id="timeline-dependency-summary">0 active links</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Blockers</div>
+            <div class="stat-value" id="timeline-blocker-summary">No blockers</div>
+          </div>
+        </section>
+
+        <section
+          class="lane-grid"
+          id="lane-grid"
+          data-testid="timeline-lane-grid"
+          aria-label="Timeline lanes"
+        ></section>
+        <div class="empty" id="empty-state">The host will post the canonical roadmap snapshot into this widget.</div>
+
+        <footer class="footer">
+          <div id="timeline-room">Room: --</div>
+          <div id="timeline-component">Component: --</div>
+          <div id="timeline-version">Version: --</div>
+          <div id="timeline-updated">Updated: not synced</div>
+        </footer>
+      </article>
+    </main>
+
+    <script>
+      const titleEl = document.getElementById('timeline-title');
+      const subtitleEl = document.getElementById('timeline-subtitle');
+      const syncChipEl = document.getElementById('timeline-sync-chip');
+      const exportChipEl = document.getElementById('timeline-export-chip');
+      const horizonEl = document.getElementById('timeline-horizon');
+      const coverageEl = document.getElementById('timeline-coverage');
+      const dependencySummaryEl = document.getElementById('timeline-dependency-summary');
+      const blockerSummaryEl = document.getElementById('timeline-blocker-summary');
+      const laneGridEl = document.getElementById('lane-grid');
+      const emptyStateEl = document.getElementById('empty-state');
+      const roomEl = document.getElementById('timeline-room');
+      const componentEl = document.getElementById('timeline-component');
+      const versionEl = document.getElementById('timeline-version');
+      const updatedEl = document.getElementById('timeline-updated');
+      const shellEl = document.querySelector('.shell');
+      const mainEl = document.querySelector('main');
+      let layoutFrame = 0;
+
+      const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+      const asArray = (value) => (Array.isArray(value) ? value : []);
+      const nonEmptyString = (value) => (typeof value === 'string' ? value.trim() : '');
+      const displayText = (value, fallback) => nonEmptyString(value) || fallback;
+      const safeNumber = (value, fallback = 0) => {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : fallback;
+      };
+      const escapeHtml = (value) =>
+        String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      const sortByOrder = (items) => items.slice().sort((a, b) => safeNumber(a.order) - safeNumber(b.order));
+      const statusClass = (value) => `status-${displayText(value, 'planned').replace(/\s+/g, '_').toLowerCase()}`;
+      const typeClass = (value) => `type-${displayText(value, 'task').replace(/\s+/g, '_').toLowerCase()}`;
+      const formatWhen = (value) => {
+        const raw = typeof value === 'number' ? value : Date.parse(String(value || ''));
+        if (!Number.isFinite(raw)) return 'not synced';
+        const date = new Date(raw);
+        if (Number.isNaN(date.getTime())) return 'not synced';
+        return new Intl.DateTimeFormat(undefined, {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }).format(date);
+      };
+
+      const reportLayout = () => {
+        layoutFrame = 0;
+        const width = Math.ceil(
+          Math.max(
+            shellEl ? shellEl.scrollWidth : 0,
+            laneGridEl ? laneGridEl.scrollWidth : 0,
+            mainEl ? mainEl.scrollWidth : 0,
+            shellEl ? shellEl.offsetWidth : 0,
+            mainEl ? mainEl.offsetWidth : 0,
+            document.documentElement ? document.documentElement.scrollWidth : 0,
+            document.body ? document.body.scrollWidth : 0,
+          ),
+        ) || undefined;
+        const height = Math.ceil(
+          Math.max(
+            laneGridEl ? laneGridEl.scrollHeight : 0,
+            mainEl ? mainEl.scrollHeight : 0,
+            shellEl ? shellEl.scrollHeight : 0,
+            document.documentElement ? document.documentElement.scrollHeight : 0,
+            document.body ? document.body.scrollHeight : 0,
+            shellEl ? shellEl.offsetHeight : 0,
+            mainEl ? mainEl.offsetHeight : 0,
+            document.body ? document.body.offsetHeight : 0,
+          ),
+        ) || undefined;
+        if (!width && !height) return;
+        window.parent.postMessage(
+          {
+            type: 'present:mcp-app-layout',
+            payload: {
+              width,
+              height,
+            },
+          },
+          '*',
+        );
+      };
+
+      const scheduleLayoutReport = () => {
+        if (layoutFrame) cancelAnimationFrame(layoutFrame);
+        layoutFrame = requestAnimationFrame(reportLayout);
+      };
+
+      const summarizeOwner = (lane, items) => {
+        const owner = nonEmptyString(lane.owner);
+        if (owner) return `Owner: ${owner}`;
+        return `${items.length} ${items.length === 1 ? 'active item' : 'active items'}`;
+      };
+
+      const getCardRail = (item, dependencyCount) => {
+        const status = displayText(item.status, 'planned').toLowerCase();
+        const type = displayText(item.type, 'task').toLowerCase();
+        if (status === 'blocked' || type === 'blocker') return 'var(--danger)';
+        if (status === 'at_risk' || status === 'staged' || type === 'handoff') return 'var(--warning)';
+        if (status === 'done' || status === 'complete') return 'var(--success)';
+        if (dependencyCount > 0 || type === 'milestone' || status === 'in_progress' || status === 'live') return 'var(--accent)';
+        return 'rgba(23, 33, 29, 0.14)';
+      };
+
+      const renderPills = (values, className) =>
+        values
+          .filter(Boolean)
+          .map((value) => `<span class="${className}">${escapeHtml(value)}</span>`)
+          .join('');
+
+      const renderDependencies = (item, incomingDependencies, itemsById) => {
+        const labels = [];
+        asArray(item.blockedBy).forEach((entry) => {
+          const id = nonEmptyString(entry);
+          if (id) labels.push(itemsById.get(id)?.title || id);
+        });
+        incomingDependencies.forEach((dependency) => {
+          const sourceId = nonEmptyString(dependency.fromItemId);
+          if (sourceId) labels.push(itemsById.get(sourceId)?.title || sourceId);
+        });
+        if (labels.length === 0) return '';
+        const unique = Array.from(new Set(labels));
+        return `
+          <div class="dependency-row">
+            ${unique
+              .map((label) => `<span class="dependency-chip" data-testid="timeline-dependency">${escapeHtml(`Depends on ${label}`)}</span>`)
+              .join('')}
+          </div>
+        `;
+      };
+
+      const renderDetailBlock = (label, copy) => {
+        const value = nonEmptyString(copy);
+        if (!value) return '';
+        return `
+          <div class="detail-block">
+            <p class="detail-label">${escapeHtml(label)}</p>
+            <p class="detail-copy">${escapeHtml(value)}</p>
+          </div>
+        `;
+      };
+
+      const renderCard = (item, incomingDependencies, itemsById) => {
+        const markers = [];
+        const status = displayText(item.status, 'planned');
+        const type = displayText(item.type, 'task');
+        const dependencyCount = incomingDependencies.length + asArray(item.blockedBy).filter((entry) => nonEmptyString(entry)).length;
+        const owner = displayText(item.owner, 'Unassigned');
+        const scheduleBits = [item.startLabel, item.dueLabel, item.sprintLabel].map(nonEmptyString).filter(Boolean);
+        const metaText = [owner, ...scheduleBits].join(' · ');
+
+        if (dependencyCount > 0) markers.push({ label: `${dependencyCount} dependency${dependencyCount === 1 ? '' : 'ies'}`, className: 'marker dependency' });
+        if (status.toLowerCase() === 'blocked' || type.toLowerCase() === 'blocker') {
+          markers.push({ label: 'Blocker', className: 'marker blocker' });
+        } else if (status.toLowerCase() === 'at_risk') {
+          markers.push({ label: 'At risk', className: 'marker risk' });
+        } else if (status.toLowerCase() === 'done' || status.toLowerCase() === 'complete') {
+          markers.push({ label: 'Done', className: 'marker done' });
+        }
+
+        const summary = nonEmptyString(item.summary);
+        const notes = nonEmptyString(item.notes);
+        const detailHtml = `${renderDetailBlock('Summary', summary)}${renderDetailBlock('Notes', notes)}`;
+        const dependencyHtml = renderDependencies(item, incomingDependencies, itemsById);
+        const railColor = getCardRail(item, dependencyCount);
+
+        return `
+          <details class="card" data-testid="timeline-item" style="--card-rail: ${escapeHtml(railColor)}">
+            <summary class="card-summary" data-testid="timeline-detail-toggle">
+              <div class="card-top">
+                <h3 class="card-title">${escapeHtml(displayText(item.title, 'Untitled item'))}</h3>
+                <span class="card-toggle">Detail</span>
+              </div>
+              <div class="card-meta">${escapeHtml(metaText || 'Unassigned')}</div>
+              <div class="badge-row">
+                ${renderPills([type, status], 'badge')}
+                ${markers.map((marker) => `<span class="${marker.className}">${escapeHtml(marker.label)}</span>`).join('')}
+              </div>
+              ${dependencyHtml}
+            </summary>
+            <div class="card-detail" data-testid="timeline-detail">
+              ${detailHtml || renderDetailBlock('Status', `${status} · ${type}`)}
+            </div>
+          </details>
+        `;
+      };
+
+      const renderLane = (lane, items, dependenciesByTarget, itemsById) => {
+        const laneItems = sortByOrder(items);
+        const cards = laneItems.map((item) => renderCard(item, dependenciesByTarget.get(item.id) || [], itemsById)).join('');
+        const subline = [summarizeOwner(lane, laneItems), nonEmptyString(lane.summary)].filter(Boolean).join(' · ');
+
+        return `
+          <section class="lane" data-testid="timeline-lane">
+            <div class="lane-head">
+              <div>
+                <h2 class="lane-title">${escapeHtml(displayText(lane.name, 'Lane'))}</h2>
+                <div class="lane-sub">${escapeHtml(subline || 'Roadmap lane')}</div>
+              </div>
+              <span class="lane-kind">${escapeHtml(displayText(lane.kind, 'team'))}</span>
+            </div>
+            <div class="lane-list">${cards || '<div class="lane-empty">No milestones placed yet.</div>'}</div>
+          </section>
+        `;
+      };
+
+      const getSyncStatus = (sync, snapshot) => {
+        const explicit = nonEmptyString(sync.status).toLowerCase();
+        if (explicit) return explicit;
+        return snapshot.syncedAt ? 'live' : 'idle';
+      };
+
+      const getExportStage = (sync) => {
+        const pendingExports = asArray(sync.pendingExports).filter(isObject);
+        if (pendingExports.length > 0) return pendingExports[0];
+        const exportStages = asArray(sync.exportStages).filter(isObject);
+        if (exportStages.length > 0) return exportStages[0];
+        return null;
+      };
+
+      const render = (snapshot) => {
+        const document = isObject(snapshot.document) ? snapshot.document : {};
+        const lanes = sortByOrder(asArray(document.lanes).filter(isObject));
+        const items = sortByOrder(asArray(document.items).filter(isObject));
+        const dependencies = sortByOrder(asArray(document.dependencies).filter(isObject));
+        const sync = isObject(document.sync) ? document.sync : {};
+        const itemsById = new Map();
+        const dependenciesByTarget = new Map();
+        let blockerCount = 0;
+
+        items.forEach((item) => {
+          const id = nonEmptyString(item.id);
+          if (id) itemsById.set(id, item);
+          const status = displayText(item.status, '').toLowerCase();
+          const type = displayText(item.type, '').toLowerCase();
+          if (status === 'blocked' || type === 'blocker') blockerCount += 1;
+        });
+
+        dependencies.forEach((dependency) => {
+          const target = nonEmptyString(dependency.toItemId);
+          if (!target) return;
+          const bucket = dependenciesByTarget.get(target) || [];
+          bucket.push(dependency);
+          dependenciesByTarget.set(target, bucket);
+        });
+
+        titleEl.textContent = displayText(document.title, 'Live Roadmap');
+        subtitleEl.textContent = displayText(document.subtitle, 'Realtime roadmap for teams, milestones, and shipping pressure.');
+        horizonEl.textContent = displayText(document.horizonLabel, 'Current planning horizon');
+        coverageEl.textContent = `${lanes.length} lanes / ${items.length} items`;
+        dependencySummaryEl.textContent = `${dependencies.length} active link${dependencies.length === 1 ? '' : 's'}`;
+        blockerSummaryEl.textContent = blockerCount > 0 ? `${blockerCount} blocker${blockerCount === 1 ? '' : 's'}` : 'No blockers';
+
+        roomEl.textContent = `Room: ${displayText(snapshot.room, '--')}`;
+        componentEl.textContent = `Component: ${displayText(snapshot.componentId, '--')}`;
+        versionEl.textContent = `Version: ${typeof snapshot.version === 'number' ? snapshot.version : '--'}`;
+        updatedEl.textContent = `Updated: ${formatWhen(snapshot.lastUpdated || snapshot.syncedAt)}`;
+
+        const syncStatus = getSyncStatus(sync, snapshot);
+        const syncLabel = syncStatus.replace(/_/g, ' ');
+        syncChipEl.textContent = `Sync ${syncLabel}`;
+        syncChipEl.className = `chip sync-${syncStatus}`;
+
+        const exportStage = getExportStage(sync);
+        if (exportStage) {
+          const target = displayText(exportStage.target, 'manual');
+          const status = displayText(exportStage.status, 'queued');
+          exportChipEl.textContent = `Export ${target} ${status}`;
+          exportChipEl.className = `chip sync-${status.toLowerCase().replace(/\s+/g, '_')}`;
+        } else {
+          exportChipEl.textContent = 'Export idle';
+          exportChipEl.className = 'chip sync-idle';
+        }
+
+        laneGridEl.innerHTML = lanes
+          .map((lane) => renderLane(
+            lane,
+            items.filter((item) => nonEmptyString(item.laneId) === nonEmptyString(lane.id)),
+            dependenciesByTarget,
+            itemsById,
+          ))
+          .join('');
+
+        emptyStateEl.style.display = lanes.length > 0 ? 'none' : 'block';
+        scheduleLayoutReport();
+      };
+
+      const isValidSnapshot = (snapshot) =>
+        isObject(snapshot) &&
+        nonEmptyString(snapshot.room).length > 0 &&
+        nonEmptyString(snapshot.componentId).length > 0 &&
+        isObject(snapshot.document);
+
+      window.addEventListener('message', (event) => {
+        if (event.source !== window.parent) return;
+        const data = event && event.data;
+        if (!isObject(data) || data.type !== 'present:timeline-sync') return;
+        if (!isValidSnapshot(data.payload)) return;
+        render(data.payload);
+      });
+
+      if (typeof ResizeObserver === 'function') {
+        const layoutObserver = new ResizeObserver(() => {
+          scheduleLayoutReport();
+        });
+        if (mainEl) layoutObserver.observe(mainEl);
+        if (shellEl) layoutObserver.observe(shellEl);
+        if (laneGridEl) layoutObserver.observe(laneGridEl);
+      }
+
+      window.addEventListener('resize', () => {
+        scheduleLayoutReport();
+      });
+
+      window.addEventListener('load', () => {
+        scheduleLayoutReport();
+      });
+
+      scheduleLayoutReport();
+    </script>
+  </body>
+</html>

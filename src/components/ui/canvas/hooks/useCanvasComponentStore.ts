@@ -81,6 +81,38 @@ function extractComponentStateFromNode(component: React.ReactNode): Record<strin
   return extracted;
 }
 
+function applyComponentSizeOverrides(
+  initialSize: { w: number; h: number },
+  componentState?: Record<string, unknown>,
+) {
+  if (!componentState) return initialSize;
+  const preferredWidth = Number(
+    componentState.canvasNaturalWidth ?? componentState.preferredWidth ?? componentState.naturalWidth,
+  );
+  const preferredHeight = Number(
+    componentState.canvasNaturalHeight ?? componentState.preferredHeight ?? componentState.naturalHeight,
+  );
+  const minWidth = Number(componentState.canvasMinWidth ?? componentState.minWidth);
+  const minHeight = Number(componentState.canvasMinHeight ?? componentState.minHeight);
+
+  return {
+    w:
+      Number.isFinite(preferredWidth) && preferredWidth > 0
+        ? Math.max(
+            Number.isFinite(minWidth) && minWidth > 0 ? minWidth : initialSize.w,
+            preferredWidth,
+          )
+        : initialSize.w,
+    h:
+      Number.isFinite(preferredHeight) && preferredHeight > 0
+        ? Math.max(
+            Number.isFinite(minHeight) && minHeight > 0 ? minHeight : initialSize.h,
+            preferredHeight,
+          )
+        : initialSize.h,
+  };
+}
+
 export function useCanvasComponentStore(
   editor: Editor | null,
   logger: CanvasLogger,
@@ -190,12 +222,15 @@ export function useCanvasComponentStore(
           );
         } catch {
           /* noop */
-        }
+      }
         return;
       }
 
       const viewport = editor.getViewportPageBounds();
-      const initialSize = calculateInitialSize(componentName || 'Default');
+      const initialSize = applyComponentSizeOverrides(
+        calculateInitialSize(componentName || 'Default', undefined, componentState),
+        componentState,
+      );
       const placement = findTiledPlacement(initialSize);
       const x = viewport ? placement.x : Math.random() * 500;
       const y = viewport ? placement.y : Math.random() * 300;

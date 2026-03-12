@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
@@ -11,6 +12,15 @@ import {
   recomputePlayerScoresFromClaims,
   type DebateScorecardState,
 } from '@/lib/agents/debate-scorecard-schema';
+import {
+  applyTimelineOps,
+  createDefaultTimelineDocument,
+  normalizeTimelineDocument,
+  timelineDocumentSchema,
+  timelineOpSchema,
+  type TimelineDocument,
+  type TimelineOp,
+} from '@/lib/agents/timeline-schema';
 
 // Ensure .env.local is loaded when running stewards/conductor in Node
 try {
@@ -133,10 +143,22 @@ export type ScorecardRecord = {
   lastUpdated: number;
 };
 
+export type TimelineRecord = {
+  document: TimelineDocument;
+  version: number;
+  lastUpdated: number;
+};
+
 const SCORECARD_MEMORY_KEY = '__present_debate_scorecard_store__';
 const scorecardStore: Map<string, ScorecardRecord> =
   (GLOBAL_APEX[SCORECARD_MEMORY_KEY] as Map<string, ScorecardRecord> | undefined) ||
   new Map<string, ScorecardRecord>();
+
+const TIMELINE_MEMORY_KEY = '__present_timeline_document_store__';
+const timelineStore: Map<string, TimelineRecord> =
+  (GLOBAL_APEX[TIMELINE_MEMORY_KEY] as Map<string, TimelineRecord> | undefined) ||
+  new Map<string, TimelineRecord>();
+const TIMELINE_FALLBACK_DIR = join(process.cwd(), '.tmp', 'timeline-fallback');
 
 const CANVAS_STATE_STORE_KEY = '__present_canvas_state_store__';
 const canvasStateStore: Map<string, CanvasStateRecord> =
@@ -177,6 +199,10 @@ if (!GLOBAL_APEX[MEMORY_STORE_KEY]) {
 
 if (!GLOBAL_APEX[SCORECARD_MEMORY_KEY]) {
   GLOBAL_APEX[SCORECARD_MEMORY_KEY] = scorecardStore;
+}
+
+if (!GLOBAL_APEX[TIMELINE_MEMORY_KEY]) {
+  GLOBAL_APEX[TIMELINE_MEMORY_KEY] = timelineStore;
 }
 
 if (!GLOBAL_APEX[TRANSCRIPT_STORE_KEY]) {
@@ -398,6 +424,51 @@ const sendLivekitData = async (params: {
 const fallbackKey = (room: string, docId: string) => `${room}::${docId}`;
 const canvasStateKey = (room: string) => `${room}`;
 const scorecardMemoryKey = (room: string, componentId: string) => `${room}::${componentId}`;
+const timelineMemoryKey = (room: string, componentId: string) => `${room}::${componentId}`;
+const timelineFallbackPath = (room: string, componentId: string) =>
+  join(TIMELINE_FALLBACK_DIR, `${encodeURIComponent(room)}__${encodeURIComponent(componentId)}.json`);
+
+const readTimelineFileFallback = (room: string, componentId: string): TimelineRecord | null => {
+  try {
+    const filePath = timelineFallbackPath(room, componentId);
+    if (!existsSync(filePath)) {
+      return null;
+    }
+    const raw = JSON.parse(readFileSync(filePath, 'utf8')) as Record<string, unknown>;
+    const payload =
+      raw.document && typeof raw.document === 'object' ? (raw.document as Record<string, unknown>) : raw;
+    const parsed = timelineDocumentSchema.safeParse({ ...payload, componentId });
+    if (!parsed.success) {
+      return null;
+    }
+    const document = normalizeTimelineDocument(parsed.data);
+    const version =
+      typeof raw.version === 'number' && Number.isFinite(raw.version) ? raw.version : document.version;
+    const lastUpdated =
+      typeof raw.lastUpdated === 'number' && Number.isFinite(raw.lastUpdated)
+        ? raw.lastUpdated
+        : document.lastUpdated;
+    return {
+      document: {
+        ...document,
+        componentId,
+        version,
+        lastUpdated,
+      },
+      version,
+      lastUpdated,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writeTimelineFileFallback = (room: string, componentId: string, record: TimelineRecord) => {
+  try {
+    mkdirSync(TIMELINE_FALLBACK_DIR, { recursive: true });
+    writeFileSync(timelineFallbackPath(room, componentId), JSON.stringify(record, null, 2), 'utf8');
+  } catch { }
+};
 
 const readFallback = (room: string, docId: string): FlowchartDocRecord => {
   return (memoryStore.get(fallbackKey(room, docId)) ?? {
@@ -427,6 +498,50 @@ const writeScorecardFallback = (room: string, componentId: string, record: Score
     ...record,
     lastUpdated: Date.now(),
   });
+};
+
+const readTimelineFallback = (room: string, componentId: string): TimelineRecord => {
+  const key = timelineMemoryKey(room, componentId);
+  const existing = timelineStore.get(key);
+  const persisted = readTimelineFileFallback(room, componentId);
+  if (persisted) {
+    if (!existing || persisted.lastUpdated >= existing.lastUpdated) {
+      timelineStore.set(key, persisted);
+      return persisted;
+    }
+  }
+  if (existing) {
+    return existing;
+  }
+  const document = createDefaultTimelineDocument(componentId);
+  const record: TimelineRecord = {
+    document,
+    version: document.version,
+    lastUpdated: document.lastUpdated,
+  };
+  timelineStore.set(key, record);
+  writeTimelineFileFallback(room, componentId, record);
+  return record;
+};
+
+const writeTimelineFallback = (room: string, componentId: string, record: TimelineRecord) => {
+  const persisted: TimelineRecord = {
+    ...record,
+    document: {
+      ...record.document,
+      componentId,
+      lastUpdated:
+        typeof record.document?.lastUpdated === 'number' && Number.isFinite(record.document.lastUpdated)
+          ? record.document.lastUpdated
+          : Date.now(),
+    },
+    lastUpdated:
+      typeof record.lastUpdated === 'number' && Number.isFinite(record.lastUpdated)
+        ? record.lastUpdated
+        : Date.now(),
+  };
+  timelineStore.set(timelineMemoryKey(room, componentId), persisted);
+  writeTimelineFileFallback(room, componentId, persisted);
 };
 
 const defaultCanvasState = (room: string): CanvasStateRecord => {
@@ -513,6 +628,69 @@ const normalizeScorecardRecord = (room: string, componentId: string, entry: Reco
   };
 
   writeScorecardFallback(room, componentId, normalized);
+  return normalized;
+};
+
+const normalizeTimelineRecord = (room: string, componentId: string, entry: Record<string, unknown>) => {
+  const fallback = readTimelineFallback(room, componentId);
+  const base =
+    entry?.timelineDocument && typeof entry.timelineDocument === 'object'
+      ? (entry.timelineDocument as Record<string, unknown>)
+      : entry?.timeline &&
+          typeof entry.timeline === 'object' &&
+          (entry.timeline as Record<string, unknown>).document &&
+          typeof (entry.timeline as Record<string, unknown>).document === 'object'
+      ? ((entry.timeline as Record<string, unknown>).document as Record<string, unknown>)
+        : entry;
+
+  const parsed = timelineDocumentSchema.safeParse(
+    base && typeof base === 'object'
+      ? ('document' in base && typeof base.document === 'object'
+          ? { ...(base.document as JsonObject), componentId }
+          : { ...(base as JsonObject), componentId })
+      : { ...fallback.document, componentId },
+  );
+  const document = parsed.success ? normalizeTimelineDocument(parsed.data) : fallback.document;
+  const versionSource =
+    (base && typeof base === 'object' && typeof (base as Record<string, unknown>).version === 'number'
+      ? (base as Record<string, unknown>).version
+      : entry.timeline && typeof entry.timeline === 'object' && typeof (entry.timeline as Record<string, unknown>).version === 'number'
+        ? (entry.timeline as Record<string, unknown>).version
+      : typeof entry.version === 'number'
+        ? entry.version
+        : document.version);
+  const version = typeof versionSource === 'number' && Number.isFinite(versionSource) ? versionSource : fallback.version;
+  const lastUpdatedSource =
+    (base &&
+      typeof base === 'object' &&
+      typeof (base as Record<string, unknown>).updated_at === 'number'
+      ? (base as Record<string, unknown>).updated_at
+      : entry.timeline &&
+          typeof entry.timeline === 'object' &&
+          typeof (entry.timeline as Record<string, unknown>).updated_at === 'number'
+        ? (entry.timeline as Record<string, unknown>).updated_at
+      : typeof entry.updated_at === 'number'
+        ? entry.updated_at
+        : typeof document.lastUpdated === 'number'
+          ? document.lastUpdated
+          : fallback.lastUpdated);
+  const lastUpdated =
+    typeof lastUpdatedSource === 'number' && Number.isFinite(lastUpdatedSource)
+      ? lastUpdatedSource
+      : Date.now();
+
+  const normalized: TimelineRecord = {
+    document: {
+      ...document,
+      componentId,
+      version,
+      lastUpdated,
+    },
+    version,
+    lastUpdated,
+  };
+
+  writeTimelineFallback(room, componentId, normalized);
   return normalized;
 };
 
@@ -833,6 +1011,166 @@ export async function commitDebateScorecard(
     lastUpdated: Date.now(),
   };
   writeScorecardFallback(room, componentId, record);
+  return record;
+}
+
+export async function getTimelineDocument(
+  room: string,
+  componentId: string,
+  options?: { strict?: boolean },
+): Promise<TimelineRecord> {
+  const fallback = readTimelineFallback(room, componentId);
+  const strict = options?.strict === true;
+  const enforceStrictRead = strict && process.env.NODE_ENV === 'production';
+  if (shouldBypassSupabase) {
+    logBypass('getTimelineDocument');
+    return fallback;
+  }
+
+  try {
+    const lookup = deriveCanvasLookup(room);
+    const canvasQuery = getSupabase().from('canvases').select('document, id');
+    if (lookup.canvasId && isUuid(lookup.canvasId)) {
+      canvasQuery.eq('id', lookup.canvasId);
+    } else {
+      canvasQuery.ilike('name', `%${lookup.fallback}%`);
+    }
+    const { data, error } = await canvasQuery.limit(1).maybeSingle();
+
+    if (error) throw error;
+    if (!data || typeof data.document !== 'object' || data.document === null) {
+      if (enforceStrictRead) {
+        throw new Error('TIMELINE_NOT_FOUND');
+      }
+      return fallback;
+    }
+
+    const components = (data.document?.components || {}) as Record<string, Record<string, unknown>>;
+    const entry = components[componentId];
+    if (!entry) {
+      if (enforceStrictRead) {
+        throw new Error('TIMELINE_NOT_FOUND');
+      }
+      return fallback;
+    }
+    return normalizeTimelineRecord(room, componentId, entry);
+  } catch (error) {
+    if (enforceStrictRead && error instanceof Error && error.message === 'TIMELINE_NOT_FOUND') {
+      throw error;
+    }
+    if (process.env.NODE_ENV === 'production') {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+    warnFallback('getTimelineDocument', error);
+    return fallback;
+  }
+}
+
+export async function commitTimelineDocument(
+  room: string,
+  componentId: string,
+  payload: {
+    document?: TimelineDocument;
+    ops?: TimelineOp[];
+    prevVersion?: number;
+    componentType?: string;
+    props?: JsonObject;
+  },
+): Promise<TimelineRecord> {
+  const current = await getTimelineDocument(room, componentId);
+  if (typeof payload.prevVersion === 'number' && payload.prevVersion !== current.version) {
+    throw new Error('CONFLICT');
+  }
+
+  const parsedOps = Array.isArray(payload.ops)
+    ? payload.ops.map((op) => timelineOpSchema.parse(op))
+    : [];
+  const nextVersion = (current.version || 0) + 1;
+  const nextDocumentSource =
+    payload.document && typeof payload.document === 'object'
+      ? payload.document
+      : applyTimelineOps(current.document, parsedOps);
+  const nextDocument = normalizeTimelineDocument(
+    timelineDocumentSchema.parse({
+      ...nextDocumentSource,
+      componentId,
+      version: nextVersion,
+      lastUpdated: Date.now(),
+    }),
+  );
+  const sanitizedDocument = JSON.parse(JSON.stringify(nextDocument)) as TimelineDocument;
+
+  if (shouldBypassSupabase) {
+    logBypass('commitTimelineDocument');
+  } else {
+    try {
+      const lookup = deriveCanvasLookup(room);
+      const canvasQuery = getSupabase().from('canvases').select('id, document');
+      if (lookup.canvasId && isUuid(lookup.canvasId)) {
+        canvasQuery.eq('id', lookup.canvasId);
+      } else {
+        canvasQuery.ilike('name', `%${lookup.fallback}%`);
+      }
+      const { data: canvas, error: fetchErr } = await canvasQuery.limit(1).maybeSingle();
+
+      if (fetchErr || !canvas) {
+        throw fetchErr || new Error('NOT_FOUND');
+      }
+
+      const document = canvas.document || {};
+      document.components = document.components || {};
+      const componentEntry = document.components[componentId] || {};
+      const props =
+        componentEntry.props && typeof componentEntry.props === 'object'
+          ? { ...(componentEntry.props as JsonObject) }
+          : ({} as JsonObject);
+      document.components[componentId] = {
+        ...componentEntry,
+        componentType:
+          typeof componentEntry.componentType === 'string'
+            ? componentEntry.componentType
+            : payload.componentType ?? 'McpAppWidget',
+        type:
+          typeof componentEntry.type === 'string'
+            ? componentEntry.type
+            : payload.componentType ?? 'McpAppWidget',
+        props: payload.props ? { ...props, ...payload.props } : props,
+        timelineDocument: {
+          document: sanitizedDocument,
+          version: nextVersion,
+          updated_at: Date.now(),
+        },
+        timeline: {
+          document: sanitizedDocument,
+          version: nextVersion,
+          updated_at: Date.now(),
+        },
+        version: nextVersion,
+        updated_at: Date.now(),
+      };
+
+      const { error: updateErr } = await getSupabase()
+        .from('canvases')
+        .update({ document })
+        .eq('id', canvas.id);
+
+      if (updateErr) {
+        throw updateErr;
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV === 'production') {
+        throw error instanceof Error ? error : new Error(String(error));
+      }
+      warnFallback('commitTimelineDocument', error);
+    }
+  }
+
+  const record: TimelineRecord = {
+    document: sanitizedDocument,
+    version: nextVersion,
+    lastUpdated: sanitizedDocument.lastUpdated,
+  };
+  writeTimelineFallback(room, componentId, record);
   return record;
 }
 
