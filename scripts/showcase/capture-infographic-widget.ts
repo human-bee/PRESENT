@@ -1,6 +1,6 @@
 import { mkdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { chromium, request, type Page } from 'playwright';
+import { chromium, type Page } from 'playwright';
 
 const BASE_URL = 'http://127.0.0.1:3000';
 const OUTPUT_ROOT = path.join(process.cwd(), 'output/playwright/infographic-widget-showcase');
@@ -34,20 +34,17 @@ async function ensureOutputDir() {
   return dir;
 }
 
-async function seedContext(page: Page, sessionId: string) {
-  const api = await request.newContext({ baseURL: BASE_URL });
-  try {
-    const response = await api.post('/api/session/context', {
-      data: {
-        sessionId,
-        contextDocuments: CONTEXT_DOCUMENTS,
-      },
-    });
-    if (!response.ok()) {
-      throw new Error(`failed_to_seed_context:${response.status()}`);
-    }
-  } finally {
-    await api.dispose();
+async function seedContext(sessionId: string) {
+  const response = await fetch(`${BASE_URL}/api/session/context`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      sessionId,
+      contextDocuments: CONTEXT_DOCUMENTS,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`failed_to_seed_context:${response.status}`);
   }
 }
 
@@ -126,7 +123,7 @@ async function captureScreenshots(outputDir: string) {
       const canvasId = `infographic-canvas-${model}-${Date.now().toString(36)}`;
       const messageId = `infographic-${model}`;
 
-      await seedContext(page, canvasId);
+      await seedContext(canvasId);
       await waitForCanvas(page, canvasId);
       await mountWidget(page, model, messageId, canvasId);
       const outcome = await generate(page);
@@ -164,7 +161,7 @@ async function captureVideo(outputDir: string) {
   const messageId = 'infographic-video-widget';
 
   try {
-    await seedContext(page, canvasId);
+    await seedContext(canvasId);
     await waitForCanvas(page, canvasId);
     await mountWidget(page, 'openai-gpt-image-1_5-high', messageId, canvasId);
 
