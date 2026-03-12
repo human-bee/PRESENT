@@ -180,8 +180,18 @@ export function ResetCollaborationSurface({
 
   if (!serverUrl) {
     return (
-      <div className="reset-empty">
-        Reset-native board controls are available when `NEXT_PUBLIC_LK_SERVER_URL` is configured.
+      <div className="reset-collaboration-surface">
+        <div className="reset-collaboration-surface__controls">
+          <div className="reset-frame-title">Room Controls</div>
+          <div className="reset-empty">
+            Reset-native board controls are available when `NEXT_PUBLIC_LK_SERVER_URL` is configured.
+          </div>
+        </div>
+        <div className="reset-collaboration-surface__board">
+          <div className="reset-frame-title">Reset Board</div>
+          <strong>Server-owned TLDraw collaboration</strong>
+          <p>Room-aware canvas sync lives in the reset shell. Configure LiveKit to turn on the interactive board.</p>
+        </div>
       </div>
     );
   }

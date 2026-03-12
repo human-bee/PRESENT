@@ -1,7 +1,16 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { startTransition, useEffect, useEffectEvent, useMemo, useRef, useState, useDeferredValue } from 'react';
+import {
+  startTransition,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  useDeferredValue,
+  type ComponentType,
+} from 'react';
 import type {
   ApprovalRequest,
   AgentInteropPack,
@@ -17,7 +26,7 @@ import type {
 } from '@present/contracts';
 import { ArtifactPreviewFrame } from './artifact-preview-frame';
 import { ResetCollaborationSurface } from './reset-collaboration-surface';
-import { ResetMonacoEditor } from './reset-monaco-editor';
+import type { ResetMonacoEditorProps } from './reset-monaco-editor';
 
 const initialDraft = `// Codex-native workspace draft
 // This shell is backed by reset-era kernel contracts.
@@ -145,6 +154,7 @@ export function ResetWorkspaceShell({
   initialTraceEvents,
 }: ResetWorkspaceShellProps) {
   const router = useRouter();
+  const [MonacoEditorComponent, setMonacoEditorComponent] = useState<null | ComponentType<ResetMonacoEditorProps>>(null);
   const [agentPack, setAgentPack] = useState(initialAgentPack);
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [recentWorkspaces, setRecentWorkspaces] = useState(initialWorkspaces);
@@ -355,6 +365,18 @@ export function ResetWorkspaceShell({
     localDisplayNameRef.current = displayName;
     setLocalIdentity(identity);
     setLocalPresenceLabel(displayName);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void import('./reset-monaco-editor').then((module) => {
+      if (active) {
+        setMonacoEditorComponent(() => module.ResetMonacoEditor);
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -852,16 +874,20 @@ export function ResetWorkspaceShell({
                 </div>
               </div>
               {activeDocument ? (
-                <ResetMonacoEditor
-                  key={activeEditorKey}
-                  workspaceSessionId={workspace.id}
-                  filePath={activeDocument.path}
-                  initialValue={codeDraft}
-                  language={activeDocument.language}
-                  identity={localIdentity || 'mission-control'}
-                  displayName={localPresenceLabel}
-                  onValueChange={setCodeDraft}
-                />
+                MonacoEditorComponent ? (
+                  <MonacoEditorComponent
+                    key={activeEditorKey}
+                    workspaceSessionId={workspace.id}
+                    filePath={activeDocument.path}
+                    initialValue={codeDraft}
+                    language={activeDocument.language}
+                    identity={localIdentity || 'mission-control'}
+                    displayName={localPresenceLabel}
+                    onValueChange={setCodeDraft}
+                  />
+                ) : (
+                  <div className="reset-empty">Loading collaborative editor…</div>
+                )
               ) : (
                 <div className="reset-empty">Select a file to start the collaborative editor.</div>
               )}

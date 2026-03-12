@@ -75,6 +75,7 @@ describe('reset persistence', () => {
     resetKernelStateForTests();
     resetSupabaseTables();
     delete process.env.PRESENT_RESET_STATE_PATH;
+    delete process.env.PRESENT_RESET_SUPABASE_CACHE_TTL_MS;
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   });
@@ -190,5 +191,45 @@ describe('reset persistence', () => {
         title: 'Next',
       }),
     ]);
+  });
+
+  it('refreshes from Supabase again after the cache ttl expires', async () => {
+    process.env.PRESENT_RESET_SUPABASE_CACHE_TTL_MS = '0';
+
+    supabaseTables.workspace_sessions = [
+      {
+        id: 'ws_old',
+        workspace_path: '/tmp/old',
+        branch: 'codex/reset',
+        title: 'Old',
+        state: 'active',
+        owner_user_id: null,
+        active_executor_session_id: null,
+        metadata: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+
+    await ensureResetKernelHydrated();
+    expect(readResetCollection('workspaces').map((workspace) => workspace.id)).toEqual(['ws_old']);
+
+    supabaseTables.workspace_sessions = [
+      {
+        id: 'ws_new',
+        workspace_path: '/tmp/new',
+        branch: 'codex/reset',
+        title: 'New',
+        state: 'active',
+        owner_user_id: null,
+        active_executor_session_id: null,
+        metadata: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+
+    await ensureResetKernelHydrated();
+    expect(readResetCollection('workspaces').map((workspace) => workspace.id)).toEqual(['ws_new']);
   });
 });
