@@ -29,6 +29,13 @@ const asRecord = (value: unknown): Record<string, unknown> | null => {
   return value as Record<string, unknown>;
 };
 
+const asRowRecords = (value: unknown): RowRecord[] =>
+  Array.isArray(value)
+    ? value
+        .map((entry) => asRecord(entry))
+        .filter((entry): entry is RowRecord => entry !== null)
+    : [];
+
 const readText = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -153,7 +160,7 @@ export async function GET(req: NextRequest) {
         });
       }
       if (traceModelError) throw traceModelError;
-      for (const row of (traceModelRowsRaw ?? []) as RowRecord[]) {
+      for (const row of asRowRecords(traceModelRowsRaw)) {
         const sessionId = readText(row.session_id);
         if (sessionId) sessionIdSet.add(sessionId);
       }
@@ -170,7 +177,7 @@ export async function GET(req: NextRequest) {
       } else if (traceToolError) {
         throw traceToolError;
       }
-      for (const row of ((traceToolRowsRaw ?? []) as RowRecord[])) {
+      for (const row of asRowRecords(traceToolRowsRaw)) {
         const sessionId = readText(row.session_id);
         if (sessionId) sessionIdSet.add(sessionId);
       }
@@ -214,7 +221,7 @@ export async function GET(req: NextRequest) {
     }
     if (startedError) throw startedError;
 
-    const startedRows = ((startedRowsRaw ?? []) as RowRecord[]).filter(
+    const startedRows = asRowRecords(startedRowsRaw).filter(
       (row) => readText(row.session_id) !== null,
     );
     const sessionIds = Array.from(
@@ -258,11 +265,11 @@ export async function GET(req: NextRequest) {
     } else if (toolEventsError) {
       throw toolEventsError;
     } else {
-      toolEvents = (toolEventsRaw ?? []) as RowRecord[];
+      toolEvents = asRowRecords(toolEventsRaw);
     }
 
     const modelEventsBySession = new Map<string, RowRecord[]>();
-    for (const row of (modelEventsRaw ?? []) as RowRecord[]) {
+    for (const row of asRowRecords(modelEventsRaw)) {
       const sessionId = readText(row.session_id);
       if (!sessionId) continue;
       const current = modelEventsBySession.get(sessionId);
