@@ -1,6 +1,7 @@
 export * from './agent-interop';
 export * from './approvals';
 export * from './artifacts';
+export * from './collaboration-docs';
 export * from './executor-leases';
 export * from './executor-sessions';
 export * from './ids';

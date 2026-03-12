@@ -355,6 +355,31 @@
   font-size: 13px;
 }
 
+.reset-code-editor--surface {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.reset-monaco {
+  min-height: 520px;
+}
+
+.reset-monaco__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px 0;
+  font-size: 12px;
+  color: rgba(24, 20, 17, 0.62);
+}
+
+.dark .reset-monaco__status {
+  color: rgba(246, 237, 228, 0.64);
+}
+
 .reset-editor-layout {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);

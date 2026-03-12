@@ -11,6 +11,10 @@ jest.mock('./reset-collaboration-surface', () => ({
   ResetCollaborationSurface: () => <div>Reset-native TLDraw collaboration</div>,
 }));
 
+jest.mock('./reset-monaco-editor', () => ({
+  ResetMonacoEditor: ({ initialValue }: { initialValue: string }) => <div>{initialValue}</div>,
+}));
+
 class MockEventSource {
   close() {}
   addEventListener() {}
