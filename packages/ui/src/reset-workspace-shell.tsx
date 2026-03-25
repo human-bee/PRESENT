@@ -11,19 +11,20 @@ import {
   useDeferredValue,
   type ComponentType,
 } from 'react';
-import type {
-  ApprovalRequest,
-  AgentInteropPack,
-  Artifact,
-  ConnectorRegistrySnapshot,
-  ExecutorSession,
-  ModelProfile,
-  PresenceMember,
-  RuntimeManifest,
-  TaskRun,
-  WorkspaceFileDocument,
-  WorkspaceFileEntry,
-  WorkspaceSession,
+import {
+  resolveCanvasRoomId,
+  type ApprovalRequest,
+  type AgentInteropPack,
+  type Artifact,
+  type ConnectorRegistrySnapshot,
+  type ExecutorSession,
+  type ModelProfile,
+  type PresenceMember,
+  type RuntimeManifest,
+  type TaskRun,
+  type WorkspaceFileDocument,
+  type WorkspaceFileEntry,
+  type WorkspaceSession,
 } from '@present/contracts';
 import { ArtifactPreviewFrame } from './artifact-preview-frame';
 import { ResetCollaborationSurface } from './reset-collaboration-surface';
@@ -120,9 +121,9 @@ type WorkspaceSnapshotResponse = {
   artifacts: Artifact[];
   approvals: ApprovalRequest[];
   presence: PresenceMember[];
-  traces: Array<Record<string, unknown>>;
+  traces?: Array<Record<string, unknown>>;
   modelProfiles: ModelProfile[];
-  manifest: RuntimeManifest;
+  manifest?: RuntimeManifest;
 };
 
 type WorkspaceFilesResponse = {
@@ -142,6 +143,12 @@ type RuntimeManifestResponse = {
   registry: ConnectorRegistrySnapshot;
   agentPack: AgentInteropPack;
 };
+
+type TraceEventsResponse = {
+  events: Array<Record<string, unknown>>;
+};
+
+const TRACE_EVENT_LIMIT = 80;
 
 export function ResetWorkspaceShell({
   initialManifest,
@@ -192,7 +199,8 @@ export function ResetWorkspaceShell({
     agentStatus: string;
     media: PresenceMember['media'];
   }>({
-    roomName: null,
+    roomName:
+      initialAgentPack.roomId ?? initialRegistry.roomId ?? initialManifest.collaboration.defaultRoomId ?? null,
     connectionState: 'disconnected',
     participantCount: 0,
     agentStatus: 'not-requested',
@@ -229,6 +237,14 @@ export function ResetWorkspaceShell({
     () => (effectiveActiveTaskId ? tasks.find((task) => task.id === effectiveActiveTaskId) ?? null : null),
     [effectiveActiveTaskId, tasks],
   );
+  const canonicalRoomId = useMemo(
+    () =>
+      resolveCanvasRoomId({
+        workspaceSessionId: workspace.id,
+        preferredRoomId: agentPack.roomId ?? registry.roomId ?? manifest.collaboration.defaultRoomId,
+      }),
+    [agentPack.roomId, manifest.collaboration.defaultRoomId, registry.roomId, workspace.id],
+  );
   const approvedWriteApproval = useMemo(
     () =>
       approvals.find(
@@ -239,17 +255,25 @@ export function ResetWorkspaceShell({
       ) ?? null,
     [approvals, workspace.id],
   );
+
+  useEffect(() => {
+    setRoomTelemetry((current) => ({
+      ...current,
+      roomName: canonicalRoomId,
+    }));
+  }, [canonicalRoomId]);
+
   const formatCommand = (command: AgentInteropPack['commands'][keyof AgentInteropPack['commands']]) =>
     [command.command, ...command.args].join(' ');
 
-  const refreshWorkspaceState = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
+  const refreshWorkspaceSnapshot = useEffectEvent(async (workspaceSessionId: string) => {
+    const search = new URLSearchParams({
+      includeTraces: 'false',
+      includeManifest: 'false',
+    });
     const snapshot = await requestJson<WorkspaceSnapshotResponse>(
-      `/api/reset/workspaces/${encodeURIComponent(workspaceSessionId)}/state`,
+      `/api/reset/workspaces/${encodeURIComponent(workspaceSessionId)}/state?${search.toString()}`,
     );
-    const traces =
-      activeQuery && activeQuery.trim()
-        ? snapshot.traces.filter((event) => JSON.stringify(event).toLowerCase().includes(activeQuery.trim().toLowerCase()))
-        : snapshot.traces;
 
     setWorkspace(snapshot.workspace);
     setExecutors(snapshot.executors);
@@ -257,8 +281,26 @@ export function ResetWorkspaceShell({
     setArtifacts(snapshot.artifacts);
     setApprovals(snapshot.approvals);
     setPresence(snapshot.presence);
-    setTraceEvents(traces);
     setActiveTaskId((current) => current ?? snapshot.tasks[0]?.id ?? null);
+  });
+
+  const refreshTraceEvents = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
+    const search = new URLSearchParams({
+      workspaceSessionId,
+      limit: String(TRACE_EVENT_LIMIT),
+    });
+    if (activeQuery?.trim()) {
+      search.set('query', activeQuery.trim());
+    }
+    const payload = await requestJson<TraceEventsResponse>(`/api/reset/traces?${search.toString()}`);
+    setTraceEvents(Array.isArray(payload.events) ? payload.events : []);
+  });
+
+  const refreshWorkspaceState = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
+    await Promise.all([
+      refreshWorkspaceSnapshot(workspaceSessionId),
+      refreshTraceEvents(workspaceSessionId, activeQuery),
+    ]);
   });
 
   const refreshWorkspaceCatalog = useEffectEvent(async () => {
@@ -355,7 +397,7 @@ export function ResetWorkspaceShell({
             activeFilePath: activeDocument?.path ?? null,
             editorMode: 'reset_shell',
             draftSyncEnabled: false,
-            roomName: roomTelemetry.roomName,
+            roomName: canonicalRoomId,
             roomConnectionState: roomTelemetry.connectionState,
             roomParticipantCount: roomTelemetry.participantCount,
             roomAgentStatus: roomTelemetry.agentStatus,
@@ -372,8 +414,8 @@ export function ResetWorkspaceShell({
   );
 
   useEffect(() => {
-    void refreshWorkspaceState(workspace.id, deferredTraceQuery);
-  }, [deferredTraceQuery, refreshWorkspaceState, workspace.id]);
+    void refreshTraceEvents(workspace.id, deferredTraceQuery);
+  }, [deferredTraceQuery, refreshTraceEvents, workspace.id]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -419,11 +461,18 @@ export function ResetWorkspaceShell({
 
     const visibilityHandler = () => {
       void syncPresence(document.hidden ? 'away' : 'connected');
+      if (!document.hidden) {
+        void refreshWorkspaceSnapshot(workspace.id);
+      }
     };
     const heartbeat = window.setInterval(() => {
       void syncPresence(document.hidden ? 'idle' : 'connected');
-      void refreshWorkspaceState(workspace.id, deferredTraceQuery);
     }, 15000);
+    const snapshotRefresh = window.setInterval(() => {
+      if (!document.hidden) {
+        void refreshWorkspaceSnapshot(workspace.id);
+      }
+    }, 60000);
     const cleanup = () => {
       void requestJson('/api/reset/presence', {
         method: 'POST',
@@ -443,11 +492,12 @@ export function ResetWorkspaceShell({
 
     return () => {
       window.clearInterval(heartbeat);
+      window.clearInterval(snapshotRefresh);
       window.removeEventListener('visibilitychange', visibilityHandler);
       window.removeEventListener('pagehide', cleanup);
       cleanup();
     };
-  }, [deferredTraceQuery, localIdentity, refreshWorkspaceState, syncPresence, workspace.id]);
+  }, [localIdentity, refreshWorkspaceSnapshot, syncPresence, workspace.id]);
 
   useEffect(() => {
     if (!localIdentity) return;
@@ -476,6 +526,13 @@ export function ResetWorkspaceShell({
 
     eventSource.addEventListener('trace', (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as Record<string, unknown>;
+      const normalizedTraceQuery = deferredTraceQuery.trim().toLowerCase();
+      if (
+        normalizedTraceQuery &&
+        !JSON.stringify(payload).toLowerCase().includes(normalizedTraceQuery)
+      ) {
+        return;
+      }
       setTraceEvents((previous) => [payload, ...previous.filter((entry) => entry['id'] !== payload['id'])]);
     });
 
@@ -777,7 +834,7 @@ export function ResetWorkspaceShell({
           <div className="reset-room-grid">
             <div className="reset-room-card">
               <span>Room</span>
-              <strong>{agentPack.roomId ?? roomTelemetry.roomName ?? 'pending'}</strong>
+              <strong>{canonicalRoomId ?? roomTelemetry.roomName ?? 'pending'}</strong>
             </div>
             <div className="reset-room-card">
               <span>Participants</span>
@@ -797,6 +854,7 @@ export function ResetWorkspaceShell({
           <div className="reset-frame-shell">
             <ResetCollaborationSurface
               workspaceSessionId={workspace.id}
+              roomId={canonicalRoomId}
               operatorLabel={localPresenceLabel}
               onTelemetryChange={(telemetry) => {
                 setRoomTelemetry({

@@ -151,13 +151,10 @@ export async function getCollaborationDocument(
       return null;
     }
     if (!document) return null;
-    const parsed = collaborationDocumentSchema.parse({
+    return collaborationDocumentSchema.parse({
       ...document,
       collaborators: pruneCollaborators(document.collaborators),
     });
-    store.documents[key] = parsed;
-    writeStore(store);
-    return parsed;
   });
 }
 

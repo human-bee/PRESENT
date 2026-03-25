@@ -4,13 +4,12 @@ import {
   connectorDescriptorSchema,
   connectorRegistrySnapshotSchema,
   approvalPolicySchema,
+  createCanvasRoomId,
   type WorkspaceSession,
 } from '@present/contracts';
 
 const getOpenClawEndpoint = () => process.env.OPENCLAW_ACP_URL ?? process.env.OPENCLAW_PLUGIN_URL ?? null;
-
-export const createCanvasRoomId = (workspaceSessionId: string) =>
-  `reset-${workspaceSessionId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+export { createCanvasRoomId } from '@present/contracts';
 
 const buildConnectorDescriptors = () => {
   const codexAppServerBaseUrl = process.env.CODEX_APP_SERVER_URL ?? 'http://127.0.0.1:4096';

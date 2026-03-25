@@ -72,6 +72,20 @@ export const canvasNodeKindSchema = z.enum([
   'trace-rail',
 ]);
 
+export const createCanvasRoomId = (workspaceSessionId: string) =>
+  `reset-${workspaceSessionId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+
+export const resolveCanvasRoomId = (input: {
+  workspaceSessionId: string;
+  preferredRoomId?: string | null;
+}) => {
+  const preferredRoomId = input.preferredRoomId?.trim();
+  if (preferredRoomId) {
+    return preferredRoomId;
+  }
+  return createCanvasRoomId(input.workspaceSessionId);
+};
+
 export const connectorDescriptorSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),

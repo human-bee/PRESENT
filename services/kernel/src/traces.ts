@@ -25,18 +25,59 @@ export function recordKernelEvent(input: Record<string, unknown>) {
   return event;
 }
 
-export function listTraceEvents(traceId?: string) {
-  const traces = readResetCollection('traces');
-  if (traceId) {
-    return traces
-      .filter((event) => event.traceId === traceId)
-      .sort((left, right) => right.emittedAt.localeCompare(left.emittedAt));
+export type ListTraceEventsOptions = {
+  traceId?: string;
+  workspaceSessionId?: string;
+  emittedAfterOrAt?: string | null;
+  limit?: number;
+  order?: 'asc' | 'desc';
+  query?: string;
+};
+
+const resolveTraceListOptions = (input?: string | ListTraceEventsOptions): ListTraceEventsOptions => {
+  if (typeof input === 'string') {
+    return { traceId: input };
   }
-  return traces.sort((left, right) => right.emittedAt.localeCompare(left.emittedAt));
+  return input ?? {};
+};
+
+export function listTraceEvents(input?: string | ListTraceEventsOptions) {
+  const options = resolveTraceListOptions(input);
+  const normalizedQuery = options.query?.trim().toLowerCase() ?? '';
+  let traces = readResetCollection('traces');
+
+  if (options.traceId) {
+    traces = traces.filter((event) => event.traceId === options.traceId);
+  }
+
+  if (options.workspaceSessionId) {
+    traces = traces.filter((event) => event.workspaceSessionId === options.workspaceSessionId);
+  }
+
+  if (options.emittedAfterOrAt) {
+    traces = traces.filter((event) => event.emittedAt >= options.emittedAfterOrAt!);
+  }
+
+  if (normalizedQuery) {
+    traces = traces.filter((event) => JSON.stringify(event).toLowerCase().includes(normalizedQuery));
+  }
+
+  if (typeof options.limit === 'number' && options.limit > 0) {
+    traces = traces.slice(0, options.limit);
+  }
+
+  if (options.order === 'asc') {
+    return [...traces].reverse();
+  }
+
+  return traces;
 }
 
-export function searchTraceEvents(query: string) {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return listTraceEvents();
-  return listTraceEvents().filter((event) => JSON.stringify(event).toLowerCase().includes(normalized));
+export function searchTraceEvents(query: string, options?: Omit<ListTraceEventsOptions, 'query'>) {
+  const normalized = query.trim();
+  if (!normalized) return listTraceEvents(options);
+  return listTraceEvents({
+    ...options,
+    query: normalized,
+  });
 }

@@ -25,6 +25,7 @@ export async function GET(
   }
 
   const seenTraceIds = new Set<string>();
+  let lastSeenTraceEmittedAt: string | null = null;
   let interval: ReturnType<typeof setInterval> | null = null;
   let closed = false;
 
@@ -61,9 +62,16 @@ export async function GET(
           return;
         }
 
-        for (const event of listTraceEvents(taskRun.traceId).slice().reverse()) {
+        const traceEvents = listTraceEvents({
+          traceId: taskRun.traceId,
+          emittedAfterOrAt: lastSeenTraceEmittedAt,
+          order: 'asc',
+        });
+
+        for (const event of traceEvents) {
           if (seenTraceIds.has(event.id)) continue;
           seenTraceIds.add(event.id);
+          lastSeenTraceEmittedAt = event.emittedAt;
           if (!enqueue('trace', event)) {
             return;
           }

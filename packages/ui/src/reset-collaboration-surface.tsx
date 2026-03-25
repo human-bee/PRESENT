@@ -1,7 +1,7 @@
 'use client';
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { RoomScopedProviders } from '@/components/RoomScopedProviders';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
 import { RoomConnectorUI } from '@/components/ui/livekit/components';
@@ -23,6 +23,7 @@ type ResetRoomTelemetry = {
 
 type ResetCollaborationSurfaceProps = {
   workspaceSessionId: string;
+  roomId: string;
   operatorLabel: string;
   onTelemetryChange?: (telemetry: ResetRoomTelemetry) => void;
 };
@@ -96,13 +97,13 @@ function ResetCollaborationSurfaceInner({
 
   const copyResetInviteLink = useCallback(async () => {
     if (typeof window === 'undefined') return;
-    const link = `${window.location.origin}/?room=${encodeURIComponent(roomName)}`;
+    const link = `${window.location.origin}/?workspace=${encodeURIComponent(workspaceSessionId)}`;
     try {
       await navigator.clipboard.writeText(link);
     } catch (error) {
       console.error(`[present-reset] Failed to copy room link for ${roomName}:`, error);
     }
-  }, [roomName]);
+  }, [roomName, workspaceSessionId]);
 
   const roomContext = useMemo(
     () => ({
@@ -133,7 +134,10 @@ function ResetCollaborationSurfaceInner({
                 Mounted directly in the reset shell. Use the archived canvas route only for reference or parity checks.
               </div>
               <div className="reset-inline-actions">
-                <a href="/canvas?legacy=1" className="reset-button reset-button--ghost">
+                <a
+                  href={`/canvas?legacy=1&workspace=${encodeURIComponent(workspaceSessionId)}`}
+                  className="reset-button reset-button--ghost"
+                >
                   Open Archived Canvas
                 </a>
               </div>
@@ -156,27 +160,15 @@ function ResetCollaborationSurfaceInner({
 
 export function ResetCollaborationSurface({
   workspaceSessionId,
+  roomId,
   operatorLabel,
   onTelemetryChange,
 }: ResetCollaborationSurfaceProps) {
-  const [roomOverride, setRoomOverride] = useState<string | null>(null);
   const serverUrl =
     process.env.NEXT_PUBLIC_LIVEKIT_URL ??
     process.env.NEXT_PUBLIC_LK_SERVER_URL ??
     '';
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const nextRoom = new URLSearchParams(window.location.search).get('room')?.trim();
-    if (nextRoom) {
-      setRoomOverride(nextRoom);
-    }
-  }, []);
-
-  const roomName = useMemo(() => {
-    const fallback = `reset-${workspaceSessionId.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 24)}`;
-    return roomOverride || fallback;
-  }, [roomOverride, workspaceSessionId]);
+  const roomName = useMemo(() => roomId, [roomId]);
 
   if (!serverUrl) {
     return (

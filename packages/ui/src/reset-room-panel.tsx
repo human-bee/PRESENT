@@ -1,7 +1,7 @@
 'use client';
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { RoomConnectorUI } from '@/components/ui/livekit/components';
 import { useLivekitConnection, useRoomEvents } from '@/components/ui/livekit/hooks';
 
@@ -19,15 +19,18 @@ type ResetRoomTelemetry = {
 
 type ResetRoomPanelProps = {
   workspaceSessionId: string;
+  roomId: string;
   operatorLabel: string;
   onTelemetryChange?: (telemetry: ResetRoomTelemetry) => void;
 };
 
 function ResetRoomPanelInner({
+  workspaceSessionId,
   roomName,
   operatorLabel,
   onTelemetryChange,
 }: {
+  workspaceSessionId: string;
   roomName: string;
   operatorLabel: string;
   onTelemetryChange?: (telemetry: ResetRoomTelemetry) => void;
@@ -89,13 +92,13 @@ function ResetRoomPanelInner({
 
   const copyResetInviteLink = useCallback(async () => {
     if (typeof window === 'undefined') return;
-    const link = `${window.location.origin}/?room=${encodeURIComponent(roomName)}`;
+    const link = `${window.location.origin}/?workspace=${encodeURIComponent(workspaceSessionId)}`;
     try {
       await navigator.clipboard.writeText(link);
     } catch (error) {
       console.error(`[present-reset] Failed to copy room link for ${roomName}:`, error);
     }
-  }, [roomName]);
+  }, [roomName, workspaceSessionId]);
 
   return (
     <div className="reset-room-panel">
@@ -113,25 +116,12 @@ function ResetRoomPanelInner({
   );
 }
 
-export function ResetRoomPanel({ workspaceSessionId, operatorLabel, onTelemetryChange }: ResetRoomPanelProps) {
-  const [roomOverride, setRoomOverride] = useState<string | null>(null);
+export function ResetRoomPanel({ workspaceSessionId, roomId, operatorLabel, onTelemetryChange }: ResetRoomPanelProps) {
   const serverUrl =
     process.env.NEXT_PUBLIC_LIVEKIT_URL ??
     process.env.NEXT_PUBLIC_LK_SERVER_URL ??
     '';
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const nextRoom = new URLSearchParams(window.location.search).get('room')?.trim();
-    if (nextRoom) {
-      setRoomOverride(nextRoom);
-    }
-  }, []);
-
-  const roomName = useMemo(() => {
-    const fallback = `reset-${workspaceSessionId.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 24)}`;
-    return roomOverride || fallback;
-  }, [roomOverride, workspaceSessionId]);
+  const roomName = roomId;
 
   if (!serverUrl) {
     return (
@@ -150,6 +140,7 @@ export function ResetRoomPanel({ workspaceSessionId, operatorLabel, onTelemetryC
       serverUrl={serverUrl}
     >
       <ResetRoomPanelInner
+        workspaceSessionId={workspaceSessionId}
         roomName={roomName}
         operatorLabel={operatorLabel}
         onTelemetryChange={onTelemetryChange}

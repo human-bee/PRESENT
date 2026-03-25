@@ -72,7 +72,7 @@ export default async function Home({
       initialApprovals={listApprovalRequests(workspace.id)}
       initialPresence={listPresenceMembers(workspace.id)}
       initialModelProfiles={modelProfiles}
-      initialTraceEvents={listTraceEvents()}
+      initialTraceEvents={listTraceEvents({ workspaceSessionId: workspace.id, limit: 80 })}
     />
   );
 }

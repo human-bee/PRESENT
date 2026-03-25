@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { openWorkspaceSession, resetKernelStateForTests } from '@present/kernel';
+import { openWorkspaceSession, recordKernelEvent, resetKernelStateForTests } from '@present/kernel';
 
 const installFetchPrimitives = () => {
   class MockHeaders {
@@ -79,5 +79,53 @@ describe('GET /api/reset/workspaces/[workspaceSessionId]/state', () => {
     expect(payload.workspace.id).toBe(workspace.id);
     expect(Array.isArray(payload.tasks)).toBe(true);
     expect(Array.isArray(payload.artifacts)).toBe(true);
+  });
+
+  it('supports filtered trace windows and can skip heavy snapshot fields', async () => {
+    installFetchPrimitives();
+    const { GET } = await import('./route');
+    const workspace = openWorkspaceSession({
+      workspacePath: process.cwd(),
+      title: 'Trace Filter Route',
+      branch: 'codex/reset',
+    });
+
+    recordKernelEvent({
+      id: 'evt_turn',
+      type: 'approval.requested',
+      traceId: 'trace_route',
+      workspaceSessionId: workspace.id,
+      emittedAt: '2026-03-24T12:00:00.000Z',
+      approvalRequestId: 'approval_1',
+      state: 'pending',
+      summary: 'turn queued',
+      metadata: {},
+    });
+    recordKernelEvent({
+      id: 'evt_approval',
+      type: 'approval.requested',
+      traceId: 'trace_route',
+      workspaceSessionId: workspace.id,
+      emittedAt: '2026-03-24T12:00:05.000Z',
+      approvalRequestId: 'approval_2',
+      state: 'pending',
+      summary: 'needs approval',
+      metadata: {},
+    });
+
+    const response = await GET(
+      {
+        url: `http://localhost/api/reset/workspaces/${workspace.id}/state?traceQuery=approval&traceLimit=1&includeManifest=false`,
+      } as Request,
+      {
+        params: Promise.resolve({ workspaceSessionId: workspace.id }),
+      },
+    );
+
+    const payload = await response.json();
+    expect(response.status).toBe(200);
+    expect(payload.traces).toHaveLength(1);
+    expect(payload.traces[0].id).toBe('evt_approval');
+    expect(payload.manifest).toBeUndefined();
   });
 });

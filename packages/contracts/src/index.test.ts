@@ -2,6 +2,8 @@ import {
   agentInteropPackSchema,
   artifactSchema,
   connectorRegistrySnapshotSchema,
+  createCanvasRoomId,
+  resolveCanvasRoomId,
   runtimeManifestSchema,
   workspaceSessionSchema,
 } from '@present/contracts';
@@ -189,5 +191,21 @@ describe('reset contracts', () => {
 
     expect(pack.recommendedClients).toContain('OpenClaw');
     expect(pack.surface).toBe('canvas');
+  });
+
+  it('derives one canonical canvas room id per workspace', () => {
+    expect(createCanvasRoomId('ws_123')).toBe('reset-ws_123');
+    expect(createCanvasRoomId('ws 123/alpha')).toBe('reset-ws-123-alpha');
+    expect(
+      resolveCanvasRoomId({
+        workspaceSessionId: 'ws 123/alpha',
+        preferredRoomId: 'reset-ws_123',
+      }),
+    ).toBe('reset-ws_123');
+    expect(
+      resolveCanvasRoomId({
+        workspaceSessionId: 'ws 123/alpha',
+      }),
+    ).toBe('reset-ws-123-alpha');
   });
 });

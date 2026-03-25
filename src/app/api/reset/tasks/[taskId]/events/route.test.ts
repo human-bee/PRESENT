@@ -113,6 +113,11 @@ describe('/api/reset/tasks/[taskId]/events', () => {
 
     expect(response.status).toBe(200);
     expect(hydrateResetKernelMock).toHaveBeenCalled();
+    expect(listTraceEventsMock).toHaveBeenCalledWith({
+      traceId: 'trace_123',
+      emittedAfterOrAt: null,
+      order: 'asc',
+    });
     expect(body).toContain('event: task');
     expect(body).toContain('event: trace');
     expect(body).toContain('event: done');
