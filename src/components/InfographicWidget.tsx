@@ -491,7 +491,8 @@ export function InfographicWidget({
   }, [isShape]);
 
   useEffect(() => {
-    const off = bus.on('transcription', (data: TranscriptEntry) => {
+    const off = bus.on('transcription', (payload) => {
+      const data = payload as TranscriptEntry;
       if (typeof data?.text !== 'string') return;
       setTranscripts((current) => [...current, data].slice(-20));
     });
@@ -597,11 +598,17 @@ export function InfographicWidget({
     const widgetShape =
       editorRef
         ?.getCurrentPageShapes?.()
-        ?.find(
-          (shape) =>
-            shape.id === messageId ||
-            (shape.type === 'custom' && String(shape.props?.customComponent || '') === messageId),
-        ) ?? null;
+        ?.find((shape) => {
+          const candidate = shape as {
+            id: string;
+            type?: string;
+            props?: Record<string, unknown>;
+          };
+          return (
+            candidate.id === messageId ||
+            (candidate.type === 'custom' && String(candidate.props?.['customComponent'] ?? '') === messageId)
+          );
+        }) ?? null;
 
     if (!widgetShape) return null;
     const bounds = editorRef?.getShapePageBounds?.(widgetShape.id);

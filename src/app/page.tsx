@@ -1,7 +1,6 @@
 import { ResetWorkspaceShell } from '@present/ui';
 import {
-  buildAgentInteropPack,
-  buildRuntimeManifest,
+  buildCanvasRuntimeSurface,
   createArtifact,
   ensureResetKernelHydrated,
   getWorkspaceSession,
@@ -46,21 +45,25 @@ export default async function Home({
     createArtifact({
       workspaceSessionId: workspace.id,
       kind: 'widget_bundle',
-      title: 'Reset Brief',
+      title: 'Canvas OS Brief',
       mimeType: 'text/html',
-      content: `<!doctype html><html lang="en"><body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#111;color:#f4eadb;font-family:Georgia,serif"><div style="padding:32px;border:1px solid rgba(255,255,255,.1);border-radius:24px;background:rgba(255,255,255,.04)"><div style="font:600 11px/1.2 ui-monospace,monospace;letter-spacing:.28em;text-transform:uppercase;color:#f6a566;margin-bottom:12px">PRESENT RESET</div><h1 style="margin:0 0 10px;font-size:40px">Mission Control</h1><p style="margin:0;color:rgba(244,234,219,.75)">The new shell runs on workspace, task, artifact, approval, and trace contracts.</p></div></body></html>`,
+      content: `<!doctype html><html lang="en"><body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#111;color:#f4eadb;font-family:Georgia,serif"><div style="padding:32px;border:1px solid rgba(255,255,255,.1);border-radius:24px;background:rgba(255,255,255,.04)"><div style="font:600 11px/1.2 ui-monospace,monospace;letter-spacing:.28em;text-transform:uppercase;color:#f6a566;margin-bottom:12px">PRESENT CANVAS OS</div><h1 style="margin:0 0 10px;font-size:40px">Shared Board Runtime</h1><p style="margin:0;color:rgba(244,234,219,.75)">Humans, agents, widgets, runs, and approvals now meet on one canvas-native surface.</p></div></body></html>`,
       metadata: {
         seed: true,
       },
     });
   }
 
-  const [manifest, modelProfiles] = await Promise.all([buildRuntimeManifest(), resolveKernelModelProfiles()]);
+  const [runtimeSurface, modelProfiles] = await Promise.all([
+    Promise.resolve(buildCanvasRuntimeSurface(workspace)),
+    resolveKernelModelProfiles(),
+  ]);
 
   return (
     <ResetWorkspaceShell
-      initialManifest={manifest}
-      initialAgentPack={buildAgentInteropPack(workspace)}
+      initialManifest={runtimeSurface.manifest}
+      initialRegistry={runtimeSurface.registry}
+      initialAgentPack={runtimeSurface.agentPack}
       initialWorkspace={workspace}
       initialWorkspaces={listWorkspaceSessions().slice(0, 6)}
       initialExecutors={listExecutorSessions(workspace.id)}

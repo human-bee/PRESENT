@@ -34,6 +34,6 @@ export async function getWorkspaceStateSnapshot(workspaceSessionId: string): Pro
     presence: listPresenceMembers(workspaceSessionId),
     traces: listTraceEvents().filter((event) => event.workspaceSessionId === workspaceSessionId),
     modelProfiles: await resolveKernelModelProfiles(),
-    manifest: buildRuntimeManifest(),
+    manifest: buildRuntimeManifest(workspace),
   };
 }

@@ -1,6 +1,8 @@
 import path from 'node:path';
 import {
   buildAgentInteropPack,
+  buildCanvasRuntimeSurface,
+  buildConnectorRegistrySnapshot,
   buildRuntimeManifest,
   completeTaskRun,
   createApprovalRequest,
@@ -68,6 +70,7 @@ describe('reset kernel', () => {
     expect(listApprovalRequests(workspace.id).some((entry) => entry.id === approval.id)).toBe(true);
     expect(listTraceEvents(traceId).some((event) => event.type === 'approval.requested')).toBe(true);
     expect(buildRuntimeManifest().mcp.serverName).toBe('present-mcp');
+    expect(buildRuntimeManifest(workspace).primarySurface).toBe('canvas');
   });
 
   it('persists task lifecycle across kernel reads', () => {
@@ -102,10 +105,28 @@ describe('reset kernel', () => {
     });
 
     const pack = buildAgentInteropPack(workspace);
+    const registry = buildConnectorRegistrySnapshot(workspace);
 
     expect(pack.workspaceSessionId).toBe(workspace.id);
     expect(pack.mcpServer.name).toBe('present-mcp');
     expect(pack.recommendedClients).toContain('OpenClaw');
     expect(pack.commands.startTurn.args).toContain('--prompt');
+    expect(pack.roomId).toBe(registry.roomId);
+    expect(buildRuntimeManifest(workspace).media.roomIdTemplate.replace('{workspaceSessionId}', workspace.id)).toBe(pack.roomId);
+    expect(registry.connectors.some((connector) => connector.id === 'codex-app-server')).toBe(true);
+  });
+
+  it('builds one consistent runtime snapshot per workspace', () => {
+    const workspace = openWorkspaceSession({
+      workspacePath: `/tmp/present-reset-runtime-surface-${Date.now()}`,
+      title: 'Runtime Surface Test',
+      branch: 'codex/reset',
+    });
+
+    const surface = buildCanvasRuntimeSurface(workspace);
+
+    expect(surface.manifest.generatedAt).toBe(surface.registry.generatedAt);
+    expect(surface.agentPack.generatedAt).toBe(surface.registry.generatedAt);
+    expect(surface.agentPack.roomId).toBe(surface.manifest.collaboration.defaultRoomId);
   });
 });

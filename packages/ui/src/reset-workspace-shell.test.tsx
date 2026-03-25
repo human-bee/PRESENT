@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ResetWorkspaceShell } from './reset-workspace-shell';
 
 jest.mock('next/navigation', () => ({
@@ -114,6 +114,9 @@ describe('ResetWorkspaceShell', () => {
           modelProfiles: [],
           manifest: {
             generatedAt: new Date().toISOString(),
+            schemaVersion: 'canvas-os/v1',
+            runtimeCenter: 'responses',
+            primarySurface: 'canvas',
             codex: {
               appServerBaseUrl: 'http://127.0.0.1:4096',
               authModes: ['chatgpt', 'api_key', 'shared_key', 'byok'],
@@ -124,11 +127,32 @@ describe('ResetWorkspaceShell', () => {
               transport: 'stdio',
               command: ['npm', 'run', 'present:mcp'],
             },
+            connectors: [],
+            resources: [],
+            events: [],
+            approvalPolicies: [],
+            traceSchemaUri: 'present://schemas/trace-linkage',
+            registry: {
+              uri: 'present://runtime/registry',
+              updatedAt: new Date().toISOString(),
+              connectorCount: 0,
+            },
+            media: {
+              provider: 'livekit',
+              transport: 'webrtc',
+              supports: ['audio', 'video', 'screen', 'data_channel'],
+              roomIdTemplate: 'reset-{workspaceSessionId}',
+            },
             collaboration: {
               livekitEnabled: true,
               canvasEnabled: true,
               widgetsEnabled: true,
               dualClient: true,
+              canvasTransport: 'tldraw_sync',
+              sharedDocTransport: 'yjs_ws',
+              presenceTransport: 'webrtc',
+              operatorSurfaces: ['canvas', 'shell', 'archive'],
+              defaultRoomId: 'reset-ws_123',
             },
           },
         }),
@@ -147,6 +171,9 @@ describe('ResetWorkspaceShell', () => {
       <ResetWorkspaceShell
         initialManifest={{
           generatedAt: new Date().toISOString(),
+          schemaVersion: 'canvas-os/v1',
+          runtimeCenter: 'responses',
+          primarySurface: 'canvas',
           codex: {
             appServerBaseUrl: 'http://127.0.0.1:4096',
             authModes: ['chatgpt', 'api_key', 'shared_key', 'byok'],
@@ -157,17 +184,82 @@ describe('ResetWorkspaceShell', () => {
             transport: 'stdio',
             command: ['npm', 'run', 'present:mcp'],
           },
+          connectors: [],
+          resources: [],
+          events: [],
+          approvalPolicies: [],
+          traceSchemaUri: 'present://schemas/trace-linkage',
+          registry: {
+            uri: 'present://runtime/registry',
+            updatedAt: new Date().toISOString(),
+            connectorCount: 0,
+          },
+          media: {
+            provider: 'livekit',
+            transport: 'webrtc',
+            supports: ['audio', 'video', 'screen', 'data_channel'],
+            roomIdTemplate: 'reset-{workspaceSessionId}',
+          },
           collaboration: {
             livekitEnabled: true,
             canvasEnabled: true,
             widgetsEnabled: true,
             dualClient: true,
+            canvasTransport: 'tldraw_sync',
+            sharedDocTransport: 'yjs_ws',
+            presenceTransport: 'webrtc',
+            operatorSurfaces: ['canvas', 'shell', 'archive'],
+            defaultRoomId: 'reset-ws_123',
           },
+        }}
+        initialRegistry={{
+          generatedAt: new Date().toISOString(),
+          workspaceSessionId: 'ws_123',
+          roomId: 'reset-ws_123',
+          connectors: [
+            {
+              id: 'codex-app-server',
+              label: 'Codex App Server',
+              lane: 'codex',
+              transport: 'app_server',
+              endpoint: 'http://127.0.0.1:4096',
+              health: 'healthy',
+              capabilities: ['code_edit'],
+              metadata: {},
+            },
+          ],
+          resources: [],
+          events: [],
+          approvalPolicies: [],
         }}
         initialAgentPack={{
           generatedAt: new Date().toISOString(),
+          surface: 'canvas',
           workspaceSessionId: 'ws_123',
           workspacePath: '/tmp/present-reset',
+          manifestUri: 'present://runtime/manifest',
+          registryUri: 'present://runtime/registry',
+          resourceUris: {
+            manifest: 'present://runtime/manifest',
+            registry: 'present://runtime/registry',
+            workspace: 'present://workspaces/state',
+            artifacts: 'present://artifacts/state',
+            approvals: 'present://approvals/state',
+            presence: 'present://presence/state',
+            traces: 'present://traces/state',
+            models: 'present://models/status',
+          },
+          eventUris: {
+            taskStreamTemplate: '/api/reset/tasks/{taskId}/events',
+            traces: '/api/reset/traces',
+            presence: '/api/reset/presence',
+            livekitCommentary: 'livekit:data-channel:reset-ws_123',
+          },
+          approvalUris: {
+            state: 'present://approvals/state',
+            resolve: '/api/reset/approvals',
+          },
+          roomId: 'reset-ws_123',
           mcpServer: {
             name: 'present-mcp',
             transport: 'stdio',
@@ -200,6 +292,13 @@ describe('ResetWorkspaceShell', () => {
               cwd: process.cwd(),
             },
           },
+          connectorHints: [
+            {
+              connectorId: 'codex-app-server',
+              purpose: 'Primary coding lane.',
+              preferWhen: 'You need code edits and artifacts.',
+            },
+          ],
           recommendedClients: ['OpenClaw', 'Codex desktop'],
           notes: ['ChatGPT auth remains local-companion only.'],
         }}
@@ -239,13 +338,15 @@ describe('ResetWorkspaceShell', () => {
       />,
     );
 
-    expect(await screen.findByText(/Editorial mission control/i)).toBeTruthy();
+    expect(await screen.findByText(/Canvas OS for rooms, agents, widgets, and live code/i)).toBeTruthy();
+    expect(await screen.findByText(/Shared Spatial Runtime/i)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: /Show Operator Dock/i }));
     expect(await screen.findByRole('button', { name: /Start Codex Turn/i })).toBeTruthy();
     expect(await screen.findByRole('button', { name: /Queue Canvas Task/i })).toBeTruthy();
     expect(await screen.findByRole('button', { name: /Create Patch Artifact/i })).toBeTruthy();
     expect(await screen.findByText(/Recent Sessions/i)).toBeTruthy();
-    expect(await screen.findByText(/OpenClaw \+ MCP Pack/i)).toBeTruthy();
-    expect(await screen.findByText(/Server-Owned Preview/i)).toBeTruthy();
+    expect(await screen.findByText(/Canvas Interop Pack/i)).toBeTruthy();
+    expect(await screen.findByText(/GenUI Dock/i)).toBeTruthy();
     expect((await screen.findAllByText('package.json')).length).toBeGreaterThan(0);
   });
 });

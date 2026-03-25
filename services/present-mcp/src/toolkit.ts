@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import {
   applyArtifactPatch,
-  buildAgentInteropPack,
-  buildRuntimeManifest,
+  buildCanvasRuntimeSurface,
   createApprovalRequest,
   createArtifact,
   createWorkspacePatchArtifact,
   getArtifact,
+  getWorkspaceSession,
   listApprovalRequests,
   listArtifacts,
   listExecutorSessions,
@@ -23,6 +23,20 @@ import {
   enqueueTaskRun,
 } from '@present/kernel';
 import { startCodexTurn } from '@present/codex-adapter';
+
+function resolveScopedWorkspace() {
+  const scopedWorkspaceSessionId = process.env.PRESENT_RESET_WORKSPACE_SESSION_ID?.trim() || null;
+  if (scopedWorkspaceSessionId) {
+    return getWorkspaceSession(scopedWorkspaceSessionId);
+  }
+
+  const scopedWorkspacePath = process.env.PRESENT_RESET_WORKSPACE_PATH?.trim() || null;
+  if (scopedWorkspacePath) {
+    return listWorkspaceSessions().find((workspace) => workspace.workspacePath === scopedWorkspacePath) ?? null;
+  }
+
+  return listWorkspaceSessions()[0] ?? null;
+}
 
 export const presentMcpTools = {
   workspaceOpen: {
@@ -267,40 +281,53 @@ export const presentMcpTools = {
 
 export async function listPresentMcpResources() {
   const modelProfiles = await resolveKernelModelProfiles();
-  const artifacts = listArtifacts();
-  const workspace = listWorkspaceSessions()[0] ?? null;
+  const workspace = resolveScopedWorkspace();
+  const workspaces = workspace ? [workspace] : listWorkspaceSessions();
+  const executors = workspace ? listExecutorSessions(workspace.id) : listExecutorSessions();
+  const tasks = workspace ? listTaskRuns(workspace.id) : listTaskRuns();
+  const artifacts = workspace ? listArtifacts(workspace.id) : listArtifacts();
+  const approvals = workspace ? listApprovalRequests(workspace.id) : listApprovalRequests();
+  const presence = workspace ? listPresenceMembers(workspace.id) : listPresenceMembers();
+  const traces = workspace ? listTraceEvents().filter((event) => event.workspaceSessionId === workspace.id) : listTraceEvents();
   const latestPatchArtifact = artifacts.find((artifact) => artifact.kind === 'file_patch') ?? null;
+  const runtimeSurface = buildCanvasRuntimeSurface(workspace);
 
   return [
     {
       uri: 'present://runtime/manifest',
       name: 'runtime.manifest',
       mimeType: 'application/json',
-      text: JSON.stringify(buildRuntimeManifest(), null, 2),
+      text: JSON.stringify(runtimeSurface.manifest, null, 2),
+    },
+    {
+      uri: 'present://runtime/registry',
+      name: 'runtime.registry',
+      mimeType: 'application/json',
+      text: JSON.stringify(runtimeSurface.registry, null, 2),
     },
     {
       uri: 'present://runtime/interop',
       name: 'runtime.interop',
       mimeType: 'application/json',
-      text: JSON.stringify(buildAgentInteropPack(workspace), null, 2),
+      text: JSON.stringify(runtimeSurface.agentPack, null, 2),
     },
     {
       uri: 'present://workspaces/state',
       name: 'workspace.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listWorkspaceSessions(), null, 2),
+      text: JSON.stringify(workspaces, null, 2),
     },
     {
       uri: 'present://executors/state',
       name: 'executor.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listExecutorSessions(), null, 2),
+      text: JSON.stringify(executors, null, 2),
     },
     {
       uri: 'present://tasks/state',
       name: 'task.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listTaskRuns(), null, 2),
+      text: JSON.stringify(tasks, null, 2),
     },
     {
       uri: 'present://artifacts/state',
@@ -313,10 +340,10 @@ export async function listPresentMcpResources() {
       name: 'workspace.files',
       mimeType: 'application/json',
       text: JSON.stringify(
-        listWorkspaceSessions().map((workspace) => ({
-          workspaceSessionId: workspace.id,
-          workspacePath: workspace.workspacePath,
-          files: listWorkspaceFiles({ workspaceSessionId: workspace.id, limit: 120 }),
+        workspaces.map((scopedWorkspace) => ({
+          workspaceSessionId: scopedWorkspace.id,
+          workspacePath: scopedWorkspace.workspacePath,
+          files: listWorkspaceFiles({ workspaceSessionId: scopedWorkspace.id, limit: 120 }),
         })),
         null,
         2,
@@ -332,19 +359,19 @@ export async function listPresentMcpResources() {
       uri: 'present://approvals/state',
       name: 'approval.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listApprovalRequests(), null, 2),
+      text: JSON.stringify(approvals, null, 2),
     },
     {
       uri: 'present://presence/state',
       name: 'presence.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listPresenceMembers(), null, 2),
+      text: JSON.stringify(presence, null, 2),
     },
     {
       uri: 'present://traces/state',
       name: 'trace.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listTraceEvents(), null, 2),
+      text: JSON.stringify(traces, null, 2),
     },
     {
       uri: 'present://models/status',

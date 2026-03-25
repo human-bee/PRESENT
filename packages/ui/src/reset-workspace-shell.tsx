@@ -15,6 +15,7 @@ import type {
   ApprovalRequest,
   AgentInteropPack,
   Artifact,
+  ConnectorRegistrySnapshot,
   ExecutorSession,
   ModelProfile,
   PresenceMember,
@@ -99,6 +100,7 @@ async function requestJson<T>(url: string, init?: RequestInit) {
 
 type ResetWorkspaceShellProps = {
   initialManifest: RuntimeManifest;
+  initialRegistry: ConnectorRegistrySnapshot;
   initialAgentPack: AgentInteropPack;
   initialWorkspace: WorkspaceSession;
   initialWorkspaces: WorkspaceSession[];
@@ -137,11 +139,13 @@ type WorkspaceCatalogResponse = {
 
 type RuntimeManifestResponse = {
   manifest: RuntimeManifest;
+  registry: ConnectorRegistrySnapshot;
   agentPack: AgentInteropPack;
 };
 
 export function ResetWorkspaceShell({
   initialManifest,
+  initialRegistry,
   initialAgentPack,
   initialWorkspace,
   initialWorkspaces,
@@ -155,6 +159,8 @@ export function ResetWorkspaceShell({
 }: ResetWorkspaceShellProps) {
   const router = useRouter();
   const [MonacoEditorComponent, setMonacoEditorComponent] = useState<null | ComponentType<ResetMonacoEditorProps>>(null);
+  const [manifest, setManifest] = useState(initialManifest);
+  const [registry, setRegistry] = useState(initialRegistry);
   const [agentPack, setAgentPack] = useState(initialAgentPack);
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [recentWorkspaces, setRecentWorkspaces] = useState(initialWorkspaces);
@@ -173,6 +179,7 @@ export function ResetWorkspaceShell({
   const [widgetHtml, setWidgetHtml] = useState(defaultWidgetHtml('Reset Brief'));
   const [traceQuery, setTraceQuery] = useState('');
   const [directoryPath, setDirectoryPath] = useState('');
+  const [operatorDockOpen, setOperatorDockOpen] = useState(false);
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileEntry[]>([]);
   const [activeDocument, setActiveDocument] = useState<WorkspaceFileDocument | null>(null);
   const [localIdentity, setLocalIdentity] = useState('');
@@ -217,6 +224,11 @@ export function ResetWorkspaceShell({
     () => (activeDocument ? `${activeDocument.path}:${activeDocument.updatedAt}` : 'no-file'),
     [activeDocument],
   );
+  const effectiveActiveTaskId = activeTaskId ?? tasks[0]?.id ?? null;
+  const effectiveActiveTask = useMemo(
+    () => (effectiveActiveTaskId ? tasks.find((task) => task.id === effectiveActiveTaskId) ?? null : null),
+    [effectiveActiveTaskId, tasks],
+  );
   const formatCommand = (command: AgentInteropPack['commands'][keyof AgentInteropPack['commands']]) =>
     [command.command, ...command.args].join(' ');
 
@@ -244,9 +256,11 @@ export function ResetWorkspaceShell({
     setRecentWorkspaces(payload.workspaces.slice(0, 6));
   });
 
-  const refreshAgentPack = useEffectEvent(async (workspaceSessionId: string) => {
+  const refreshRuntimeSurface = useEffectEvent(async (workspaceSessionId: string) => {
     const search = new URLSearchParams({ workspaceSessionId });
     const payload = await requestJson<RuntimeManifestResponse>(`/api/reset/runtime-manifest?${search.toString()}`);
+    setManifest(payload.manifest);
+    setRegistry(payload.registry);
     setAgentPack(payload.agentPack);
   });
 
@@ -268,7 +282,7 @@ export function ResetWorkspaceShell({
     await loadWorkspaceFiles(nextWorkspace.id, '');
     await loadDefaultWorkspaceFile(nextWorkspace.id);
     await refreshWorkspaceCatalog();
-    await refreshAgentPack(nextWorkspace.id);
+    await refreshRuntimeSurface(nextWorkspace.id);
   });
 
   const loadWorkspaceFiles = useEffectEvent(async (workspaceSessionId: string, nextDirectoryPath = '') => {
@@ -431,17 +445,14 @@ export function ResetWorkspaceShell({
   }, [activeDocument?.path, localIdentity, roomTelemetry, syncPresence]);
 
   useEffect(() => {
-    const currentTaskId = activeTaskId ?? tasks[0]?.id ?? null;
-    const currentTask = tasks.find((task) => task.id === currentTaskId) ?? null;
-
-    if (!currentTaskId || !currentTask || !['queued', 'running'].includes(currentTask.status)) {
+    if (!effectiveActiveTaskId || !effectiveActiveTask || !['queued', 'running'].includes(effectiveActiveTask.status)) {
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       return;
     }
 
     eventSourceRef.current?.close();
-    const eventSource = new EventSource(`/api/reset/tasks/${encodeURIComponent(currentTaskId)}/events`);
+    const eventSource = new EventSource(`/api/reset/tasks/${encodeURIComponent(effectiveActiveTaskId)}/events`);
     eventSourceRef.current = eventSource;
 
     eventSource.addEventListener('task', (event) => {
@@ -477,7 +488,13 @@ export function ResetWorkspaceShell({
         eventSourceRef.current = null;
       }
     };
-  }, [activeTaskId, deferredTraceQuery, refreshWorkspaceState, tasks, workspace.id]);
+  }, [
+    deferredTraceQuery,
+    effectiveActiveTask?.status,
+    effectiveActiveTaskId,
+    refreshWorkspaceState,
+    workspace.id,
+  ]);
 
   const runAction = async (action: () => Promise<void>) => {
     setIsBusy(true);
@@ -518,6 +535,17 @@ export function ResetWorkspaceShell({
     });
   };
 
+  const pendingApprovalCount = approvals.filter((approval) => approval.state === 'pending').length;
+  const healthyConnectorCount = registry.connectors.filter((connector) => connector.health === 'healthy').length;
+  const visibleConnectors = useMemo(() => {
+    const priorityOrder = ['codex-app-server', 'livekit-room', 'present-mcp', 'openclaw-acp'];
+    const prioritized = priorityOrder
+      .map((connectorId) => registry.connectors.find((connector) => connector.id === connectorId))
+      .filter((connector): connector is (typeof registry.connectors)[number] => Boolean(connector));
+    return prioritized.slice(0, 3);
+  }, [registry.connectors]);
+  const hiddenConnectorCount = Math.max(0, registry.connectors.length - visibleConnectors.length);
+
   const registerLocalExecutor = async () => {
     await runAction(async () => {
       const result = await requestJson<{ executorSession: ExecutorSession }>('/api/reset/executors/register', {
@@ -528,7 +556,7 @@ export function ResetWorkspaceShell({
           identity: 'local-companion',
           kind: 'local_companion',
           authMode: 'chatgpt',
-          codexBaseUrl: initialManifest.codex.appServerBaseUrl,
+          codexBaseUrl: manifest.codex.appServerBaseUrl,
           capabilities: ['code_edit', 'code_review', 'canvas_edit', 'widget_render', 'room_presence', 'mcp_server'],
         }),
       });
@@ -697,22 +725,132 @@ export function ResetWorkspaceShell({
       <div className="reset-shell__backdrop" />
       <header className="reset-hero">
         <div>
-          <div className="reset-eyebrow">PRESENT RESET / CODEX-NATIVE WORKSPACE</div>
-          <h1>Editorial mission control for code, canvas, rooms, widgets, and external agents.</h1>
-          <p>
-            The legacy canvas runtime is still in the repo, but the root product now runs on reset-era
-            kernel contracts, Codex app-server assumptions, and a server-owned MCP boundary.
-          </p>
+          <div className="reset-eyebrow">PRESENT CANVAS OS / HUMAN + AGENT COLLABORATION</div>
+          <h1>Canvas OS for rooms, agents, widgets, and live code.</h1>
+          <p>The board is primary. The shell is an operator dock over the same runtime state.</p>
         </div>
         <div className="reset-hero__badges">
-          <span>Dual Client</span>
-          <span>Small Teams</span>
-          <span>{initialManifest.codex.recommendedModels.join(' / ')}</span>
+          <span>{manifest.primarySurface.toUpperCase()} OS</span>
+          <span>{manifest.runtimeCenter}</span>
+          <span>{manifest.collaboration.dualClient ? 'web + desktop' : 'single client'}</span>
+          <span>{manifest.codex.recommendedModels.join(' / ')}</span>
+          <button
+            type="button"
+            className="reset-button reset-button--ghost"
+            onClick={() => setOperatorDockOpen((current) => !current)}
+          >
+            {operatorDockOpen ? 'Hide Operator Dock' : 'Show Operator Dock'}
+          </button>
         </div>
       </header>
 
-      <section className="reset-topline">
-        <article className="reset-panel">
+      <section className="reset-canvas-os">
+        <article className="reset-panel reset-panel--canvas-os">
+          <div className="reset-panel__header">
+            <div>
+              <div className="reset-panel__eyebrow">Canvas OS</div>
+              <h2>Shared Spatial Runtime</h2>
+            </div>
+            <div className="reset-panel__microcopy">
+              LiveKit handles the ephemeral lane, TLDraw carries the durable board, and MCP-backed widgets stay
+              server-owned inside the same room-shaped workspace.
+            </div>
+          </div>
+          <div className="reset-room-grid">
+            <div className="reset-room-card">
+              <span>Room</span>
+              <strong>{agentPack.roomId ?? roomTelemetry.roomName ?? 'pending'}</strong>
+            </div>
+            <div className="reset-room-card">
+              <span>Participants</span>
+              <strong>{roomTelemetry.participantCount || presence.length}</strong>
+            </div>
+            <div className="reset-room-card">
+              <span>Connectors</span>
+              <strong>
+                {healthyConnectorCount}/{registry.connectors.length}
+              </strong>
+            </div>
+            <div className="reset-room-card">
+              <span>Approvals</span>
+              <strong>{pendingApprovalCount}</strong>
+            </div>
+          </div>
+          <div className="reset-frame-shell">
+            <ResetCollaborationSurface
+              workspaceSessionId={workspace.id}
+              operatorLabel={localPresenceLabel}
+              onTelemetryChange={(telemetry) => {
+                setRoomTelemetry({
+                  roomName: telemetry.roomName,
+                  connectionState: telemetry.connectionState,
+                  participantCount: telemetry.participantCount,
+                  agentStatus: telemetry.agentStatus,
+                  media: telemetry.media,
+                });
+              }}
+            />
+          </div>
+        </article>
+
+        <aside className="reset-canvas-os__rail">
+          <article className="reset-panel reset-panel--stack">
+            <div className="reset-panel__header">
+              <div>
+                <div className="reset-panel__eyebrow">Canvas Objects</div>
+                <h2>Visible Kernel State</h2>
+              </div>
+            </div>
+            <div className="reset-list">
+              <article className="reset-list-card">
+                <div className="reset-list-card__eyebrow">Run Lane</div>
+                <strong>{tasks[0]?.summary ?? 'No active run'}</strong>
+                <p>{tasks[0]?.status ?? 'Queue a codex or canvas run to project it onto the board.'}</p>
+              </article>
+              <article className="reset-list-card">
+                <div className="reset-list-card__eyebrow">Widget Frames</div>
+                <strong>{artifacts.filter((artifact) => artifact.kind === 'widget_bundle').length}</strong>
+                <p>Server-owned render bundles stay attached to the same workspace and room.</p>
+              </article>
+              <article className="reset-list-card">
+                <div className="reset-list-card__eyebrow">Trace Rail</div>
+                <strong>{traceEvents.length}</strong>
+                <p>Replayable events, approvals, tool calls, and patches share one ledger.</p>
+              </article>
+            </div>
+          </article>
+
+          <article className="reset-panel reset-panel--stack">
+            <div className="reset-panel__header">
+              <div>
+                <div className="reset-panel__eyebrow">Connector Registry</div>
+                <h2>External Lanes</h2>
+              </div>
+            </div>
+            <div className="reset-list">
+              {visibleConnectors.map((connector) => (
+                <article className="reset-list-card" key={connector.id}>
+                  <div className="reset-list-card__eyebrow">{connector.lane}</div>
+                  <strong>{connector.label}</strong>
+                  <p>{connector.health === 'healthy' ? connector.transport : connector.endpoint ?? connector.transport}</p>
+                  <span className={`reset-pill reset-pill--${connector.health}`}>{connector.health}</span>
+                </article>
+              ))}
+              {hiddenConnectorCount > 0 ? (
+                <article className="reset-list-card">
+                  <div className="reset-list-card__eyebrow">Additional Connectors</div>
+                  <strong>+{hiddenConnectorCount} more</strong>
+                  <p>Healthy lanes are collapsed by default so the board stays visually primary.</p>
+                </article>
+              ) : null}
+            </div>
+          </article>
+        </aside>
+      </section>
+
+      {operatorDockOpen ? (
+        <section className="reset-topline">
+          <article className="reset-panel">
           <label className="reset-field-label">Workspace Path</label>
           <div className="reset-inline-form">
             <input
@@ -765,9 +903,9 @@ export function ResetWorkspaceShell({
               </article>
             ))}
           </div>
-        </article>
+          </article>
 
-        <article className="reset-panel">
+          <article className="reset-panel">
           <label className="reset-field-label">Codex Task</label>
           <input
             className="reset-input"
@@ -790,8 +928,9 @@ export function ResetWorkspaceShell({
               Queue Canvas Task
             </button>
           </div>
-        </article>
-      </section>
+          </article>
+        </section>
+      ) : null}
 
       <section className="reset-main-grid">
         <article className="reset-panel reset-panel--editor">
@@ -899,25 +1038,13 @@ export function ResetWorkspaceShell({
         <article className="reset-panel reset-panel--canvas">
           <div className="reset-panel__header">
             <div>
-              <div className="reset-panel__eyebrow">Canvas / Widget Rail</div>
-              <h2>Server-Owned Preview</h2>
+              <div className="reset-panel__eyebrow">Widget OS / Artifact Rail</div>
+              <h2>GenUI Dock</h2>
             </div>
-            <div className="reset-panel__microcopy">Reset-native TLDraw collaboration, widget artifacts, and patch review now live in the shell without ceding `/` back to the archived canvas route.</div>
-          </div>
-          <div className="reset-frame-shell">
-            <ResetCollaborationSurface
-              workspaceSessionId={workspace.id}
-              operatorLabel={localPresenceLabel}
-              onTelemetryChange={(telemetry) => {
-                setRoomTelemetry({
-                  roomName: telemetry.roomName,
-                  connectionState: telemetry.connectionState,
-                  participantCount: telemetry.participantCount,
-                  agentStatus: telemetry.agentStatus,
-                  media: telemetry.media,
-                });
-              }}
-            />
+            <div className="reset-panel__microcopy">
+              Paired data-tool and render-tool flows land here as server-owned widget bundles, diff artifacts, and
+              approval-aware previews without leaving the board.
+            </div>
           </div>
           <div className="reset-widget-form">
             <input
@@ -1082,7 +1209,7 @@ export function ResetWorkspaceShell({
           <div className="reset-panel__header">
             <div>
               <div className="reset-panel__eyebrow">BYO Agent</div>
-              <h2>OpenClaw + MCP Pack</h2>
+              <h2>Canvas Interop Pack</h2>
             </div>
             <div className="reset-panel__microcopy">
               Machine-readable entry points for external agents and local operator tooling.
@@ -1093,6 +1220,13 @@ export function ResetWorkspaceShell({
               <div className="reset-list-card__eyebrow">Recommended Clients</div>
               <strong>{agentPack.recommendedClients.join(' / ')}</strong>
               <p>{agentPack.notes[0] ?? 'Use the local companion for subscription-backed Codex auth.'}</p>
+            </article>
+            <article className="reset-list-card">
+              <div className="reset-list-card__eyebrow">Primary Surface</div>
+              <strong>{agentPack.surface}</strong>
+              <p>
+                Manifest: {agentPack.manifestUri} / Registry: {agentPack.registryUri}
+              </p>
             </article>
           </div>
           <div className="reset-command-grid">
@@ -1117,6 +1251,15 @@ export function ResetWorkspaceShell({
               <pre className="reset-command-block">{formatCommand(agentPack.commands.printManifest)}</pre>
             </article>
           </div>
+          <div className="reset-list">
+            {agentPack.connectorHints.slice(0, 4).map((hint) => (
+              <article className="reset-list-card" key={hint.connectorId}>
+                <div className="reset-list-card__eyebrow">{hint.connectorId}</div>
+                <strong>{hint.purpose}</strong>
+                <p>{hint.preferWhen}</p>
+              </article>
+            ))}
+          </div>
         </article>
 
         <article className="reset-panel">
@@ -1137,11 +1280,11 @@ export function ResetWorkspaceShell({
             </div>
             <div className="reset-room-card">
               <span>MCP</span>
-              <strong>{initialManifest.mcp.serverName}</strong>
+              <strong>{manifest.mcp.serverName}</strong>
             </div>
             <div className="reset-room-card">
               <span>Clients</span>
-              <strong>{initialManifest.collaboration.dualClient ? 'web + desktop' : 'single'}</strong>
+              <strong>{manifest.collaboration.dualClient ? 'web + desktop' : 'single'}</strong>
             </div>
           </div>
           <div className="reset-list-card">

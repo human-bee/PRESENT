@@ -21,6 +21,8 @@ describe('present MCP toolkit', () => {
   afterEach(() => {
     resetKernelStateForTests();
     delete process.env.PRESENT_RESET_STATE_PATH;
+    delete process.env.PRESENT_RESET_WORKSPACE_SESSION_ID;
+    delete process.env.PRESENT_RESET_WORKSPACE_PATH;
     fs.rmSync(workspacePath, { recursive: true, force: true });
   });
 
@@ -63,6 +65,7 @@ describe('present MCP toolkit', () => {
     expect(resources.map((resource) => resource.uri)).toEqual(
       expect.arrayContaining([
         'present://runtime/manifest',
+        'present://runtime/registry',
         'present://runtime/interop',
         'present://workspace/files',
         'present://artifact/diff',
@@ -71,5 +74,33 @@ describe('present MCP toolkit', () => {
         'present://models/status',
       ]),
     );
+  });
+
+  it('scopes runtime resources to the requested workspace session', async () => {
+    const firstWorkspace = openWorkspaceSession({
+      workspacePath,
+      title: 'First Workspace',
+      branch: 'codex/reset',
+    });
+    const secondWorkspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'present-reset-mcp-second-'));
+    fs.writeFileSync(path.join(secondWorkspacePath, 'SECOND.md'), '# SECOND\n', 'utf8');
+    const secondWorkspace = openWorkspaceSession({
+      workspacePath: secondWorkspacePath,
+      title: 'Second Workspace',
+      branch: 'codex/reset',
+    });
+
+    process.env.PRESENT_RESET_WORKSPACE_SESSION_ID = secondWorkspace.id;
+
+    const resources = await listPresentMcpResources();
+    const workspaceState = JSON.parse(resources.find((resource) => resource.uri === 'present://workspaces/state')?.text ?? '[]');
+    const interop = JSON.parse(resources.find((resource) => resource.uri === 'present://runtime/interop')?.text ?? '{}');
+
+    expect(firstWorkspace.id).not.toBe(secondWorkspace.id);
+    expect(workspaceState).toHaveLength(1);
+    expect(workspaceState[0]?.id).toBe(secondWorkspace.id);
+    expect(interop.workspaceSessionId).toBe(secondWorkspace.id);
+
+    fs.rmSync(secondWorkspacePath, { recursive: true, force: true });
   });
 });

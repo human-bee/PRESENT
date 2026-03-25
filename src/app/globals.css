@@ -151,6 +151,7 @@
 }
 
 .reset-hero,
+.reset-canvas-os,
 .reset-topline,
 .reset-main-grid,
 .reset-bottom-grid {
@@ -161,9 +162,9 @@
 .reset-hero {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  gap: 18px;
   align-items: end;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .reset-eyebrow,
@@ -186,19 +187,19 @@
 
 .reset-hero h1 {
   margin: 8px 0 10px;
-  max-width: 12ch;
+  max-width: 14ch;
   font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
-  font-size: clamp(40px, 6vw, 72px);
-  line-height: 0.95;
+  font-size: clamp(32px, 4.8vw, 56px);
+  line-height: 0.98;
   letter-spacing: -0.04em;
 }
 
 .reset-hero p {
-  max-width: 72ch;
+  max-width: 58ch;
   margin: 0;
   color: rgba(24, 20, 17, 0.72);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .dark .reset-hero p {
@@ -237,6 +238,18 @@
   margin-bottom: 18px;
 }
 
+.reset-canvas-os {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) 300px;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.reset-canvas-os__rail {
+  display: grid;
+  gap: 18px;
+}
+
 .reset-main-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 340px;
@@ -262,6 +275,10 @@
   background: rgba(17, 19, 24, 0.72);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.35);
+}
+
+.reset-panel--canvas-os {
+  overflow: hidden;
 }
 
 .reset-panel__header {
@@ -766,6 +783,18 @@
   color: #116c41;
 }
 
+.reset-pill--healthy {
+  color: #116c41;
+}
+
+.reset-pill--degraded {
+  color: #8f5a00;
+}
+
+.reset-pill--offline {
+  color: #8a3622;
+}
+
 .reset-pill--rejected,
 .reset-pill--expired {
   color: #8a3622;
@@ -864,10 +893,12 @@
 }
 
 @media (max-width: 1200px) {
+  .reset-canvas-os,
   .reset-main-grid {
     grid-template-columns: 1fr;
   }
 
+  .reset-canvas-os__rail,
   .reset-sidebar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -887,8 +918,10 @@
   }
 
   .reset-hero,
+  .reset-canvas-os,
   .reset-topline,
   .reset-bottom-grid,
+  .reset-canvas-os__rail,
   .reset-sidebar {
     grid-template-columns: 1fr;
     display: grid;
