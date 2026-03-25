@@ -50,6 +50,12 @@ describe('reset kernel', () => {
     });
 
     expect(listArtifacts(workspace.id).some((entry) => entry.id === artifact.id)).toBe(true);
+    expect(artifact.metadata['widgetRuntime']).toEqual(
+      expect.objectContaining({
+        hostKind: 'html_bundle',
+        displayMode: 'inline',
+      }),
+    );
   });
 
   it('records approval events into the trace ledger', () => {

@@ -89,6 +89,7 @@ export const buildRuntimeResourceDescriptors = () =>
     ['runtime.manifest', 'present://runtime/manifest', 'Runtime Manifest', 'manifest'],
     ['runtime.registry', 'present://runtime/registry', 'Connector Registry', 'registry'],
     ['runtime.interop', 'present://runtime/interop', 'Canvas Interop Pack', 'manifest'],
+    ['canvas.session', 'present://canvas/session', 'Canvas Session Snapshot', 'session'],
     ['workspace.state', 'present://workspaces/state', 'Workspace Sessions', 'workspace'],
     ['executor.state', 'present://executors/state', 'Executor Sessions', 'workspace'],
     ['task.state', 'present://tasks/state', 'Task Runs', 'trace'],

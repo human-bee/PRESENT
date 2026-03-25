@@ -51,6 +51,7 @@ export function buildAgentInteropPack(
     resourceUris: {
       manifest: getResourceUri(registry.resources, 'runtime.manifest', 'present://runtime/manifest'),
       registry: getResourceUri(registry.resources, 'runtime.registry', 'present://runtime/registry'),
+      canvasSession: getResourceUri(registry.resources, 'canvas.session', 'present://canvas/session'),
       workspace: getResourceUri(registry.resources, 'workspace.state', 'present://workspaces/state'),
       artifacts: getResourceUri(registry.resources, 'artifact.state', 'present://artifacts/state'),
       approvals: getResourceUri(registry.resources, 'approval.state', 'present://approvals/state'),

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   applyArtifactPatch,
   buildCanvasRuntimeSurface,
+  getCanvasSessionSnapshot,
   createApprovalRequest,
   createArtifact,
   createWorkspacePatchArtifact,
@@ -252,21 +253,69 @@ export const presentMcpTools = {
   },
   widgetCreate: {
     name: 'widget.create',
-    description: 'Create a server-owned iframe widget artifact.',
+    description: 'Create a server-owned widget bundle artifact for the board runtime.',
     schema: {
       workspaceSessionId: z.string().min(1),
       title: z.string().min(1),
-      html: z.string().min(1),
+      html: z.string().optional(),
+      hostKind: z.enum(['mcp_app', 'component', 'html_bundle']).optional(),
+      componentType: z.string().optional(),
+      componentProps: z.record(z.string(), z.unknown()).optional(),
+      resourceUri: z.string().optional(),
+      serverName: z.string().optional(),
+      toolName: z.string().optional(),
+      args: z.record(z.string(), z.unknown()).optional(),
+      displayMode: z.enum(['inline', 'pip', 'fullscreen']).optional(),
+      contextKey: z.string().optional(),
+      mimeType: z.string().optional(),
     },
-    async run(input: { workspaceSessionId: string; title: string; html: string }) {
+    async run(input: {
+      workspaceSessionId: string;
+      title: string;
+      html?: string;
+      hostKind?: 'mcp_app' | 'component' | 'html_bundle';
+      componentType?: string;
+      componentProps?: Record<string, unknown>;
+      resourceUri?: string;
+      serverName?: string;
+      toolName?: string;
+      args?: Record<string, unknown>;
+      displayMode?: 'inline' | 'pip' | 'fullscreen';
+      contextKey?: string;
+      mimeType?: string;
+    }) {
       requireWorkspaceAccess(input.workspaceSessionId);
+      const hostKind = input.hostKind ?? (input.html ? 'html_bundle' : 'component');
+      if (hostKind === 'component' && !input.componentType?.trim()) {
+        throw new Error('component widgets require componentType');
+      }
+      if (
+        hostKind === 'mcp_app' &&
+        !input.resourceUri?.trim() &&
+        !input.toolName?.trim()
+      ) {
+        throw new Error('mcp_app widgets require resourceUri or toolName');
+      }
       return {
         artifact: createArtifact({
           workspaceSessionId: input.workspaceSessionId,
           kind: 'widget_bundle',
           title: input.title,
-          mimeType: 'text/html',
-          content: input.html,
+          mimeType: input.mimeType ?? (input.html ? 'text/html' : 'application/json'),
+          content: input.html ?? '',
+          metadata: {
+            widgetRuntime: {
+              hostKind,
+              componentType: input.componentType ?? null,
+              componentProps: input.componentProps ?? {},
+              resourceUri: input.resourceUri ?? null,
+              serverName: input.serverName ?? null,
+              toolName: input.toolName ?? null,
+              args: input.args ?? null,
+              displayMode: input.displayMode ?? (hostKind === 'html_bundle' ? 'inline' : null),
+              contextKey: input.contextKey ?? 'canvas',
+            },
+          },
         }),
       };
     },
@@ -382,6 +431,7 @@ export async function listPresentMcpResources() {
       : listTraceEvents();
   const latestPatchArtifact = artifacts.find((artifact) => artifact.kind === 'file_patch') ?? null;
   const runtimeSurface = buildCanvasRuntimeSurface(workspace);
+  const canvasSession = workspace ? getCanvasSessionSnapshot(workspace.id, { runtimeSurface }) : null;
 
   return [
     {
@@ -401,6 +451,12 @@ export async function listPresentMcpResources() {
       name: 'runtime.interop',
       mimeType: 'application/json',
       text: JSON.stringify(runtimeSurface.agentPack, null, 2),
+    },
+    {
+      uri: 'present://canvas/session',
+      name: 'canvas.session',
+      mimeType: 'application/json',
+      text: JSON.stringify(canvasSession, null, 2),
     },
     {
       uri: 'present://workspaces/state',

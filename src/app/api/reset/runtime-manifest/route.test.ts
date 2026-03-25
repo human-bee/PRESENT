@@ -121,6 +121,7 @@ describe('GET /api/reset/runtime-manifest', () => {
       resourceUris: {
         manifest: 'present://runtime/manifest',
         registry: 'present://runtime/registry',
+        canvasSession: 'present://canvas/session',
         workspace: 'present://workspaces/state',
         artifacts: 'present://artifacts/state',
         approvals: 'present://approvals/state',

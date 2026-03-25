@@ -37,6 +37,8 @@ import {
   ToolboxShapeUtil,
 } from './utils';
 
+export type AnyShapeUtilConstructor = TLShapeUtilConstructor<any, any>;
+
 export interface TldrawCanvasProps
   extends Omit<ComponentProps<typeof Tldraw>, 'onMount' | 'shapeUtils'> {
   onMount?: (editor: Editor) => void;
@@ -44,8 +46,6 @@ export interface TldrawCanvasProps
   componentId?: string;
   shapeUtils?: readonly AnyShapeUtilConstructor[];
 }
-
-type AnyShapeUtilConstructor = TLShapeUtilConstructor<any, any>;
 
 export function TldrawCanvas({
   onMount,

@@ -1,6 +1,7 @@
 export * from './agent-interop';
 export * from './approvals';
 export * from './artifacts';
+export * from './board-projection';
 export * from './collaboration-docs';
 export * from './connector-registry';
 export * from './executor-leases';

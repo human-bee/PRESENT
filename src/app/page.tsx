@@ -1,5 +1,6 @@
 import { ResetWorkspaceShell } from '@present/ui';
 import {
+  buildCanvasSessionSnapshot,
   buildCanvasRuntimeSurface,
   createArtifact,
   ensureResetKernelHydrated,
@@ -135,12 +136,17 @@ export default async function Home({
     Promise.resolve(buildCanvasRuntimeSurface(workspace)),
     resolveKernelModelProfiles(),
   ]);
+  const canvasSession = buildCanvasSessionSnapshot(workspace, {
+    runtimeSurface,
+    traceLimit: 24,
+  });
 
   return (
     <ResetWorkspaceShell
       initialManifest={runtimeSurface.manifest}
       initialRegistry={runtimeSurface.registry}
       initialAgentPack={runtimeSurface.agentPack}
+      initialCanvasSession={canvasSession}
       initialWorkspace={workspace}
       initialWorkspaces={listWorkspaceSessions().slice(0, 6)}
       initialExecutors={listExecutorSessions(workspace.id)}

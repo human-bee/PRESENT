@@ -1,4 +1,5 @@
 export * from './useCanvasEventHandlers';
+export * from './useCanvasRoomHost';
 export * from './useCollaborationRole';
 export * from './useCollaborationSession';
 export * from './useEditorReady';

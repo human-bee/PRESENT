@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Room } from 'livekit-client';
-import type { customShapeUtil } from '../tldraw-canvas';
+import type { AnyShapeUtilConstructor } from '../tldraw-canvas';
 import { useCollaborationRole } from './useCollaborationRole';
 import { useTLDrawSync } from './useTLDrawSync';
 
@@ -9,7 +9,7 @@ export type CollaborationStatus = 'idle' | 'connecting' | 'syncing' | 'ready' | 
 interface UseCollaborationSessionOptions {
   roomName: string;
   room: Room | undefined;
-  shapeUtils?: readonly (typeof customShapeUtil)[];
+  shapeUtils?: readonly AnyShapeUtilConstructor[];
   onError?: (message: string) => void;
 }
 

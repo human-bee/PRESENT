@@ -12,6 +12,8 @@ import {
   type ComponentType,
 } from 'react';
 import {
+  type CanvasSessionNode,
+  type CanvasSessionSnapshot,
   resolveCanvasRoomId,
   type ApprovalRequest,
   type AgentInteropPack,
@@ -22,6 +24,7 @@ import {
   type PresenceMember,
   type RuntimeManifest,
   type TaskRun,
+  type WidgetInstance,
   type WorkspaceFileDocument,
   type WorkspaceFileEntry,
   type WorkspaceSession,
@@ -103,6 +106,7 @@ type ResetWorkspaceShellProps = {
   initialManifest: RuntimeManifest;
   initialRegistry: ConnectorRegistrySnapshot;
   initialAgentPack: AgentInteropPack;
+  initialCanvasSession: CanvasSessionSnapshot;
   initialWorkspace: WorkspaceSession;
   initialWorkspaces: WorkspaceSession[];
   initialExecutors: ExecutorSession[];
@@ -144,6 +148,8 @@ type RuntimeManifestResponse = {
   agentPack: AgentInteropPack;
 };
 
+type CanvasSessionResponse = CanvasSessionSnapshot;
+
 type TraceEventsResponse = {
   events: Array<Record<string, unknown>>;
 };
@@ -154,6 +160,7 @@ export function ResetWorkspaceShell({
   initialManifest,
   initialRegistry,
   initialAgentPack,
+  initialCanvasSession,
   initialWorkspace,
   initialWorkspaces,
   initialExecutors,
@@ -169,6 +176,7 @@ export function ResetWorkspaceShell({
   const [manifest, setManifest] = useState(initialManifest);
   const [registry, setRegistry] = useState(initialRegistry);
   const [agentPack, setAgentPack] = useState(initialAgentPack);
+  const [canvasSession, setCanvasSession] = useState(initialCanvasSession);
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [recentWorkspaces, setRecentWorkspaces] = useState(initialWorkspaces);
   const [executors, setExecutors] = useState(initialExecutors);
@@ -187,6 +195,8 @@ export function ResetWorkspaceShell({
   const [traceQuery, setTraceQuery] = useState('');
   const [directoryPath, setDirectoryPath] = useState('');
   const [operatorDockOpen, setOperatorDockOpen] = useState(false);
+  const [selectedRuntimeNodeId, setSelectedRuntimeNodeId] = useState<string | null>(null);
+  const [revealedWidgetArtifactId, setRevealedWidgetArtifactId] = useState<string | null>(null);
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileEntry[]>([]);
   const [activeDocument, setActiveDocument] = useState<WorkspaceFileDocument | null>(null);
   const [localIdentity, setLocalIdentity] = useState('');
@@ -213,6 +223,7 @@ export function ResetWorkspaceShell({
   const [isBusy, setIsBusy] = useState(false);
   const deferredTraceQuery = useDeferredValue(traceQuery);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const canvasRefreshTimeoutRef = useRef<number | null>(null);
   const localIdentityRef = useRef('');
   const localDisplayNameRef = useRef('Mission Control');
 
@@ -223,6 +234,14 @@ export function ResetWorkspaceShell({
   const latestPatchArtifact = useMemo(
     () => artifacts.find((artifact) => artifact.kind === 'file_patch') ?? null,
     [artifacts],
+  );
+  const projectedRunLane = useMemo(
+    () => canvasSession.nodes.find((node) => node.kind === 'run-lane') ?? null,
+    [canvasSession.nodes],
+  );
+  const selectedRuntimeNode = useMemo(
+    () => (selectedRuntimeNodeId ? canvasSession.nodes.find((node) => node.id === selectedRuntimeNodeId) ?? null : null),
+    [canvasSession.nodes, selectedRuntimeNodeId],
   );
   const activeFileBreadcrumbs = useMemo(
     () => activeDocument?.path.split('/').filter(Boolean) ?? [],
@@ -296,11 +315,32 @@ export function ResetWorkspaceShell({
     setTraceEvents(Array.isArray(payload.events) ? payload.events : []);
   });
 
+  const refreshCanvasSession = useEffectEvent(async (workspaceSessionId: string) => {
+    const search = new URLSearchParams({
+      traceLimit: '24',
+    });
+    const payload = await requestJson<CanvasSessionResponse>(
+      `/api/reset/workspaces/${encodeURIComponent(workspaceSessionId)}/canvas-session?${search.toString()}`,
+    );
+    setCanvasSession(payload);
+  });
+
   const refreshWorkspaceState = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
     await Promise.all([
       refreshWorkspaceSnapshot(workspaceSessionId),
       refreshTraceEvents(workspaceSessionId, activeQuery),
+      refreshCanvasSession(workspaceSessionId),
     ]);
+  });
+
+  const scheduleCanvasSessionRefresh = useEffectEvent((workspaceSessionId: string) => {
+    if (canvasRefreshTimeoutRef.current !== null) {
+      return;
+    }
+    canvasRefreshTimeoutRef.current = window.setTimeout(() => {
+      canvasRefreshTimeoutRef.current = null;
+      void refreshCanvasSession(workspaceSessionId);
+    }, 750);
   });
 
   const refreshWorkspaceCatalog = useEffectEvent(async () => {
@@ -462,8 +502,7 @@ export function ResetWorkspaceShell({
     const visibilityHandler = () => {
       void syncPresence(document.hidden ? 'away' : 'connected');
       if (!document.hidden) {
-        void refreshWorkspaceSnapshot(workspace.id);
-        void refreshTraceEvents(workspace.id, deferredTraceQuery);
+        void refreshWorkspaceState(workspace.id, deferredTraceQuery);
       }
     };
     const heartbeat = window.setInterval(() => {
@@ -472,7 +511,10 @@ export function ResetWorkspaceShell({
     }, 15000);
     const snapshotRefresh = window.setInterval(() => {
       if (!document.hidden) {
-        void refreshWorkspaceSnapshot(workspace.id);
+        void Promise.all([
+          refreshWorkspaceSnapshot(workspace.id),
+          refreshCanvasSession(workspace.id),
+        ]);
       }
     }, 60000);
     const cleanup = () => {
@@ -499,7 +541,16 @@ export function ResetWorkspaceShell({
       window.removeEventListener('pagehide', cleanup);
       cleanup();
     };
-  }, [deferredTraceQuery, localIdentity, refreshTraceEvents, refreshWorkspaceSnapshot, syncPresence, workspace.id]);
+  }, [
+    deferredTraceQuery,
+    localIdentity,
+    refreshCanvasSession,
+    refreshTraceEvents,
+    refreshWorkspaceSnapshot,
+    refreshWorkspaceState,
+    syncPresence,
+    workspace.id,
+  ]);
 
   useEffect(() => {
     if (!localIdentity) return;
@@ -524,6 +575,7 @@ export function ResetWorkspaceShell({
           right.updatedAt.localeCompare(left.updatedAt),
         ),
       );
+      void refreshCanvasSession(workspace.id);
     });
 
     eventSource.addEventListener('trace', (event) => {
@@ -536,6 +588,7 @@ export function ResetWorkspaceShell({
         return;
       }
       setTraceEvents((previous) => [payload, ...previous.filter((entry) => entry['id'] !== payload['id'])]);
+      scheduleCanvasSessionRefresh(workspace.id);
     });
 
     eventSource.addEventListener('done', () => {
@@ -561,9 +614,31 @@ export function ResetWorkspaceShell({
     deferredTraceQuery,
     effectiveActiveTask?.status,
     effectiveActiveTaskId,
+    refreshCanvasSession,
     refreshWorkspaceState,
+    scheduleCanvasSessionRefresh,
     workspace.id,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (canvasRefreshTimeoutRef.current !== null) {
+        window.clearTimeout(canvasRefreshTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRuntimeNodeId) return;
+    if (canvasSession.nodes.some((node) => node.id === selectedRuntimeNodeId)) return;
+    setSelectedRuntimeNodeId(null);
+  }, [canvasSession.nodes, selectedRuntimeNodeId]);
+
+  useEffect(() => {
+    if (!selectedRuntimeNodeId) {
+      setRevealedWidgetArtifactId(null);
+    }
+  }, [selectedRuntimeNodeId]);
 
   const runAction = async (action: () => Promise<void>) => {
     setIsBusy(true);
@@ -685,8 +760,35 @@ export function ResetWorkspaceShell({
           title: widgetTitle,
           mimeType: 'text/html',
           content: widgetHtml,
+          metadata: {
+            widgetRuntime: {
+              hostKind: 'html_bundle',
+              componentType: null,
+              componentProps: {},
+              resourceUri: null,
+              serverName: null,
+              toolName: null,
+              args: null,
+              displayMode: 'inline',
+              contextKey: 'canvas',
+            },
+          },
         }),
       });
+      await refreshWorkspaceState(workspace.id, deferredTraceQuery);
+    });
+  };
+
+  const copyTextValue = async (value: string | null | undefined) => {
+    if (!value || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    await navigator.clipboard.writeText(value);
+  };
+
+  const reloadWidgetArtifact = async (artifactId: string) => {
+    await runAction(async () => {
+      await requestJson(
+        `/api/reset/artifacts/${encodeURIComponent(artifactId)}?workspaceSessionId=${encodeURIComponent(workspace.id)}`,
+      );
       await refreshWorkspaceState(workspace.id, deferredTraceQuery);
     });
   };
@@ -797,6 +899,212 @@ export function ResetWorkspaceShell({
     });
   };
 
+  const renderSelectionInspector = (node: CanvasSessionNode | null) => {
+    if (!node) {
+      return (
+        <div className="reset-list">
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Run Lane</div>
+            <strong>{projectedRunLane?.title ?? 'No active run'}</strong>
+            <p>
+              {projectedRunLane?.kind === 'run-lane'
+                ? projectedRunLane.status
+                : 'Select a runtime shape on the board to inspect it here.'}
+            </p>
+          </article>
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Widget Frames</div>
+            <strong>{canvasSession.summary.widgets}</strong>
+            <p>Widgets and artifacts now live as TLDraw objects with shared layout and selection.</p>
+          </article>
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Trace Rails</div>
+            <strong>{canvasSession.summary.traceRails}</strong>
+            <p>The board keeps a fixed live replay window while the ledger search stays dock-only.</p>
+          </article>
+        </div>
+      );
+    }
+
+    const metadataEntries = Object.entries(node.metadata ?? {}).filter(([, value]) => {
+      if (value == null) return false;
+      if (Array.isArray(value)) return value.length > 0;
+      if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+      return true;
+    });
+    const nodeTitle =
+      node.kind === 'agent-seat'
+        ? node.label
+        : node.kind === 'media-tile'
+          ? node.participantIdentity
+          : node.title;
+
+    return (
+      <div className="reset-list">
+        <article className="reset-list-card">
+          <div className="reset-list-card__eyebrow">{node.kind}</div>
+          <strong>{nodeTitle}</strong>
+          <p>Sync version: {node.syncVersion}</p>
+          <p>
+            {node.retention} · {node.layoutHint.zone.replace('_', ' ')}
+          </p>
+        </article>
+
+        {node.kind === 'approval-chip' ? (
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Approval Actions</div>
+            <strong>{node.state}</strong>
+            <p>{node.detail}</p>
+            {node.state === 'pending' ? (
+              <div className="reset-inline-actions">
+                <button
+                  type="button"
+                  className="reset-button reset-button--ghost"
+                  onClick={() => {
+                    void resolveApproval(node.approvalRequestId, 'approved');
+                  }}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  className="reset-button reset-button--secondary"
+                  onClick={() => {
+                    void resolveApproval(node.approvalRequestId, 'rejected');
+                  }}
+                >
+                  Reject
+                </button>
+              </div>
+            ) : null}
+          </article>
+        ) : null}
+
+        {node.kind === 'artifact-card' ? (
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Artifact Actions</div>
+            <strong>{String(node.metadata['kind'] ?? node.mimeType)}</strong>
+            <p>{String(node.metadata['filePath'] ?? node.metadata['preview'] ?? node.mimeType)}</p>
+            {String(node.metadata['kind'] ?? '') === 'file_patch' ? (
+              <div className="reset-inline-actions">
+                <button
+                  type="button"
+                  className="reset-button reset-button--ghost"
+                  disabled={!approvedWriteApproval}
+                  onClick={() => {
+                    void applyPatchArtifact(node.artifactId);
+                  }}
+                >
+                  Apply Patch
+                </button>
+              </div>
+            ) : null}
+          </article>
+        ) : null}
+
+        {node.kind === 'widget-frame' ? (
+          <article className="reset-list-card">
+            {(() => {
+              const widgetNode = node as WidgetInstance;
+              const widgetResourceUri = widgetNode.resourceUri;
+              const artifactUri = widgetNode.artifactUri;
+              return (
+                <>
+            <div className="reset-list-card__eyebrow">Widget Runtime</div>
+            <strong>{widgetNode.widgetRuntime.hostKind}</strong>
+            <p>
+              {widgetNode.widgetRuntime.componentType
+                ? `${widgetNode.widgetRuntime.componentType} · ${widgetNode.bridgeState.status}`
+                : widgetNode.bridgeState.status}
+            </p>
+            <p>{widgetResourceUri ?? 'No model-visible resource URI available yet.'}</p>
+            <p>
+              {widgetNode.widgetRuntime.serverName || widgetNode.widgetRuntime.toolName
+                ? `Binding: ${widgetNode.widgetRuntime.serverName ?? 'unknown server'} / ${widgetNode.widgetRuntime.toolName ?? 'no tool'}`
+                : 'Binding: component or legacy HTML bundle'}
+            </p>
+            <p>Artifact route: {artifactUri ?? 'n/a'}</p>
+            <p>
+              Display: {widgetNode.widgetRuntime.displayMode ?? 'default'} · Hydrated:{' '}
+              {widgetNode.bridgeState.lastHydratedAt ?? 'pending'}
+            </p>
+            <div className="reset-inline-actions">
+              <button
+                type="button"
+                className="reset-button reset-button--ghost"
+                disabled={!widgetNode.artifactId || isBusy}
+                onClick={() => {
+                  if (!widgetNode.artifactId) return;
+                  void reloadWidgetArtifact(widgetNode.artifactId);
+                }}
+              >
+                Reload Widget
+              </button>
+              <button
+                type="button"
+                className="reset-button reset-button--ghost"
+                disabled={!widgetResourceUri}
+                onClick={() => {
+                  void copyTextValue(widgetResourceUri);
+                }}
+              >
+                Copy Resource URI
+              </button>
+              <button
+                type="button"
+                className="reset-button reset-button--secondary"
+                disabled={!widgetNode.artifactId}
+                onClick={() => {
+                  setRevealedWidgetArtifactId((current) =>
+                    current === widgetNode.artifactId ? null : widgetNode.artifactId ?? null,
+                  );
+                }}
+              >
+                Reveal Artifact ID
+              </button>
+            </div>
+            {revealedWidgetArtifactId === widgetNode.artifactId ? (
+              <pre className="reset-command-block">{`artifactId: ${widgetNode.artifactId}\nartifactUri: ${artifactUri ?? 'n/a'}\nresourceUri: ${widgetResourceUri ?? 'n/a'}`}</pre>
+            ) : null}
+                </>
+              );
+            })()}
+          </article>
+        ) : null}
+
+        {node.kind === 'trace-rail' && Array.isArray(node.metadata['preview']) ? (
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Trace Preview</div>
+            <strong>{node.eventCount} event(s)</strong>
+            <p>{node.latestEventType ?? 'trace'}</p>
+            <div className="reset-list">
+              {(node.metadata['preview'] as Array<Record<string, unknown>>).slice(0, 3).map((entry) => (
+                <article className="reset-list-card" key={String(entry['id'] ?? entry['emittedAt'] ?? Math.random())}>
+                  <div className="reset-list-card__eyebrow">{String(entry['type'] ?? 'event')}</div>
+                  <strong>{String(entry['title'] ?? 'Trace Event')}</strong>
+                  <p>{String(entry['detail'] ?? '')}</p>
+                </article>
+              ))}
+            </div>
+          </article>
+        ) : null}
+
+        {metadataEntries.length > 0 ? (
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Metadata</div>
+            <strong>{metadataEntries.length} field(s)</strong>
+            <p>
+              {metadataEntries
+                .slice(0, 4)
+                .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+                .join(' · ')}
+            </p>
+          </article>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <div className="reset-shell">
       <div className="reset-shell__backdrop" />
@@ -855,9 +1163,18 @@ export function ResetWorkspaceShell({
           </div>
           <div className="reset-frame-shell">
             <ResetCollaborationSurface
+              canvasSession={canvasSession}
+              canApplyLatestPatch={Boolean(approvedWriteApproval && latestPatchArtifact)}
+              onApplyPatchArtifact={(artifactId) => {
+                void applyPatchArtifact(artifactId);
+              }}
+              onResolveApproval={(approvalRequestId, state) => {
+                void resolveApproval(approvalRequestId, state);
+              }}
               workspaceSessionId={workspace.id}
               roomId={canonicalRoomId}
               operatorLabel={localPresenceLabel}
+              onSelectedRuntimeNodeChange={setSelectedRuntimeNodeId}
               onTelemetryChange={(telemetry) => {
                 setRoomTelemetry({
                   roomName: telemetry.roomName,
@@ -875,27 +1192,11 @@ export function ResetWorkspaceShell({
           <article className="reset-panel reset-panel--stack">
             <div className="reset-panel__header">
               <div>
-                <div className="reset-panel__eyebrow">Canvas Objects</div>
-                <h2>Visible Kernel State</h2>
+                <div className="reset-panel__eyebrow">Selection Inspector</div>
+                <h2>{selectedRuntimeNode ? 'Board-Owned Runtime Object' : 'Board Runtime Summary'}</h2>
               </div>
             </div>
-            <div className="reset-list">
-              <article className="reset-list-card">
-                <div className="reset-list-card__eyebrow">Run Lane</div>
-                <strong>{tasks[0]?.summary ?? 'No active run'}</strong>
-                <p>{tasks[0]?.status ?? 'Queue a codex or canvas run to project it onto the board.'}</p>
-              </article>
-              <article className="reset-list-card">
-                <div className="reset-list-card__eyebrow">Widget Frames</div>
-                <strong>{artifacts.filter((artifact) => artifact.kind === 'widget_bundle').length}</strong>
-                <p>Server-owned render bundles stay attached to the same workspace and room.</p>
-              </article>
-              <article className="reset-list-card">
-                <div className="reset-list-card__eyebrow">Trace Rail</div>
-                <strong>{traceEvents.length}</strong>
-                <p>Replayable events, approvals, tool calls, and patches share one ledger.</p>
-              </article>
-            </div>
+            {renderSelectionInspector(selectedRuntimeNode)}
           </article>
 
           <article className="reset-panel reset-panel--stack">

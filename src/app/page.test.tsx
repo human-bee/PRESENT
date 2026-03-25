@@ -8,6 +8,7 @@ const openWorkspaceSessionMock = jest.fn();
 const listArtifactsMock = jest.fn();
 const createArtifactMock = jest.fn();
 const buildCanvasRuntimeSurfaceMock = jest.fn();
+const buildCanvasSessionSnapshotMock = jest.fn();
 const resolveKernelModelProfilesMock = jest.fn();
 const listExecutorSessionsMock = jest.fn();
 const listApprovalRequestsMock = jest.fn();
@@ -27,6 +28,7 @@ jest.mock('@present/kernel', () => ({
   listArtifacts: (...args: unknown[]) => listArtifactsMock(...args),
   createArtifact: (...args: unknown[]) => createArtifactMock(...args),
   buildCanvasRuntimeSurface: (...args: unknown[]) => buildCanvasRuntimeSurfaceMock(...args),
+  buildCanvasSessionSnapshot: (...args: unknown[]) => buildCanvasSessionSnapshotMock(...args),
   resolveKernelModelProfiles: (...args: unknown[]) => resolveKernelModelProfilesMock(...args),
   listExecutorSessions: (...args: unknown[]) => listExecutorSessionsMock(...args),
   listApprovalRequests: (...args: unknown[]) => listApprovalRequestsMock(...args),
@@ -109,6 +111,7 @@ describe('home page invite handling', () => {
         resourceUris: {
           manifest: 'present://runtime/manifest',
           registry: 'present://runtime/registry',
+          canvasSession: 'present://canvas/session',
           workspace: 'present://workspaces/state',
           artifacts: 'present://artifacts/state',
           approvals: 'present://approvals/state',
@@ -144,6 +147,45 @@ describe('home page invite handling', () => {
         connectorHints: [],
         recommendedClients: ['Codex desktop'],
         notes: [],
+      },
+    });
+    buildCanvasSessionSnapshotMock.mockReturnValue({
+      generatedAt: new Date().toISOString(),
+      schemaVersion: 'canvas-session/v1',
+      boardMode: 'tldraw_native',
+      workspace: {
+        id: 'ws_local',
+        workspacePath: '/tmp/present-reset',
+        branch: 'codex/reset',
+        title: 'Reset Workspace',
+        state: 'active',
+        ownerUserId: null,
+        activeExecutorSessionId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        metadata: {},
+      },
+      room: {
+        generatedAt: new Date().toISOString(),
+        workspaceSessionId: 'ws_local',
+        workspaceTitle: 'Reset Workspace',
+        roomId: 'reset-ws_local',
+        primarySurface: 'canvas',
+        operatorSurfaces: ['canvas'],
+        metadata: {},
+      },
+      activeTaskRunId: null,
+      nodes: [],
+      summary: {
+        taskRuns: 0,
+        widgets: 0,
+        artifacts: 0,
+        approvals: 0,
+        pendingApprovals: 0,
+        traceRails: 0,
+        traceEvents: 0,
+        participants: 0,
+        mediaTiles: 0,
       },
     });
     resolveKernelModelProfilesMock.mockResolvedValue([]);

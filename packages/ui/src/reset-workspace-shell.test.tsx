@@ -8,7 +8,21 @@ jest.mock('next/navigation', () => ({
 }));
 
 jest.mock('./reset-collaboration-surface', () => ({
-  ResetCollaborationSurface: () => <div>Reset-native TLDraw collaboration</div>,
+  ResetCollaborationSurface: ({
+    onSelectedRuntimeNodeChange,
+  }: {
+    onSelectedRuntimeNodeChange?: (nodeId: string | null) => void;
+  }) => (
+    <div>
+      <div>Reset-native TLDraw collaboration</div>
+      <button type="button" onClick={() => onSelectedRuntimeNodeChange?.('artifact:artifact_1')}>
+        Select Runtime Artifact
+      </button>
+      <button type="button" onClick={() => onSelectedRuntimeNodeChange?.('widget:artifact_widget')}>
+        Select Runtime Widget
+      </button>
+    </div>
+  ),
 }));
 
 jest.mock('./reset-monaco-editor', () => ({
@@ -242,6 +256,7 @@ describe('ResetWorkspaceShell', () => {
           resourceUris: {
             manifest: 'present://runtime/manifest',
             registry: 'present://runtime/registry',
+            canvasSession: 'present://canvas/session',
             workspace: 'present://workspaces/state',
             artifacts: 'present://artifacts/state',
             approvals: 'present://approvals/state',
@@ -302,6 +317,106 @@ describe('ResetWorkspaceShell', () => {
           recommendedClients: ['OpenClaw', 'Codex desktop'],
           notes: ['ChatGPT auth remains local-companion only.'],
         }}
+        initialCanvasSession={{
+          generatedAt: new Date().toISOString(),
+          schemaVersion: 'canvas-session/v1',
+          boardMode: 'tldraw_native',
+          workspace: {
+            id: 'ws_123',
+            workspacePath: '/tmp/present-reset',
+            branch: 'codex/reset',
+            title: 'Reset Workspace',
+            state: 'active',
+            ownerUserId: null,
+            activeExecutorSessionId: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            metadata: {},
+          },
+          room: {
+            generatedAt: new Date().toISOString(),
+            workspaceSessionId: 'ws_123',
+            workspaceTitle: 'Reset Workspace',
+            roomId: 'reset-ws_123',
+            primarySurface: 'canvas',
+            operatorSurfaces: ['canvas', 'shell', 'archive'],
+            metadata: {},
+          },
+          activeTaskRunId: null,
+          nodes: [
+            {
+              id: 'artifact:artifact_1',
+              kind: 'artifact-card',
+              syncVersion: 'artifact-sync-1',
+              retention: 'persistent',
+              layoutHint: {
+                zone: 'center_stack',
+                priority: 0,
+                defaultSize: { w: 368, h: 220 },
+              },
+              artifactId: 'artifact_1',
+              title: 'Patch README',
+              mimeType: 'text/x-diff',
+              metadata: {
+                kind: 'file_patch',
+                filePath: 'README.md',
+                preview: 'diff --git a/README.md b/README.md',
+              },
+            },
+            {
+              id: 'widget:artifact_widget',
+              kind: 'widget-frame',
+              syncVersion: 'widget-sync-1',
+              retention: 'persistent',
+              layoutHint: {
+                zone: 'center_stack',
+                priority: 1,
+                defaultSize: { w: 440, h: 336 },
+              },
+              title: 'Research Widget',
+              artifactId: 'artifact_widget',
+              artifactUri: '/api/reset/artifacts/artifact_widget?workspaceSessionId=ws_123',
+              resourceUri: null,
+              widgetRuntime: {
+                hostKind: 'component',
+                componentType: 'ResearchPanel',
+                componentProps: {
+                  title: 'Research Widget',
+                  results: [],
+                },
+                resourceUri: null,
+                serverName: null,
+                toolName: null,
+                args: null,
+                displayMode: 'inline',
+                contextKey: 'canvas',
+              },
+              bridgeState: {
+                status: 'hydrating',
+                resourceUri: null,
+                lastHydratedAt: new Date().toISOString(),
+                privatePayloadHash: null,
+                metadata: {},
+              },
+              metadata: {
+                kind: 'widget_bundle',
+                componentType: 'ResearchPanel',
+                hostKind: 'component',
+              },
+            },
+          ],
+          summary: {
+            taskRuns: 0,
+            widgets: 1,
+            artifacts: 2,
+            approvals: 0,
+            pendingApprovals: 0,
+            traceRails: 0,
+            traceEvents: 0,
+            participants: 0,
+            mediaTiles: 0,
+          },
+        }}
         initialWorkspace={{
           id: 'ws_123',
           workspacePath: '/tmp/present-reset',
@@ -348,5 +463,12 @@ describe('ResetWorkspaceShell', () => {
     expect(await screen.findByText(/Canvas Interop Pack/i)).toBeTruthy();
     expect(await screen.findByText(/GenUI Dock/i)).toBeTruthy();
     expect((await screen.findAllByText('package.json')).length).toBeGreaterThan(0);
-  });
+    fireEvent.click(await screen.findByRole('button', { name: /Select Runtime Artifact/i }));
+    expect(await screen.findByText(/Board-Owned Runtime Object/i)).toBeTruthy();
+    expect(await screen.findByText(/Patch README/i)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: /Select Runtime Widget/i }));
+    expect(await screen.findByText(/ResearchPanel · hydrating/i)).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Reload Widget/i })).toBeTruthy();
+    expect((await screen.findByRole('button', { name: /Copy Resource URI/i })).hasAttribute('disabled')).toBe(true);
+  }, 15000);
 });

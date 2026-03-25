@@ -6,6 +6,15 @@ type ArtifactPreviewFrameProps = {
 };
 
 export function ArtifactPreviewFrame({ title, html }: ArtifactPreviewFrameProps) {
+  if (!html.trim()) {
+    return (
+      <div className="reset-frame-shell">
+        <div className="reset-frame-title">{title}</div>
+        <div className="reset-empty">This widget bundle no longer carries inline HTML in the canvas session payload.</div>
+      </div>
+    );
+  }
+
   return (
     <div className="reset-frame-shell">
       <div className="reset-frame-title">{title}</div>

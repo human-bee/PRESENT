@@ -111,9 +111,9 @@ describe('/api/reset/artifacts/[artifactId]', () => {
 
   it('returns a matching artifact', async () => {
     const { GET } = await import('./route');
-    getArtifactMock.mockReturnValue({ id: 'artifact_123' });
+    getArtifactMock.mockReturnValue({ id: 'artifact_123', workspaceSessionId: 'ws_123' });
 
-    const response = await GET(new Request('http://localhost/api/reset/artifacts/artifact_123') as never, {
+    const response = await GET(new Request('http://localhost/api/reset/artifacts/artifact_123?workspaceSessionId=ws_123') as never, {
       params: Promise.resolve({ artifactId: 'artifact_123' }),
     });
     const payload = await response.json();
@@ -127,10 +127,28 @@ describe('/api/reset/artifacts/[artifactId]', () => {
     const { GET } = await import('./route');
     getArtifactMock.mockReturnValue(null);
 
-    const response = await GET(new Request('http://localhost/api/reset/artifacts/missing') as never, {
+    const response = await GET(new Request('http://localhost/api/reset/artifacts/missing?workspaceSessionId=ws_123') as never, {
       params: Promise.resolve({ artifactId: 'missing' }),
     });
 
     expect(response.status).toBe(404);
+  });
+
+  it('fails closed when workspace scoping is missing or mismatched', async () => {
+    const { GET } = await import('./route');
+    getArtifactMock.mockReturnValue({ id: 'artifact_123', workspaceSessionId: 'ws_456' });
+
+    const missingScopeResponse = await GET(new Request('http://localhost/api/reset/artifacts/artifact_123') as never, {
+      params: Promise.resolve({ artifactId: 'artifact_123' }),
+    });
+    const mismatchedScopeResponse = await GET(
+      new Request('http://localhost/api/reset/artifacts/artifact_123?workspaceSessionId=ws_123') as never,
+      {
+        params: Promise.resolve({ artifactId: 'artifact_123' }),
+      },
+    );
+
+    expect(missingScopeResponse.status).toBe(400);
+    expect(mismatchedScopeResponse.status).toBe(404);
   });
 });

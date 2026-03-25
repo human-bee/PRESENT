@@ -2,6 +2,7 @@
 
 export { TldrawCanvas } from './canvas/tldraw-canvas';
 export type { TldrawCanvasProps } from './canvas/tldraw-canvas';
+export type { AnyShapeUtilConstructor } from './canvas/tldraw-canvas';
 
 export {
   ComponentStoreContext,
@@ -27,12 +28,6 @@ export {
   Rulers,
 } from './canvas/components';
 
-import { InfographicShapeUtil } from './shapes/InfographicShapeUtil';
-
-const customShapeUtils = [
-  InfographicShapeUtil,
-]
-
 export {
   CustomShapeUtil as customShapeUtil,
   MermaidStreamShapeUtil,
@@ -41,7 +36,6 @@ export {
   type MermaidStreamShape,
 } from './canvas/utils/shapeUtils';
 
-export { InfographicShapeUtil };
+export { InfographicShapeUtil } from './shapes/InfographicShapeUtil';
 
 export type { customShapeProps, MermaidStreamShapeProps } from './canvas/utils/types';
-

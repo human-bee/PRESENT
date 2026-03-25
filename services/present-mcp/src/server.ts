@@ -26,6 +26,7 @@ const registerResource = (name: string, uri: string) => {
 registerResource('runtime.manifest', 'present://runtime/manifest');
 registerResource('runtime.registry', 'present://runtime/registry');
 registerResource('runtime.interop', 'present://runtime/interop');
+registerResource('canvas.session', 'present://canvas/session');
 registerResource('workspace.state', 'present://workspaces/state');
 registerResource('executor.state', 'present://executors/state');
 registerResource('task.state', 'present://tasks/state');
@@ -138,7 +139,17 @@ server.tool(
   {
     workspaceSessionId: z.string(),
     title: z.string(),
-    html: z.string(),
+    html: z.string().optional(),
+    hostKind: z.enum(['mcp_app', 'component', 'html_bundle']).optional(),
+    componentType: z.string().optional(),
+    componentProps: z.record(z.string(), z.unknown()).optional(),
+    resourceUri: z.string().optional(),
+    serverName: z.string().optional(),
+    toolName: z.string().optional(),
+    args: z.record(z.string(), z.unknown()).optional(),
+    displayMode: z.enum(['inline', 'pip', 'fullscreen']).optional(),
+    contextKey: z.string().optional(),
+    mimeType: z.string().optional(),
   },
   async (input) => ({
     content: [{ type: 'text', text: JSON.stringify(await presentMcpTools.widgetCreate.run(input), null, 2) }],
