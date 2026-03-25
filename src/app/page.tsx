@@ -27,9 +27,86 @@ export default async function Home({
   const requestedWorkspaceSessionId =
     typeof params.workspace === 'string' && params.workspace.trim() ? params.workspace.trim() : null;
   const existingWorkspaces = listWorkspaceSessions();
+  const requestedWorkspace = requestedWorkspaceSessionId ? getWorkspaceSession(requestedWorkspaceSessionId) : null;
+
+  if (requestedWorkspaceSessionId && !requestedWorkspace) {
+    return (
+      <main
+        style={{
+          minHeight: '100vh',
+          display: 'grid',
+          placeItems: 'center',
+          padding: '32px',
+          background:
+            'radial-gradient(circle at top left, rgba(246,165,102,0.18), transparent 40%), linear-gradient(180deg, #11141b 0%, #0a0c10 100%)',
+          color: '#f8eee5',
+        }}
+      >
+        <article
+          style={{
+            width: 'min(92vw, 620px)',
+            padding: '32px',
+            borderRadius: '28px',
+            border: '1px solid rgba(255,255,255,0.12)',
+            background: 'rgba(17, 20, 27, 0.82)',
+            boxShadow: '0 20px 80px rgba(0,0,0,0.28)',
+          }}
+        >
+          <div
+            style={{
+              font: '600 11px/1.1 ui-monospace, SFMono-Regular, monospace',
+              letterSpacing: '.28em',
+              textTransform: 'uppercase',
+              color: '#f6a566',
+              marginBottom: '14px',
+            }}
+          >
+            Reset Workspace Missing
+          </div>
+          <h1 style={{ margin: '0 0 12px', fontSize: 'clamp(28px, 5vw, 42px)' }}>Invite Could Not Be Resolved</h1>
+          <p style={{ margin: '0 0 18px', lineHeight: 1.6, color: 'rgba(248, 238, 229, 0.78)' }}>
+            The requested workspace session is not available in this reset runtime, so PRESENT is refusing to open a
+            different room under the same invite link.
+          </p>
+          <code
+            style={{
+              display: 'block',
+              padding: '14px 16px',
+              borderRadius: '18px',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: '#f8eee5',
+              overflowX: 'auto',
+            }}
+          >
+            {requestedWorkspaceSessionId}
+          </code>
+          <div style={{ marginTop: '20px' }}>
+            <a
+              href="/"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: '44px',
+                padding: '0 18px',
+                borderRadius: '999px',
+                background: '#f6a566',
+                color: '#11141b',
+                textDecoration: 'none',
+                fontWeight: 700,
+              }}
+            >
+              Open Local Reset Workspace
+            </a>
+          </div>
+        </article>
+      </main>
+    );
+  }
 
   const workspace =
-    (requestedWorkspaceSessionId ? getWorkspaceSession(requestedWorkspaceSessionId) : null) ??
+    requestedWorkspace ??
     existingWorkspaces[0] ??
     openWorkspaceSession({
       workspacePath: process.cwd(),

@@ -75,6 +75,14 @@ describe('trace ledger filters', () => {
     ).toEqual(['evt_late']);
 
     expect(
+      listTraceEvents({
+        traceId: 'trace_123',
+        order: 'asc',
+        limit: 1,
+      }).map((event) => event.id),
+    ).toEqual(['evt_early']);
+
+    expect(
       searchTraceEvents('approval', {
         workspaceSessionId: workspace.id,
         limit: 1,

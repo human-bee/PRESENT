@@ -62,15 +62,16 @@ export function listTraceEvents(input?: string | ListTraceEventsOptions) {
     traces = traces.filter((event) => JSON.stringify(event).toLowerCase().includes(normalizedQuery));
   }
 
-  if (typeof options.limit === 'number' && options.limit > 0) {
-    traces = traces.slice(0, options.limit);
-  }
-
+  const orderedTraces = options.order === 'asc' ? [...traces].reverse() : traces;
   if (options.order === 'asc') {
-    return [...traces].reverse();
+    return typeof options.limit === 'number' && options.limit > 0
+      ? orderedTraces.slice(0, options.limit)
+      : orderedTraces;
   }
 
-  return traces;
+  return typeof options.limit === 'number' && options.limit > 0
+    ? orderedTraces.slice(0, options.limit)
+    : orderedTraces;
 }
 
 export function searchTraceEvents(query: string, options?: Omit<ListTraceEventsOptions, 'query'>) {

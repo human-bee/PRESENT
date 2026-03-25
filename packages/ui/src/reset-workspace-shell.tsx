@@ -463,10 +463,12 @@ export function ResetWorkspaceShell({
       void syncPresence(document.hidden ? 'away' : 'connected');
       if (!document.hidden) {
         void refreshWorkspaceSnapshot(workspace.id);
+        void refreshTraceEvents(workspace.id, deferredTraceQuery);
       }
     };
     const heartbeat = window.setInterval(() => {
       void syncPresence(document.hidden ? 'idle' : 'connected');
+      void refreshTraceEvents(workspace.id, deferredTraceQuery);
     }, 15000);
     const snapshotRefresh = window.setInterval(() => {
       if (!document.hidden) {
@@ -497,7 +499,7 @@ export function ResetWorkspaceShell({
       window.removeEventListener('pagehide', cleanup);
       cleanup();
     };
-  }, [localIdentity, refreshWorkspaceSnapshot, syncPresence, workspace.id]);
+  }, [deferredTraceQuery, localIdentity, refreshTraceEvents, refreshWorkspaceSnapshot, syncPresence, workspace.id]);
 
   useEffect(() => {
     if (!localIdentity) return;
