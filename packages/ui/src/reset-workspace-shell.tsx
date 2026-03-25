@@ -229,6 +229,16 @@ export function ResetWorkspaceShell({
     () => (effectiveActiveTaskId ? tasks.find((task) => task.id === effectiveActiveTaskId) ?? null : null),
     [effectiveActiveTaskId, tasks],
   );
+  const approvedWriteApproval = useMemo(
+    () =>
+      approvals.find(
+        (approval) =>
+          approval.workspaceSessionId === workspace.id &&
+          approval.state === 'approved' &&
+          (approval.kind === 'file_write' || approval.kind === 'git_action'),
+      ) ?? null,
+    [approvals, workspace.id],
+  );
   const formatCommand = (command: AgentInteropPack['commands'][keyof AgentInteropPack['commands']]) =>
     [command.command, ...command.args].join(' ');
 
@@ -660,9 +670,17 @@ export function ResetWorkspaceShell({
   };
 
   const applyPatchArtifact = async (artifactId: string) => {
+    if (!approvedWriteApproval) {
+      throw new Error('Approve a pending write request before applying a patch artifact.');
+    }
     await runAction(async () => {
       await requestJson(`/api/reset/artifacts/${encodeURIComponent(artifactId)}/apply`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approvalRequestId: approvedWriteApproval.id,
+          resolvedBy: 'mission-control',
+        }),
       });
       await refreshWorkspaceState(workspace.id, deferredTraceQuery);
       if (activeDocument) {
@@ -1082,7 +1100,12 @@ export function ResetWorkspaceShell({
               <>
                 <pre className="reset-diff-view">{latestPatchArtifact.content}</pre>
                 <div className="reset-inline-actions">
-                  <button type="button" onClick={() => applyPatchArtifact(latestPatchArtifact.id)} className="reset-button reset-button--ghost" disabled={isBusy}>
+                  <button
+                    type="button"
+                    onClick={() => applyPatchArtifact(latestPatchArtifact.id)}
+                    className="reset-button reset-button--ghost"
+                    disabled={isBusy || !approvedWriteApproval}
+                  >
                     Apply Latest Patch
                   </button>
                 </div>
@@ -1325,7 +1348,7 @@ export function ResetWorkspaceShell({
                   type="button"
                   onClick={() => applyPatchArtifact(artifact.id)}
                   className="reset-button reset-button--ghost"
-                  disabled={isBusy}
+                  disabled={isBusy || !approvedWriteApproval}
                 >
                   Apply Patch
                 </button>

@@ -1,5 +1,6 @@
 import { artifactSchema, type Artifact } from '@present/contracts';
 import { execFileSync } from 'node:child_process';
+import { consumeApprovalRequest } from './approvals';
 import { createResetId, RESET_ID_PREFIXES } from './ids';
 import { recordKernelEvent } from './traces';
 import { readResetCollection, writeResetCollection } from './persistence';
@@ -41,8 +42,12 @@ export function getArtifact(artifactId: string) {
   return listArtifacts().find((artifact) => artifact.id === artifactId) ?? null;
 }
 
-export function applyArtifactPatch(artifactId: string) {
-  const artifact = getArtifact(artifactId);
+export function applyArtifactPatch(input: {
+  artifactId: string;
+  approvalRequestId: string;
+  resolvedBy: string;
+}) {
+  const artifact = getArtifact(input.artifactId);
   if (!artifact) {
     throw new Error('Artifact not found');
   }
@@ -54,6 +59,17 @@ export function applyArtifactPatch(artifactId: string) {
   if (!workspace) {
     throw new Error('Workspace session not found');
   }
+
+  const approval = consumeApprovalRequest({
+    approvalRequestId: input.approvalRequestId,
+    workspaceSessionId: artifact.workspaceSessionId,
+    resolvedBy: input.resolvedBy,
+    requiredKinds: ['file_write', 'git_action'],
+    metadata: {
+      artifactId: artifact.id,
+      capabilityUsed: 'artifact.applyPatch',
+    },
+  });
 
   execFileSync('git', ['apply', '--whitespace=nowarn', '-'], {
     cwd: workspace.workspacePath,
@@ -67,7 +83,10 @@ export function applyArtifactPatch(artifactId: string) {
     workspaceSessionId: artifact.workspaceSessionId,
     artifactId: artifact.id,
     summary: artifact.title,
-    metadata: artifact.metadata,
+    metadata: {
+      ...artifact.metadata,
+      approvalRequestId: approval.id,
+    },
   });
 
   return artifact;

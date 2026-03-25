@@ -24,18 +24,67 @@ import {
 } from '@present/kernel';
 import { startCodexTurn } from '@present/codex-adapter';
 
-function resolveScopedWorkspace() {
+function resolveScopedWorkspaceContext() {
   const scopedWorkspaceSessionId = process.env.PRESENT_RESET_WORKSPACE_SESSION_ID?.trim() || null;
   if (scopedWorkspaceSessionId) {
-    return getWorkspaceSession(scopedWorkspaceSessionId);
+    const workspace = getWorkspaceSession(scopedWorkspaceSessionId);
+    return {
+      workspace,
+      error: workspace ? null : `Configured workspace session ${scopedWorkspaceSessionId} was not found`,
+    };
   }
 
   const scopedWorkspacePath = process.env.PRESENT_RESET_WORKSPACE_PATH?.trim() || null;
   if (scopedWorkspacePath) {
-    return listWorkspaceSessions().find((workspace) => workspace.workspacePath === scopedWorkspacePath) ?? null;
+    const workspace = listWorkspaceSessions().find((candidate) => candidate.workspacePath === scopedWorkspacePath) ?? null;
+    return {
+      workspace,
+      error: workspace ? null : `Configured workspace path ${scopedWorkspacePath} was not found`,
+    };
   }
 
-  return listWorkspaceSessions()[0] ?? null;
+  return {
+    workspace: null,
+    error: null,
+  };
+}
+
+function requireWorkspaceAccess(workspaceSessionId: string) {
+  const scoped = resolveScopedWorkspaceContext();
+  if (scoped.error) {
+    throw new Error(scoped.error);
+  }
+
+  if (scoped.workspace) {
+    if (scoped.workspace.id !== workspaceSessionId) {
+      throw new Error('Workspace session is outside the current MCP scope');
+    }
+    return scoped.workspace;
+  }
+
+  const workspace = getWorkspaceSession(workspaceSessionId);
+  if (!workspace) {
+    throw new Error('Workspace session not found');
+  }
+  return workspace;
+}
+
+function requireArtifactAccess(artifactId: string) {
+  const artifact = getArtifact(artifactId);
+  if (!artifact) {
+    throw new Error('Artifact not found');
+  }
+  requireWorkspaceAccess(artifact.workspaceSessionId);
+  return artifact;
+}
+
+function requireApprovalAccess(approvalRequestId: string) {
+  const approval = listApprovalRequests().find((entry) => entry.id === approvalRequestId) ?? null;
+  if (!approval) {
+    throw new Error('Approval request not found');
+  }
+  requireWorkspaceAccess(approval.workspaceSessionId);
+  return approval;
 }
 
 export const presentMcpTools = {
@@ -48,6 +97,16 @@ export const presentMcpTools = {
       title: z.string().optional(),
     },
     async run(input: { workspacePath: string; branch?: string; title?: string }) {
+      const scoped = resolveScopedWorkspaceContext();
+      if (scoped.error) {
+        throw new Error(scoped.error);
+      }
+      if (scoped.workspace) {
+        if (scoped.workspace.workspacePath !== input.workspacePath) {
+          throw new Error('Workspace session is outside the current MCP scope');
+        }
+        return { workspace: scoped.workspace };
+      }
       return { workspace: openWorkspaceSession(input) };
     },
   },
@@ -60,6 +119,7 @@ export const presentMcpTools = {
       limit: z.number().int().positive().max(500).optional(),
     },
     async run(input: { workspaceSessionId: string; directoryPath?: string; limit?: number }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         files: listWorkspaceFiles({
           workspaceSessionId: input.workspaceSessionId,
@@ -77,6 +137,7 @@ export const presentMcpTools = {
       filePath: z.string().min(1),
     },
     async run(input: { workspaceSessionId: string; filePath: string }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         document: readWorkspaceFile({
           workspaceSessionId: input.workspaceSessionId,
@@ -102,6 +163,7 @@ export const presentMcpTools = {
       traceId?: string;
       title?: string;
     }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         artifact: createWorkspacePatchArtifact({
           workspaceSessionId: input.workspaceSessionId,
@@ -128,6 +190,7 @@ export const presentMcpTools = {
       taskType: string;
       prompt?: string;
     }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         taskRun: await enqueueTaskRun({
           workspaceSessionId: input.workspaceSessionId,
@@ -155,6 +218,7 @@ export const presentMcpTools = {
       executorSessionId?: string;
       model?: string;
     }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         taskRun: await startCodexTurn({
           workspaceSessionId: input.workspaceSessionId,
@@ -175,6 +239,7 @@ export const presentMcpTools = {
       summary: z.string().optional(),
     },
     async run(input: { workspaceSessionId: string; prompt: string; summary?: string }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         taskRun: await enqueueTaskRun({
           workspaceSessionId: input.workspaceSessionId,
@@ -194,6 +259,7 @@ export const presentMcpTools = {
       html: z.string().min(1),
     },
     async run(input: { workspaceSessionId: string; title: string; html: string }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         artifact: createArtifact({
           workspaceSessionId: input.workspaceSessionId,
@@ -212,21 +278,30 @@ export const presentMcpTools = {
       artifactId: z.string().min(1),
     },
     async run(input: { artifactId: string }) {
-      const artifact = getArtifact(input.artifactId);
-      if (!artifact) {
-        throw new Error('Artifact not found');
-      }
-      return { artifact };
+      return { artifact: requireArtifactAccess(input.artifactId) };
     },
   },
   artifactApplyPatch: {
     name: 'artifact.applyPatch',
-    description: 'Apply a reset file patch artifact into the workspace via git apply.',
+    description: 'Apply an approved reset file patch artifact into the workspace via git apply.',
     schema: {
       artifactId: z.string().min(1),
+      approvalRequestId: z.string().min(1),
+      resolvedBy: z.string().min(1).optional(),
     },
-    async run(input: { artifactId: string }) {
-      return { artifact: applyArtifactPatch(input.artifactId) };
+    async run(input: { artifactId: string; approvalRequestId: string; resolvedBy?: string }) {
+      const artifact = requireArtifactAccess(input.artifactId);
+      const approval = requireApprovalAccess(input.approvalRequestId);
+      if (approval.workspaceSessionId !== artifact.workspaceSessionId) {
+        throw new Error('Approval request does not match artifact workspace');
+      }
+      return {
+        artifact: applyArtifactPatch({
+          artifactId: artifact.id,
+          approvalRequestId: approval.id,
+          resolvedBy: input.resolvedBy ?? 'present-mcp',
+        }),
+      };
     },
   },
   approvalRequest: {
@@ -248,6 +323,7 @@ export const presentMcpTools = {
       detail: string;
       requestedBy: string;
     }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return { approval: createApprovalRequest(input) };
     },
   },
@@ -260,6 +336,7 @@ export const presentMcpTools = {
       resolvedBy: z.string().min(1),
     },
     async run(input: { approvalRequestId: string; state: 'approved' | 'rejected' | 'expired'; resolvedBy: string }) {
+      requireApprovalAccess(input.approvalRequestId);
       const approval = resolveApprovalRequest(input);
       if (!approval) {
         throw new Error('Approval request not found');
@@ -274,21 +351,35 @@ export const presentMcpTools = {
       query: z.string().default(''),
     },
     async run(input: { query?: string }) {
-      return { events: searchTraceEvents(input.query ?? '') };
+      const scoped = resolveScopedWorkspaceContext();
+      if (scoped.error) {
+        throw new Error(scoped.error);
+      }
+      const events = searchTraceEvents(input.query ?? '');
+      return {
+        events: scoped.workspace
+          ? events.filter((event) => event.workspaceSessionId === scoped.workspace.id)
+          : events,
+      };
     },
   },
 };
 
 export async function listPresentMcpResources() {
   const modelProfiles = await resolveKernelModelProfiles();
-  const workspace = resolveScopedWorkspace();
-  const workspaces = workspace ? [workspace] : listWorkspaceSessions();
-  const executors = workspace ? listExecutorSessions(workspace.id) : listExecutorSessions();
-  const tasks = workspace ? listTaskRuns(workspace.id) : listTaskRuns();
-  const artifacts = workspace ? listArtifacts(workspace.id) : listArtifacts();
-  const approvals = workspace ? listApprovalRequests(workspace.id) : listApprovalRequests();
-  const presence = workspace ? listPresenceMembers(workspace.id) : listPresenceMembers();
-  const traces = workspace ? listTraceEvents().filter((event) => event.workspaceSessionId === workspace.id) : listTraceEvents();
+  const scoped = resolveScopedWorkspaceContext();
+  const workspace = scoped.error ? null : scoped.workspace;
+  const workspaces = scoped.error ? [] : workspace ? [workspace] : listWorkspaceSessions();
+  const executors = scoped.error ? [] : workspace ? listExecutorSessions(workspace.id) : listExecutorSessions();
+  const tasks = scoped.error ? [] : workspace ? listTaskRuns(workspace.id) : listTaskRuns();
+  const artifacts = scoped.error ? [] : workspace ? listArtifacts(workspace.id) : listArtifacts();
+  const approvals = scoped.error ? [] : workspace ? listApprovalRequests(workspace.id) : listApprovalRequests();
+  const presence = scoped.error ? [] : workspace ? listPresenceMembers(workspace.id) : listPresenceMembers();
+  const traces = scoped.error
+    ? []
+    : workspace
+      ? listTraceEvents().filter((event) => event.workspaceSessionId === workspace.id)
+      : listTraceEvents();
   const latestPatchArtifact = artifacts.find((artifact) => artifact.kind === 'file_patch') ?? null;
   const runtimeSurface = buildCanvasRuntimeSurface(workspace);
 

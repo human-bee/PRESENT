@@ -605,8 +605,10 @@ async function handleReset(state: FairyCliState, parsed: ParsedArgs, cwd: string
 
   if (action === 'apply') {
     const artifactId = readFlagString(parsed.flags, 'artifactId') ?? session.lastArtifactId ?? parsed.positionals[2];
+    const approvalRequestId = readFlagString(parsed.flags, 'approvalRequestId');
     if (!artifactId) throw new Error('reset apply requires --artifactId <id>');
-    const response = await applyResetPatchArtifact({ baseUrl, token }, { artifactId });
+    if (!approvalRequestId) throw new Error('reset apply requires --approvalRequestId <id>');
+    const response = await applyResetPatchArtifact({ baseUrl, token }, { artifactId, approvalRequestId });
     printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
     return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
   }

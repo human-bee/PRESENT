@@ -5,6 +5,7 @@ import {
   buildConnectorRegistrySnapshot,
   buildRuntimeManifest,
   completeTaskRun,
+  consumeApprovalRequest,
   createApprovalRequest,
   createArtifact,
   createTraceId,
@@ -15,6 +16,7 @@ import {
   listTraceEvents,
   openWorkspaceSession,
   resetKernelStateForTests,
+  resolveApprovalRequest,
 } from '@present/kernel';
 
 describe('reset kernel', () => {
@@ -128,5 +130,46 @@ describe('reset kernel', () => {
     expect(surface.manifest.generatedAt).toBe(surface.registry.generatedAt);
     expect(surface.agentPack.generatedAt).toBe(surface.registry.generatedAt);
     expect(surface.agentPack.roomId).toBe(surface.manifest.collaboration.defaultRoomId);
+  });
+
+  it('does not allow consumed approvals to be re-approved', () => {
+    const workspace = openWorkspaceSession({
+      workspacePath: `/tmp/present-reset-approval-guard-${Date.now()}`,
+      title: 'Approval Guard Test',
+      branch: 'codex/reset',
+    });
+    const traceId = createTraceId();
+
+    const approval = createApprovalRequest({
+      workspaceSessionId: workspace.id,
+      traceId,
+      kind: 'git_action',
+      title: 'Approve patch apply',
+      detail: 'Allow one patch apply.',
+      requestedBy: 'jest',
+    });
+
+    const approved = resolveApprovalRequest({
+      approvalRequestId: approval.id,
+      state: 'approved',
+      resolvedBy: 'jest',
+    });
+
+    expect(approved?.state).toBe('approved');
+
+    const consumed = consumeApprovalRequest({
+      approvalRequestId: approval.id,
+      workspaceSessionId: workspace.id,
+      resolvedBy: 'jest',
+    });
+
+    expect(consumed.state).toBe('expired');
+    expect(() =>
+      resolveApprovalRequest({
+        approvalRequestId: approval.id,
+        state: 'approved',
+        resolvedBy: 'jest',
+      }),
+    ).toThrow('Approval request can only be resolved while pending');
   });
 });

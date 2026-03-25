@@ -161,6 +161,8 @@ server.tool(
   presentMcpTools.artifactApplyPatch.description,
   {
     artifactId: z.string(),
+    approvalRequestId: z.string(),
+    resolvedBy: z.string().optional(),
   },
   async (input) => ({
     content: [{ type: 'text', text: JSON.stringify(await presentMcpTools.artifactApplyPatch.run(input), null, 2) }],

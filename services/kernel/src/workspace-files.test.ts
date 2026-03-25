@@ -4,11 +4,14 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   applyArtifactPatch,
+  createApprovalRequest,
+  createTraceId,
   createWorkspacePatchArtifact,
   listWorkspaceFiles,
   openWorkspaceSession,
   readWorkspaceFile,
   resetKernelStateForTests,
+  resolveApprovalRequest,
   writeWorkspaceFile,
 } from '@present/kernel';
 
@@ -67,7 +70,25 @@ describe('reset workspace files', () => {
     expect(artifact.content).toContain('--- a/index.ts');
     expect(artifact.content).toContain('+++ b/index.ts');
 
-    applyArtifactPatch(artifact.id);
+    const approval = createApprovalRequest({
+      workspaceSessionId: workspace.id,
+      traceId: createTraceId(),
+      kind: 'git_action',
+      title: 'Approve patch apply',
+      detail: 'Allow the file patch to be applied.',
+      requestedBy: 'jest',
+    });
+    resolveApprovalRequest({
+      approvalRequestId: approval.id,
+      state: 'approved',
+      resolvedBy: 'jest',
+    });
+
+    applyArtifactPatch({
+      artifactId: artifact.id,
+      approvalRequestId: approval.id,
+      resolvedBy: 'jest',
+    });
 
     const patched = readWorkspaceFile({
       workspaceSessionId: workspace.id,

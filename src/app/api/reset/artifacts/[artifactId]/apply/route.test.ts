@@ -14,11 +14,17 @@ const installFetchPrimitives = () => {
     url: string;
     nextUrl: URL;
     signal: AbortSignal;
+    private body: string;
 
-    constructor(input: string) {
+    constructor(input: string, init: { body?: string } = {}) {
       this.url = input;
       this.nextUrl = new URL(input);
       this.signal = new AbortController().signal;
+      this.body = init.body ?? '';
+    }
+
+    async json() {
+      return JSON.parse(this.body);
     }
   }
 
@@ -112,7 +118,7 @@ describe('/api/reset/artifacts/[artifactId]/apply', () => {
     flushResetKernelWritesMock.mockReset();
   });
 
-  it('applies a patch artifact and persists the write', async () => {
+  it('returns 400 when the approval payload is missing', async () => {
     const { POST } = await import('./route');
     applyArtifactPatchMock.mockReturnValue({
       id: 'artifact_123',
@@ -124,11 +130,63 @@ describe('/api/reset/artifacts/[artifactId]/apply', () => {
     });
     const payload = await response.json();
 
+    expect(response.status).toBe(400);
+    expect(flushResetKernelWritesMock).not.toHaveBeenCalled();
+    expect(payload.error).toBeTruthy();
+  });
+
+  it('applies a patch artifact and persists the write', async () => {
+    const { POST } = await import('./route');
+    applyArtifactPatchMock.mockReturnValue({
+      id: 'artifact_123',
+      appliedAt: new Date().toISOString(),
+    });
+
+    const response = await POST(
+      new Request('http://localhost/api/reset/artifacts/artifact_123/apply', {
+        body: JSON.stringify({
+          approvalRequestId: 'approval_123',
+          resolvedBy: 'mission-control',
+        }),
+      }) as never,
+      {
+        params: Promise.resolve({ artifactId: 'artifact_123' }),
+      },
+    );
+    const payload = await response.json();
+
     expect(response.status).toBe(200);
     expect(hydrateResetKernelMock).toHaveBeenCalled();
-    expect(applyArtifactPatchMock).toHaveBeenCalledWith('artifact_123');
+    expect(applyArtifactPatchMock).toHaveBeenCalledWith({
+      artifactId: 'artifact_123',
+      approvalRequestId: 'approval_123',
+      resolvedBy: 'mission-control',
+    });
     expect(flushResetKernelWritesMock).toHaveBeenCalled();
     expect(payload.artifact.id).toBe('artifact_123');
+  });
+
+  it('returns 403 when the approval is invalid', async () => {
+    const { POST } = await import('./route');
+    applyArtifactPatchMock.mockImplementation(() => {
+      throw new Error('Approval request is not approved');
+    });
+
+    const response = await POST(
+      new Request('http://localhost/api/reset/artifacts/missing/apply', {
+        body: JSON.stringify({
+          approvalRequestId: 'approval_123',
+        }),
+      }) as never,
+      {
+        params: Promise.resolve({ artifactId: 'missing' }),
+      },
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(flushResetKernelWritesMock).not.toHaveBeenCalled();
+    expect(payload.error).toBe('Approval request is not approved');
   });
 
   it('returns 404 when the artifact is missing', async () => {
@@ -137,9 +195,16 @@ describe('/api/reset/artifacts/[artifactId]/apply', () => {
       throw new Error('Artifact not found');
     });
 
-    const response = await POST(new Request('http://localhost/api/reset/artifacts/missing/apply') as never, {
-      params: Promise.resolve({ artifactId: 'missing' }),
-    });
+    const response = await POST(
+      new Request('http://localhost/api/reset/artifacts/missing/apply', {
+        body: JSON.stringify({
+          approvalRequestId: 'approval_123',
+        }),
+      }) as never,
+      {
+        params: Promise.resolve({ artifactId: 'missing' }),
+      },
+    );
     const payload = await response.json();
 
     expect(response.status).toBe(404);

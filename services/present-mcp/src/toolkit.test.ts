@@ -103,4 +103,47 @@ describe('present MCP toolkit', () => {
 
     fs.rmSync(secondWorkspacePath, { recursive: true, force: true });
   });
+
+  it('rejects tool access outside the configured workspace scope', async () => {
+    const firstWorkspace = openWorkspaceSession({
+      workspacePath,
+      title: 'First Workspace',
+      branch: 'codex/reset',
+    });
+    const secondWorkspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'present-reset-mcp-guarded-'));
+    fs.writeFileSync(path.join(secondWorkspacePath, 'SECOND.md'), '# SECOND\n', 'utf8');
+    const secondWorkspace = openWorkspaceSession({
+      workspacePath: secondWorkspacePath,
+      title: 'Second Workspace',
+      branch: 'codex/reset',
+    });
+
+    process.env.PRESENT_RESET_WORKSPACE_SESSION_ID = secondWorkspace.id;
+
+    await expect(
+      presentMcpTools.workspaceReadFile.run({
+        workspaceSessionId: firstWorkspace.id,
+        filePath: 'README.md',
+      }),
+    ).rejects.toThrow('Workspace session is outside the current MCP scope');
+
+    fs.rmSync(secondWorkspacePath, { recursive: true, force: true });
+  });
+
+  it('fails closed when the configured workspace scope is stale', async () => {
+    openWorkspaceSession({
+      workspacePath,
+      title: 'Scoped Workspace',
+      branch: 'codex/reset',
+    });
+
+    process.env.PRESENT_RESET_WORKSPACE_SESSION_ID = 'ws_missing';
+
+    const resources = await listPresentMcpResources();
+    const workspaceState = JSON.parse(resources.find((resource) => resource.uri === 'present://workspaces/state')?.text ?? '[]');
+    const artifactState = JSON.parse(resources.find((resource) => resource.uri === 'present://artifacts/state')?.text ?? '[]');
+
+    expect(workspaceState).toEqual([]);
+    expect(artifactState).toEqual([]);
+  });
 });
