@@ -41,6 +41,7 @@ import {
   buildSyncContract,
   getCanvasIdFromCurrentUrl,
 } from '@/lib/realtime/sync-contract';
+import { canonicalizeLegacyCanvasHref } from '@/lib/legacy-canvas-route';
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -153,6 +154,17 @@ export function CanvasPageClient() {
       // noop
     }
   }, [canvasId, roomName]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const canonicalHref = canonicalizeLegacyCanvasHref(window.location.href);
+      if (!canonicalHref || canonicalHref === window.location.href) return;
+      window.history.replaceState({}, '', canonicalHref);
+    } catch {
+      // noop
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
