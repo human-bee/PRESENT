@@ -13,6 +13,7 @@ import { useLkAutoConnect } from './useLkAutoConnect';
 import { useLkAgentRequest } from './useLkAgentRequest';
 import { useLkRoomHandlers } from './useLkRoomHandlers';
 import { useLkIdentity } from './useLkIdentity';
+import { buildLegacyCanvasInviteLink } from '@/lib/legacy-canvas-route';
 
 export interface UseLivekitConnectionOptions {
   roomName?: string;
@@ -191,7 +192,7 @@ export function useLivekitConnection(options: UseLivekitConnectionOptions): Live
       return;
     }
 
-    const link = `${window.location.origin}/?room=${encodeURIComponent(providedRoomName)}`;
+    const link = buildLegacyCanvasInviteLink(window.location.origin, providedRoomName);
 
     try {
       await navigator.clipboard.writeText(link);
