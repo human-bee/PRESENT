@@ -1,7 +1,7 @@
 import { run } from '@openai/agents';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
+import { jsonObjectSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
 import {
   broadcastAgentPrompt,
   broadcastToolCall,
@@ -28,6 +28,18 @@ import {
   type DebateScorecardState,
   type Claim,
 } from '@/lib/agents/debate-scorecard-schema';
+import {
+  type TimelineDocument,
+} from '@/lib/agents/timeline-schema';
+import {
+  buildTimelineWidgetPatch,
+  DEFAULT_TIMELINE_SYNC_INTERVAL_MS,
+  runTimelinePatchTask,
+  runTimelineRunTask,
+  runTimelineTurnTask,
+  TIMELINE_RESOURCE_URI,
+  TimelineTaskArgs,
+} from '@/lib/agents/timeline-task-runner';
 import { runSearchSteward } from '@/lib/agents/subagents/search-steward';
 import {
   FairyIntentSchema,
@@ -202,6 +214,7 @@ const SCORECARD_AUTO_FACT_CHECK_MAX_CLAIMS = Number(process.env.SCORECARD_AUTO_F
 
 const scorecardAutoFactCheckLedger = new Map<string, number>();
 const scorecardExecutionLocks = new Map<string, Promise<void>>();
+const timelineExecutionLocks = new Map<string, Promise<void>>();
 const logger = createLogger('agents:conductor:router');
 let swarmOrchestrator: ReturnType<typeof createSwarmOrchestrator> | null = null;
 let orchestrationReplaySequence = 0;
@@ -315,6 +328,29 @@ async function withScorecardLock<T>(key: string, fn: () => Promise<T>): Promise<
     } finally {
       if (scorecardExecutionLocks.get(key) === current) {
         scorecardExecutionLocks.delete(key);
+      }
+    }
+  }
+}
+
+async function withTimelineLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = timelineExecutionLocks.get(key) ?? Promise.resolve();
+  let release: (() => void) | undefined;
+  const next = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  const current = previous.then(() => next);
+  timelineExecutionLocks.set(key, current);
+
+  await previous;
+  try {
+    return await fn();
+  } finally {
+    try {
+      if (release) release();
+    } finally {
+      if (timelineExecutionLocks.get(key) === current) {
+        timelineExecutionLocks.delete(key);
       }
     }
   }
@@ -668,6 +704,44 @@ const shouldDedupeFairyIntent = (intent: FairyIntent) => {
   return typeof lastSeen === 'number' && now - lastSeen <= FAIRY_INTENT_DEDUPE_MS;
 };
 
+const inferFallbackFairyRoute = (
+  intent: FairyIntent,
+  error: unknown,
+): FairyRouteDecision => {
+  const message = intent.message.trim();
+  const lowered = message.toLowerCase();
+  const contextProfile = normalizeFairyContextProfile(intent.contextProfile) ?? DEFAULT_FAIRY_CONTEXT_PROFILE;
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  if (/\b(scorecard|debate|fact check|fact-check|verify|refute|claim)\b/i.test(lowered)) {
+    return {
+      kind: 'scorecard',
+      confidence: 0.45,
+      message,
+      summary: `Fallback scorecard route after fairy router error: ${errorMessage.slice(0, 120)}`,
+      contextProfile,
+    };
+  }
+
+  if (/\b(timeline|roadmap|sprint|milestone|dependency|dependencies|blocked by|depends on|blocker|handoff|delivery plan|launch plan)\b/i.test(lowered)) {
+    return {
+      kind: 'timeline',
+      confidence: 0.55,
+      message,
+      summary: `Fallback timeline route after fairy router error: ${errorMessage.slice(0, 120)}`,
+      contextProfile,
+    };
+  }
+
+  return {
+    kind: 'canvas',
+    confidence: 0.3,
+    message,
+    summary: `Fallback canvas route after fairy router error: ${errorMessage.slice(0, 120)}`,
+    contextProfile,
+  };
+};
+
 const resolveIntentContextProfile = (intent: FairyIntent, decision: FairyRouteDecision): FairyContextProfile => {
   const metadata = intent.metadata as Record<string, unknown> | null;
   const metaProfile =
@@ -914,6 +988,79 @@ async function dispatchFastLane(intent: FairyIntent, decision: FairyRouteDecisio
   });
 }
 
+async function ensureTimelineWidgetComponent(intent: FairyIntent) {
+  const requestedId = intent.componentId?.trim();
+  let components: Awaited<ReturnType<typeof listCanvasComponents>> = [];
+  try {
+    components = await listCanvasComponents(intent.room);
+  } catch (error) {
+    logger.warn('[Conductor] failed to list canvas components for timeline widget ensure', {
+      room: intent.room,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const existingTimelineWidget = components
+    .filter((component) => component.componentType === 'McpAppWidget')
+    .filter((component) => component.props?.resourceUri === TIMELINE_RESOURCE_URI)
+    .sort((a, b) => {
+      const aStamp = typeof a.lastUpdated === 'number' ? a.lastUpdated : 0;
+      const bStamp = typeof b.lastUpdated === 'number' ? b.lastUpdated : 0;
+      return bStamp - aStamp;
+    })[0];
+
+  const componentId = requestedId || existingTimelineWidget?.componentId || `timeline-widget-${intent.id}`;
+  const patch = buildTimelineWidgetPatch({
+    room: intent.room,
+    componentId,
+    syncStatus: 'idle',
+  });
+
+  const existingById = components.find((component) => component.componentId === componentId);
+  if (!existingById) {
+    await broadcastToolCall({
+      room: intent.room,
+      tool: 'create_component',
+      params: {
+        type: 'McpAppWidget',
+        messageId: componentId,
+        intentId: intent.id,
+        props: patch,
+      },
+    });
+    return componentId;
+  }
+
+  if (existingById.componentType !== 'McpAppWidget') {
+    const remappedComponentId = `timeline-widget-${intent.id}`;
+    await broadcastToolCall({
+      room: intent.room,
+      tool: 'create_component',
+      params: {
+        type: 'McpAppWidget',
+        messageId: remappedComponentId,
+        intentId: intent.id,
+        props: buildTimelineWidgetPatch({
+          room: intent.room,
+          componentId: remappedComponentId,
+          syncStatus: 'idle',
+        }),
+      },
+    });
+    return remappedComponentId;
+  }
+
+  await broadcastToolCall({
+    room: intent.room,
+    tool: 'update_component',
+    params: {
+      componentId,
+      patch,
+    },
+  });
+  return componentId;
+}
+
 async function ensureWidgetComponent(intent: FairyIntent, componentType: string) {
   const requestedId = intent.componentId?.trim();
   let components: Awaited<ReturnType<typeof listCanvasComponents>> = [];
@@ -1044,14 +1191,26 @@ async function handleFairyIntent(rawParams: JsonObject) {
     });
     return { status: 'deduped', intentId: intent.id, room: intent.room };
   }
-  const decision = shouldForceCanvasRoute(intent)
-    ? {
-        kind: 'canvas' as const,
-        confidence: 0.95,
-        message: intent.message,
-        contextProfile: normalizeFairyContextProfile(intent.contextProfile) ?? DEFAULT_FAIRY_CONTEXT_PROFILE,
-      }
-    : await routeFairyIntent(intent);
+  let decision: FairyRouteDecision;
+  if (shouldForceCanvasRoute(intent)) {
+    decision = {
+      kind: 'canvas' as const,
+      confidence: 0.95,
+      message: intent.message,
+      contextProfile: normalizeFairyContextProfile(intent.contextProfile) ?? DEFAULT_FAIRY_CONTEXT_PROFILE,
+    };
+  } else {
+    try {
+      decision = await routeFairyIntent(intent);
+    } catch (error) {
+      logger.warn('[Conductor] fairy router failed; applying deterministic fallback route', {
+        intentId: intent.id,
+        room: intent.room,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      decision = inferFallbackFairyRoute(intent, error);
+    }
+  }
   recordOrchestrationModelEvent({
     room: intent.room,
     requestId: replayRequestId,
@@ -1220,6 +1379,27 @@ async function handleFairyIntent(rawParams: JsonObject) {
           : {}),
         ...(intent.fastModelKeySource ? { fastModelKeySource: intent.fastModelKeySource } : {}),
         ...(intent.canvasConfigOverrides ? { canvasConfigOverrides: intent.canvasConfigOverrides } : {}),
+      });
+    }
+
+    if (decisionLike.kind === 'timeline') {
+      const componentId = await ensureTimelineWidgetComponent(intent);
+      const bundleText =
+        contextBundle && Array.isArray(contextBundle.parts)
+          ? formatFairyContextParts(contextBundle.parts as any, 3000)
+          : '';
+      return executeTaskLegacy('timeline.turn', {
+        room: intent.room,
+        componentId,
+        instruction: message,
+        ...(summary ? { summary } : {}),
+        ...(bundleText ? { contextBundle: bundleText } : {}),
+        contextProfile: actionProfile,
+        source: intent.source === 'voice' ? 'voice' : 'manual',
+        intent: 'timeline.turn',
+        requestId: replayRequestId,
+        traceId: replayTraceId,
+        intentId: replayIntentId,
       });
     }
 
@@ -1965,6 +2145,35 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
   if (taskName.startsWith('flowchart.')) {
     const result = await run(activeFlowchartSteward, JSON.stringify({ task: taskName, params }));
     return result.finalOutput;
+  }
+
+  if (taskName.startsWith('timeline.')) {
+    const parsed = TimelineTaskArgs.parse(params);
+    return withTimelineLock(`${parsed.room}:${parsed.componentId}`, async () => {
+      logger.info('[Conductor] dispatching timeline task', {
+        taskName,
+        room: parsed.room,
+        componentId: parsed.componentId,
+        source: parsed.source ?? 'manual',
+      });
+
+      if (taskName === 'timeline.patch') {
+        return {
+          status: 'completed',
+          output: await runTimelinePatchTask(parsed),
+        };
+      }
+
+      if (taskName === 'timeline.turn') {
+        return {
+          status: 'completed',
+          output: await runTimelineTurnTask(parsed),
+        };
+      }
+
+      const output = await runTimelineRunTask(parsed);
+      return { status: 'completed', output };
+    });
   }
 
   if (taskName.startsWith('scorecard.')) {

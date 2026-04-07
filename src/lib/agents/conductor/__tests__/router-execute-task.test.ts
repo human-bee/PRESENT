@@ -9,10 +9,45 @@ jest.mock('@openai/agents', () => ({
 jest.mock('@/lib/agents/shared/supabase-context', () => ({
   broadcastAgentPrompt: jest.fn(),
   broadcastToolCall: jest.fn(),
+  listCanvasComponents: jest.fn(async () => []),
   getDebateScorecard: jest.fn(async () => ({ version: 0, state: null })),
   commitDebateScorecard: jest.fn(async (_room: string, _componentId: string, payload: { state: unknown }) => ({
     version: 1,
     state: payload.state,
+  })),
+  getTimelineDocument: jest.fn(async (_room: string, componentId: string) => ({
+    version: 0,
+    lastUpdated: 0,
+    document: {
+      componentId,
+      title: 'Timeline',
+      subtitle: 'Roadmap',
+      horizonLabel: 'Now',
+      lanes: [],
+      items: [],
+      dependencies: [],
+      events: [],
+      sync: { status: 'idle', pendingExports: [] },
+      version: 0,
+      lastUpdated: 0,
+    },
+  })),
+  commitTimelineDocument: jest.fn(async (_room: string, _componentId: string) => ({
+    version: 1,
+    lastUpdated: 1,
+    document: {
+      componentId: 'timeline-widget',
+      title: 'Platform Launch Timeline',
+      subtitle: 'Roadmap',
+      horizonLabel: 'Now',
+      lanes: [],
+      items: [],
+      dependencies: [],
+      events: [],
+      sync: { status: 'live', pendingExports: [] },
+      version: 1,
+      lastUpdated: 1,
+    },
   })),
 }));
 
@@ -37,6 +72,22 @@ jest.mock('@/lib/agents/debate-judge', () => ({
 
 jest.mock('@/lib/agents/subagents/debate-steward-fast', () => ({
   runDebateScorecardStewardFast: jest.fn(async () => ({ status: 'ok' })),
+}));
+
+jest.mock('@/lib/agents/subagents/timeline-steward-fast', () => ({
+  runTimelineStewardFast: jest.fn(async () => ({
+    summary: 'Timeline updated',
+    ops: [],
+  })),
+}));
+
+jest.mock('@/lib/agents/subagents/timeline-turn-resolver', () => ({
+  resolveTimelineTurn: jest.fn(async () => ({
+    mode: 'plan',
+    summary: 'Timeline updated',
+    ops: [],
+    fallbackContextBundle: 'Turn Resolution Fallback',
+  })),
 }));
 
 jest.mock('@/lib/agents/fast-steward-config', () => ({
@@ -288,6 +339,144 @@ describe('conductor router executeTask', () => {
         ]),
       }),
     });
+  });
+
+  it('routes roadmap intents to the timeline widget lane', async () => {
+    const { flags } = await import('@/lib/feature-flags');
+    const { broadcastToolCall } = await import('@/lib/agents/shared/supabase-context');
+    const { runTimelineStewardFast } = await import('@/lib/agents/subagents/timeline-steward-fast');
+    const { resolveTimelineTurn } = await import('@/lib/agents/subagents/timeline-turn-resolver');
+
+    flags.swarmOrchestrationEnabled = false;
+    mockRouteFairyIntent.mockResolvedValueOnce({
+      kind: 'timeline',
+      confidence: 0.93,
+      message: 'Build a launch roadmap across product, engineering, and GTM.',
+    });
+    const { executeTask } = await import('@/lib/agents/conductor/router');
+
+    await executeTask('conductor.dispatch', {
+      task: 'fairy.intent',
+      params: {
+        id: 'intent-timeline',
+        room: 'canvas-room-timeline',
+        message: 'Build a launch roadmap across product, engineering, and GTM.',
+        source: 'voice',
+      },
+    });
+
+    expect(broadcastToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        room: 'canvas-room-timeline',
+        tool: 'create_component',
+        params: expect.objectContaining({
+          type: 'McpAppWidget',
+          messageId: 'timeline-widget-intent-timeline',
+          props: expect.objectContaining({
+            sizingPolicyOverride: 'always_fit',
+            autoFitWidth: false,
+            autoFitHeight: true,
+            preferredWidth: expect.any(Number),
+            preferredHeight: expect.any(Number),
+          }),
+        }),
+      }),
+    );
+    expect(runTimelineStewardFast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        room: 'canvas-room-timeline',
+        componentId: 'timeline-widget-intent-timeline',
+      }),
+    );
+    expect(resolveTimelineTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instruction: 'Build a launch roadmap across product, engineering, and GTM.',
+        document: expect.any(Object),
+      }),
+    );
+  });
+
+  it('falls back to the timeline lane when the fairy router throws on timeline speech', async () => {
+    const { flags } = await import('@/lib/feature-flags');
+    const { broadcastToolCall } = await import('@/lib/agents/shared/supabase-context');
+    const { resolveTimelineTurn } = await import('@/lib/agents/subagents/timeline-turn-resolver');
+
+    flags.swarmOrchestrationEnabled = false;
+    mockRouteFairyIntent.mockRejectedValueOnce(new Error('Cannot read properties of undefined (reading _zod)'));
+    const { executeTask } = await import('@/lib/agents/conductor/router');
+
+    await executeTask('conductor.dispatch', {
+      task: 'fairy.intent',
+      params: {
+        id: 'intent-timeline-fallback',
+        room: 'canvas-room-timeline',
+        message: 'finish hero master and legal supers depends on talent rights clearance',
+        source: 'voice',
+      },
+    });
+
+    expect(broadcastToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        room: 'canvas-room-timeline',
+        tool: 'create_component',
+      }),
+    );
+    expect(resolveTimelineTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instruction: 'finish hero master and legal supers depends on talent rights clearance',
+      }),
+    );
+  });
+
+  it('preserves staged export state when timeline.patch includes export ops', async () => {
+    const { flags } = await import('@/lib/feature-flags');
+    const { commitTimelineDocument } = await import('@/lib/agents/shared/supabase-context');
+    const { executeTask } = await import('@/lib/agents/conductor/router');
+
+    flags.swarmOrchestrationEnabled = false;
+
+    await executeTask('timeline.patch', {
+      room: 'canvas-room-timeline',
+      componentId: 'timeline-widget-proof',
+      summary: 'Seed staged export state.',
+      source: 'tool',
+      ops: [
+        {
+          type: 'stage_export',
+          exportStage: {
+            id: 'export-linear',
+            target: 'linear',
+            status: 'queued',
+            summary: 'Linear export staged for roadmap review.',
+            queuedAt: 1700000000000,
+            updatedAt: 1700000000000,
+          },
+        },
+      ],
+    });
+
+    expect(commitTimelineDocument).toHaveBeenCalledWith(
+      'canvas-room-timeline',
+      'timeline-widget-proof',
+      expect.objectContaining({
+        ops: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'stage_export',
+            exportStage: expect.objectContaining({
+              id: 'export-linear',
+              status: 'queued',
+              target: 'linear',
+            }),
+          }),
+        ]),
+      }),
+    );
+    const [, , payload] = (commitTimelineDocument as jest.Mock).mock.calls.at(-1) as [
+      string,
+      string,
+      { ops: Array<{ type: string }> },
+    ];
+    expect(payload.ops.some((op) => op.type === 'set_sync_state')).toBe(false);
   });
 
   it('parses deterministic geometry ids with "with id ... as a ..." phrasing', async () => {

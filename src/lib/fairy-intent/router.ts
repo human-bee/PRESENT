@@ -25,6 +25,7 @@ const ROUTER_SYSTEM = [
   'Also select a contextProfile: glance (minimal), standard, deep (richer context), archive (full meeting sweep).',
   'Routes:',
   '- canvas: drawing, layout, styling, positioning, or edits to the tldraw canvas.',
+  '- timeline: roadmap, sprint planning, dependency tracking, or multi-team delivery planning.',
   '- scorecard: debate scorecard creation or updates.',
   '- infographic: infographic widget requests.',
   '- kanban: linear kanban board requests.',
@@ -33,6 +34,7 @@ const ROUTER_SYSTEM = [
   '- summary: create a CRM-ready summary document for future meetings.',
   '- bundle: multiple outputs; populate actions array with each desired output.',
   '- none: no action.',
+  'When routing to timeline, set componentType to McpAppWidget.',
   'When routing to scorecard/infographic/kanban, set componentType accordingly.',
   'When routing to crowd_pulse, set componentType to CrowdPulseWidget.',
   'When routing to view, set fastLaneEvent to one of: tldraw:canvas_focus, tldraw:canvas_zoom_all, tldraw:toggleGrid, tldraw:arrangeGrid, tldraw:arrangeSidebar, tldraw:arrangeSpeaker.',
@@ -60,6 +62,36 @@ let fairyReplaySequence = 0;
 const nextFairyReplaySequence = () => {
   fairyReplaySequence += 1;
   return fairyReplaySequence;
+};
+
+const inferFallbackRoute = (intent: FairyIntent): FairyRouteDecision => {
+  const message = intent.message.trim();
+  const lowered = message.toLowerCase();
+
+  if (/\b(scorecard|debate|fact check|fact-check|verify|refute|claim)\b/i.test(lowered)) {
+    return {
+      kind: 'scorecard',
+      confidence: 0.35,
+      message,
+      contextProfile: intent.contextProfile,
+    };
+  }
+
+  if (/\b(timeline|roadmap|sprint|milestone|dependency|dependencies|blocked by|depends on|blocker|handoff|delivery plan|launch plan)\b/i.test(lowered)) {
+    return {
+      kind: 'timeline',
+      confidence: 0.45,
+      message,
+      contextProfile: intent.contextProfile,
+    };
+  }
+
+  return {
+    kind: 'canvas',
+    confidence: 0.2,
+    message,
+    contextProfile: intent.contextProfile,
+  };
 };
 
 export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteDecision> {
@@ -318,7 +350,7 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       });
     }
   } catch (error) {
-    console.warn('[FairyRouter] routing failed, falling back to canvas', error);
+    console.warn('[FairyRouter] routing failed, applying deterministic fallback route', error);
     recordModelIoEvent({
       source: 'fairy_router',
       eventType: 'model_call',
@@ -339,6 +371,7 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       priority: 'high',
     });
   }
+  const fallback = inferFallbackRoute(intent);
 
   recordModelIoEvent({
     source: 'fairy_router',
@@ -356,11 +389,7 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
     providerPath: 'fast',
     contextPriming: routerContextPriming,
     input: intent,
-    output: { kind: 'canvas', confidence: 0.2, message: intent.message },
+    output: fallback,
   });
-  return {
-    kind: 'canvas',
-    confidence: 0.2,
-    message: intent.message,
-  };
+  return fallback;
 }

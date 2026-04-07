@@ -1,0 +1,1109 @@
+{
+  "generatedAt": "2026-03-12T02:36:44.483Z",
+  "baseUrl": "http://localhost:3010",
+  "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+  "timelineComponentId": "mcp-timeline-widget-proof",
+  "timelineRunResponse": {
+    "ok": true,
+    "status": 202,
+    "payload": {
+      "status": "queued",
+      "task": {
+        "id": "e078c587-2324-455a-8d0b-502f3c74bdc0",
+        "created_at": "2026-03-12T02:35:11.263+00:00",
+        "updated_at": "2026-03-12T02:35:11.263+00:00",
+        "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+        "task": "timeline.patch",
+        "params": {
+          "ops": [
+            {
+              "type": "set_meta",
+              "title": "Super Bowl Ad Sprint",
+              "subtitle": "Two-week delivery plan for the hero spot and parallel social campaign.",
+              "horizonLabel": "Jan 29 - Feb 11 sprint window"
+            },
+            {
+              "lane": {
+                "id": "lane-creative",
+                "kind": "team",
+                "name": "Creative",
+                "color": "#7bb7ff",
+                "order": 0
+              },
+              "type": "upsert_lane"
+            },
+            {
+              "lane": {
+                "id": "lane-production",
+                "kind": "team",
+                "name": "Production",
+                "color": "#74c69d",
+                "order": 1
+              },
+              "type": "upsert_lane"
+            },
+            {
+              "lane": {
+                "id": "lane-post",
+                "kind": "team",
+                "name": "Post",
+                "color": "#c792ea",
+                "order": 2
+              },
+              "type": "upsert_lane"
+            },
+            {
+              "lane": {
+                "id": "lane-media",
+                "kind": "team",
+                "name": "Media",
+                "color": "#e9b25f",
+                "order": 3
+              },
+              "type": "upsert_lane"
+            },
+            {
+              "lane": {
+                "id": "lane-social",
+                "kind": "team",
+                "name": "Social",
+                "color": "#ff8b6b",
+                "order": 4
+              },
+              "type": "upsert_lane"
+            },
+            {
+              "item": {
+                "id": "item-script",
+                "tags": [
+                  "broadcast",
+                  "creative"
+                ],
+                "type": "milestone",
+                "notes": "Final client approval gates the full shoot plan.",
+                "owner": "Creative Director",
+                "title": "Lock 60s spot script",
+                "laneId": "lane-creative",
+                "status": "in_progress",
+                "summary": "Finalize script, supers, and CTA for the hero broadcast spot.",
+                "dueLabel": "Jan 30",
+                "blockedBy": [],
+                "createdAt": 1773282905505,
+                "updatedAt": 1773282905505,
+                "sprintLabel": "Week 1"
+              },
+              "type": "upsert_item"
+            },
+            {
+              "item": {
+                "id": "item-shoot",
+                "tags": [
+                  "production",
+                  "shoot"
+                ],
+                "type": "task",
+                "notes": "Requires approved script and call sheet lock by EOD Jan 30.",
+                "owner": "Production Lead",
+                "title": "Shoot hero spot and social selects",
+                "laneId": "lane-production",
+                "status": "in_progress",
+                "summary": "Capture the hero broadcast spot plus social-first cutdowns and stills in one shoot block.",
+                "dueLabel": "Feb 1",
+                "blockedBy": [
+                  "item-script"
+                ],
+                "createdAt": 1773282905505,
+                "updatedAt": 1773282905505,
+                "sprintLabel": "Week 1"
+              },
+              "type": "upsert_item"
+            },
+            {
+              "item": {
+                "id": "item-master",
+                "tags": [
+                  "post",
+                  "master"
+                ],
+                "type": "milestone",
+                "notes": "Blocked if finishing notes or rights clearance slip past Feb 6.",
+                "owner": "Post Supervisor",
+                "title": "Finish hero master and legal supers",
+                "laneId": "lane-post",
+                "status": "at_risk",
+                "summary": "Turn around the hero master, supers, and final legal text for network delivery.",
+                "dueLabel": "Feb 6",
+                "blockedBy": [
+                  "item-shoot"
+                ],
+                "createdAt": 1773282905505,
+                "updatedAt": 1773282905505,
+                "sprintLabel": "Week 2"
+              },
+              "type": "upsert_item"
+            },
+            {
+              "item": {
+                "id": "item-broadcast",
+                "tags": [
+                  "broadcast",
+                  "delivery"
+                ],
+                "type": "handoff",
+                "notes": "Must clear QA and legal before the broadcaster cutoff.",
+                "owner": "Media Ops",
+                "title": "Traffic national broadcast delivery",
+                "laneId": "lane-media",
+                "status": "planned",
+                "summary": "Submit network delivery package, clock numbers, and placement instructions for game week.",
+                "dueLabel": "Feb 8",
+                "blockedBy": [
+                  "item-master"
+                ],
+                "createdAt": 1773282905505,
+                "updatedAt": 1773282905505,
+                "startLabel": "Feb 7"
+              },
+              "type": "upsert_item"
+            },
+            {
+              "item": {
+                "id": "item-paid-social",
+                "tags": [
+                  "social",
+                  "paid"
+                ],
+                "type": "task",
+                "notes": "Runs in parallel with the broadcast finish once selects are approved.",
+                "owner": "Social Lead",
+                "title": "Cut six paid social variants",
+                "laneId": "lane-social",
+                "status": "planned",
+                "summary": "Version six- and fifteen-second cutdowns plus caption-safe overlays for paid social.",
+                "dueLabel": "Feb 7",
+                "blockedBy": [
+                  "item-shoot"
+                ],
+                "createdAt": 1773282905505,
+                "updatedAt": 1773282905505,
+                "sprintLabel": "Week 2"
+              },
+              "type": "upsert_item"
+            },
+            {
+              "item": {
+                "id": "item-organic",
+                "tags": [
+                  "social",
+                  "organic"
+                ],
+                "type": "sprint",
+                "notes": "Starts once paid variants and hero master timing are locked.",
+                "owner": "Community Lead",
+                "title": "Launch game-week organic teaser sequence",
+                "laneId": "lane-social",
+                "status": "planned",
+                "summary": "Sequence teaser, BTS, and countdown posts around the paid launch cadence.",
+                "dueLabel": "Feb 11",
+                "blockedBy": [
+                  "item-paid-social",
+                  "item-master"
+                ],
+                "createdAt": 1773282905505,
+                "updatedAt": 1773282905505,
+                "startLabel": "Feb 8"
+              },
+              "type": "upsert_item"
+            },
+            {
+              "type": "set_dependency",
+              "dependency": {
+                "id": "dep-script-shoot",
+                "kind": "depends_on",
+                "label": "Script approved",
+                "toItemId": "item-shoot",
+                "fromItemId": "item-script"
+              }
+            },
+            {
+              "type": "set_dependency",
+              "dependency": {
+                "id": "dep-shoot-master",
+                "kind": "depends_on",
+                "label": "Selects delivered",
+                "toItemId": "item-master",
+                "fromItemId": "item-shoot"
+              }
+            },
+            {
+              "type": "set_dependency",
+              "dependency": {
+                "id": "dep-master-broadcast",
+                "kind": "depends_on",
+                "label": "Final master approved",
+                "toItemId": "item-broadcast",
+                "fromItemId": "item-master"
+              }
+            },
+            {
+              "type": "set_dependency",
+              "dependency": {
+                "id": "dep-shoot-social",
+                "kind": "depends_on",
+                "label": "Social selects approved",
+                "toItemId": "item-paid-social",
+                "fromItemId": "item-shoot"
+              }
+            },
+            {
+              "type": "set_dependency",
+              "dependency": {
+                "id": "dep-paid-organic",
+                "kind": "handoff",
+                "label": "Parallel campaign handoff",
+                "toItemId": "item-organic",
+                "fromItemId": "item-paid-social"
+              }
+            },
+            {
+              "type": "stage_export",
+              "exportStage": {
+                "id": "export-linear",
+                "status": "queued",
+                "target": "linear",
+                "summary": "Linear export staged for roadmap review.",
+                "queuedAt": 1773282905505,
+                "updatedAt": 1773282905505
+              }
+            }
+          ],
+          "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+          "task": "timeline.patch",
+          "source": "tool",
+          "lockKey": "widget:mcp-timeline-widget-proof",
+          "summary": "Seed deterministic timeline proof snapshot.",
+          "traceId": "timeline-proof-trace-1773282905505",
+          "intentId": "timeline-proof-intent-1773282905505",
+          "metadata": {
+            "runtimeScope": "local"
+          },
+          "requestId": "timeline-proof-1773282905505",
+          "componentId": "mcp-timeline-widget-proof",
+          "runtimeScope": "local",
+          "idempotencyKey": "timeline-proof-1773282905505"
+        },
+        "status": "running",
+        "priority": 0,
+        "run_at": null,
+        "attempt": 0,
+        "error": null,
+        "request_id": "timeline-proof-1773282905505",
+        "dedupe_key": "timeline-proof-1773282905505",
+        "resource_keys": [
+          "room:canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+          "timeline:mcp-timeline-widget-proof",
+          "runtime-scope:local",
+          "lock:widget:mcp-timeline-widget-proof",
+          "skip-host:f8152f2e162b",
+          "queue-mode:local-scope-direct-claim"
+        ],
+        "lease_token": null,
+        "lease_expires_at": null,
+        "result": null,
+        "trace_id": null
+      },
+      "taskId": "e078c587-2324-455a-8d0b-502f3c74bdc0",
+      "requestId": "timeline-proof-1773282905505",
+      "traceId": "timeline-proof-trace-1773282905505",
+      "intentId": "timeline-proof-intent-1773282905505"
+    }
+  },
+  "timelineTask": {
+    "id": "e078c587-2324-455a-8d0b-502f3c74bdc0",
+    "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+    "task": "timeline.patch",
+    "status": "succeeded",
+    "attempt": 0,
+    "error": null,
+    "result": {
+      "output": {
+        "status": "ok",
+        "summary": "Seed deterministic timeline proof snapshot.",
+        "version": 1
+      },
+      "status": "completed",
+      "deduped": false,
+      "lockKey": "widget:mcp-timeline-widget-proof",
+      "executionId": "e078c587-2324-455a-8d0b-502f3c74bdc0",
+      "idempotencyKey": "timeline-proof-1773282905505"
+    },
+    "request_id": "timeline-proof-1773282905505",
+    "created_at": "2026-03-12T02:35:11.263+00:00",
+    "updated_at": "2026-03-12T02:35:26.041465+00:00",
+    "trace_id": null
+  },
+  "timelineValidation": {
+    "status": "ok"
+  },
+  "voiceIngressResult": {
+    "response": {
+      "ok": true,
+      "status": 202,
+      "payload": {
+        "status": "queued",
+        "task": {
+          "id": "da49d8af-002b-4bbe-8e2c-ad6066819627",
+          "created_at": "2026-03-12T02:35:34.427+00:00",
+          "updated_at": "2026-03-12T02:35:34.427+00:00",
+          "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+          "task": "fairy.intent",
+          "params": {
+            "id": "timeline-turn-proof-intent-1773282927167",
+            "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+            "model": "claude-haiku-4-5",
+            "source": "voice",
+            "lockKey": "widget:mcp-timeline-widget-proof",
+            "message": "rename timeline to Super Bowl Ad Sprint",
+            "traceId": "timeline-turn-proof-trace-1773282927167",
+            "metadata": {
+              "traceId": "timeline-turn-proof-trace-1773282927167",
+              "intentId": "timeline-turn-proof-intent-1773282927167",
+              "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
+              "configVersion": "74aba2730c70"
+            },
+            "provider": "anthropic",
+            "requestId": "timeline-turn-proof-1773282927167",
+            "componentId": "mcp-timeline-widget-proof",
+            "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
+            "configVersion": "74aba2730c70",
+            "provider_path": "primary",
+            "contextProfile": "standard",
+            "provider_source": "task_params"
+          },
+          "status": "queued",
+          "priority": 0,
+          "run_at": null,
+          "attempt": 0,
+          "error": null,
+          "request_id": "timeline-turn-proof-1773282927167",
+          "dedupe_key": null,
+          "resource_keys": [
+            "room:canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+            "canvas:intent",
+            "runtime-scope:whiteboard-jamie-q02f56az.livekit.cloud",
+            "lock:widget:mcp-timeline-widget-proof"
+          ],
+          "lease_token": null,
+          "lease_expires_at": null,
+          "result": null,
+          "trace_id": null
+        },
+        "taskId": "da49d8af-002b-4bbe-8e2c-ad6066819627",
+        "requestId": "timeline-turn-proof-1773282927167",
+        "traceId": "timeline-turn-proof-trace-1773282927167",
+        "intentId": "timeline-turn-proof-intent-1773282927167"
+      }
+    },
+    "task": {
+      "id": "da49d8af-002b-4bbe-8e2c-ad6066819627",
+      "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+      "task": "fairy.intent",
+      "status": "succeeded",
+      "attempt": 2,
+      "error": "Cannot read properties of undefined (reading '_zod')",
+      "result": {
+        "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+        "status": "queued",
+        "deduped": false,
+        "lockKey": "widget:mcp-timeline-widget-proof",
+        "payload": {
+          "message": "rename timeline to Super Bowl Ad Sprint",
+          "metadata": {
+            "intent": {
+              "id": "timeline-turn-proof-intent-1773282927167",
+              "kind": "canvas",
+              "source": "voice",
+              "confidence": 0.2
+            },
+            "traceId": "timeline-turn-proof-trace-1773282927167",
+            "intentId": "timeline-turn-proof-intent-1773282927167",
+            "spectrum": 0.5,
+            "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
+            "configVersion": "74aba2730c70",
+            "contextProfile": "standard"
+          },
+          "requestId": "timeline-turn-proof-intent-1773282927167"
+        },
+        "requestId": "timeline-turn-proof-intent-1773282927167",
+        "executionId": "da49d8af-002b-4bbe-8e2c-ad6066819627",
+        "idempotencyKey": null
+      },
+      "request_id": "timeline-turn-proof-1773282927167",
+      "created_at": "2026-03-12T02:35:34.427+00:00",
+      "updated_at": "2026-03-12T02:35:58.667953+00:00",
+      "trace_id": null
+    },
+    "validation": {
+      "status": "warning",
+      "message": "fairy.intent task succeeded with non-fatal warning: Cannot read properties of undefined (reading '_zod')"
+    }
+  },
+  "timelineTurnResults": [
+    {
+      "response": {
+        "ok": true,
+        "status": 202,
+        "payload": {
+          "status": "queued",
+          "task": {
+            "id": "57c71390-6280-4f11-8946-b9e5b0de69f3",
+            "created_at": "2026-03-12T02:35:59.965+00:00",
+            "updated_at": "2026-03-12T02:35:59.965+00:00",
+            "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+            "task": "timeline.turn",
+            "params": {
+              "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+              "task": "timeline.turn",
+              "prompt": "add blocker talent rights clearance to creative lane",
+              "source": "voice",
+              "lockKey": "widget:mcp-timeline-widget-proof",
+              "summary": "Deterministic follow-up: add a blocker for talent rights clearance.",
+              "traceId": "timeline-turn-proof-trace-1773282959944",
+              "intentId": "timeline-turn-proof-intent-1773282959944",
+              "metadata": {
+                "runtimeScope": "local"
+              },
+              "requestId": "timeline-turn-proof-1773282959944",
+              "componentId": "mcp-timeline-widget-proof",
+              "instruction": "add blocker talent rights clearance to creative lane",
+              "runtimeScope": "local",
+              "idempotencyKey": "timeline-turn-proof-1773282959944"
+            },
+            "status": "running",
+            "priority": 0,
+            "run_at": null,
+            "attempt": 0,
+            "error": null,
+            "request_id": "timeline-turn-proof-1773282959944",
+            "dedupe_key": "timeline-turn-proof-1773282959944",
+            "resource_keys": [
+              "room:canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+              "timeline:mcp-timeline-widget-proof",
+              "runtime-scope:local",
+              "lock:widget:mcp-timeline-widget-proof",
+              "skip-host:f8152f2e162b",
+              "queue-mode:local-scope-direct-claim"
+            ],
+            "lease_token": null,
+            "lease_expires_at": null,
+            "result": null,
+            "trace_id": null
+          },
+          "taskId": "57c71390-6280-4f11-8946-b9e5b0de69f3",
+          "requestId": "timeline-turn-proof-1773282959944",
+          "traceId": "timeline-turn-proof-trace-1773282959944",
+          "intentId": "timeline-turn-proof-intent-1773282959944"
+        }
+      },
+      "task": {
+        "id": "57c71390-6280-4f11-8946-b9e5b0de69f3",
+        "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+        "task": "timeline.turn",
+        "status": "succeeded",
+        "attempt": 0,
+        "error": null,
+        "result": {
+          "output": {
+            "status": "ok",
+            "summary": "add blocker talent rights clearance to creative lane",
+            "version": 2
+          },
+          "status": "completed",
+          "deduped": false,
+          "lockKey": "widget:mcp-timeline-widget-proof",
+          "executionId": "57c71390-6280-4f11-8946-b9e5b0de69f3",
+          "idempotencyKey": "timeline-turn-proof-1773282959944"
+        },
+        "request_id": "timeline-turn-proof-1773282959944",
+        "created_at": "2026-03-12T02:35:59.965+00:00",
+        "updated_at": "2026-03-12T02:36:01.280861+00:00",
+        "trace_id": null
+      },
+      "validation": {
+        "status": "ok"
+      }
+    },
+    {
+      "response": {
+        "ok": true,
+        "status": 202,
+        "payload": {
+          "status": "queued",
+          "task": {
+            "id": "494f9d97-910a-448e-9a7a-1afba28d31c3",
+            "created_at": "2026-03-12T02:36:01.693+00:00",
+            "updated_at": "2026-03-12T02:36:01.693+00:00",
+            "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+            "task": "timeline.turn",
+            "params": {
+              "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+              "task": "timeline.turn",
+              "prompt": "finish hero master and legal supers depends on talent rights clearance",
+              "source": "voice",
+              "lockKey": "widget:mcp-timeline-widget-proof",
+              "summary": "Deterministic follow-up: connect rights clearance to the hero master dependency chain.",
+              "traceId": "timeline-turn-proof-trace-1773282961683",
+              "intentId": "timeline-turn-proof-intent-1773282961683",
+              "metadata": {
+                "runtimeScope": "local"
+              },
+              "requestId": "timeline-turn-proof-1773282961683",
+              "componentId": "mcp-timeline-widget-proof",
+              "instruction": "finish hero master and legal supers depends on talent rights clearance",
+              "runtimeScope": "local",
+              "idempotencyKey": "timeline-turn-proof-1773282961683"
+            },
+            "status": "running",
+            "priority": 0,
+            "run_at": null,
+            "attempt": 0,
+            "error": null,
+            "request_id": "timeline-turn-proof-1773282961683",
+            "dedupe_key": "timeline-turn-proof-1773282961683",
+            "resource_keys": [
+              "room:canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+              "timeline:mcp-timeline-widget-proof",
+              "runtime-scope:local",
+              "lock:widget:mcp-timeline-widget-proof",
+              "skip-host:f8152f2e162b",
+              "queue-mode:local-scope-direct-claim"
+            ],
+            "lease_token": null,
+            "lease_expires_at": null,
+            "result": null,
+            "trace_id": null
+          },
+          "taskId": "494f9d97-910a-448e-9a7a-1afba28d31c3",
+          "requestId": "timeline-turn-proof-1773282961683",
+          "traceId": "timeline-turn-proof-trace-1773282961683",
+          "intentId": "timeline-turn-proof-intent-1773282961683"
+        }
+      },
+      "task": {
+        "id": "494f9d97-910a-448e-9a7a-1afba28d31c3",
+        "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+        "task": "timeline.turn",
+        "status": "succeeded",
+        "attempt": 0,
+        "error": null,
+        "result": {
+          "output": {
+            "status": "ok",
+            "summary": "finish hero master and legal supers depends on talent rights clearance",
+            "version": 3
+          },
+          "status": "completed",
+          "deduped": false,
+          "lockKey": "widget:mcp-timeline-widget-proof",
+          "executionId": "494f9d97-910a-448e-9a7a-1afba28d31c3",
+          "idempotencyKey": "timeline-turn-proof-1773282961683"
+        },
+        "request_id": "timeline-turn-proof-1773282961683",
+        "created_at": "2026-03-12T02:36:01.693+00:00",
+        "updated_at": "2026-03-12T02:36:02.695294+00:00",
+        "trace_id": null
+      },
+      "validation": {
+        "status": "ok"
+      }
+    },
+    {
+      "response": {
+        "ok": true,
+        "status": 202,
+        "payload": {
+          "status": "queued",
+          "task": {
+            "id": "0a719ce0-6905-4a93-a018-58c7221b6283",
+            "created_at": "2026-03-12T02:36:03.4+00:00",
+            "updated_at": "2026-03-12T02:36:03.4+00:00",
+            "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+            "task": "timeline.turn",
+            "params": {
+              "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+              "task": "timeline.turn",
+              "prompt": "mark finish hero master and legal supers blocked",
+              "source": "voice",
+              "lockKey": "widget:mcp-timeline-widget-proof",
+              "summary": "Deterministic follow-up: mark the hero master blocked until rights are cleared.",
+              "traceId": "timeline-turn-proof-trace-1773282963381",
+              "intentId": "timeline-turn-proof-intent-1773282963381",
+              "metadata": {
+                "runtimeScope": "local"
+              },
+              "requestId": "timeline-turn-proof-1773282963381",
+              "componentId": "mcp-timeline-widget-proof",
+              "instruction": "mark finish hero master and legal supers blocked",
+              "runtimeScope": "local",
+              "idempotencyKey": "timeline-turn-proof-1773282963381"
+            },
+            "status": "running",
+            "priority": 0,
+            "run_at": null,
+            "attempt": 0,
+            "error": null,
+            "request_id": "timeline-turn-proof-1773282963381",
+            "dedupe_key": "timeline-turn-proof-1773282963381",
+            "resource_keys": [
+              "room:canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+              "timeline:mcp-timeline-widget-proof",
+              "runtime-scope:local",
+              "lock:widget:mcp-timeline-widget-proof",
+              "skip-host:f8152f2e162b",
+              "queue-mode:local-scope-direct-claim"
+            ],
+            "lease_token": null,
+            "lease_expires_at": null,
+            "result": null,
+            "trace_id": null
+          },
+          "taskId": "0a719ce0-6905-4a93-a018-58c7221b6283",
+          "requestId": "timeline-turn-proof-1773282963381",
+          "traceId": "timeline-turn-proof-trace-1773282963381",
+          "intentId": "timeline-turn-proof-intent-1773282963381"
+        }
+      },
+      "task": {
+        "id": "0a719ce0-6905-4a93-a018-58c7221b6283",
+        "room": "canvas-dev-ac79a741-68ae-4631-91fc-17712b495ff0",
+        "task": "timeline.turn",
+        "status": "succeeded",
+        "attempt": 0,
+        "error": null,
+        "result": {
+          "output": {
+            "status": "ok",
+            "summary": "mark finish hero master and legal supers blocked",
+            "version": 4
+          },
+          "status": "completed",
+          "deduped": false,
+          "lockKey": "widget:mcp-timeline-widget-proof",
+          "executionId": "0a719ce0-6905-4a93-a018-58c7221b6283",
+          "idempotencyKey": "timeline-turn-proof-1773282963381"
+        },
+        "request_id": "timeline-turn-proof-1773282963381",
+        "created_at": "2026-03-12T02:36:03.4+00:00",
+        "updated_at": "2026-03-12T02:36:05.374535+00:00",
+        "trace_id": null
+      },
+      "validation": {
+        "status": "ok"
+      }
+    }
+  ],
+  "syncConfirmed": true,
+  "syncedLaneCount": 8,
+  "syncedItemCount": 7,
+  "syncedDependencyCount": 7,
+  "syncChipText": "Sync live",
+  "exportChipText": "Export linear queued",
+  "detailExpanded": true,
+  "blockerRendered": true,
+  "blockedStatusRendered": true,
+  "dependencyRendered": true,
+  "laneGridOverflowing": false,
+  "laneGridClientHeight": 1954,
+  "laneGridScrollHeight": 1954,
+  "frameClipped": false,
+  "frameViewportHeight": 2579,
+  "frameDocumentHeight": 2581,
+  "traceTaskSource": "timeline",
+  "traceId": "timeline-turn-proof-trace-1773282963381",
+  "traceEvents": [
+    {
+      "id": "0524cf3b-8031-4ee9-9b86-720f773925f2",
+      "trace_id": "timeline-proof-trace-1773282905505",
+      "task_id": "e078c587-2324-455a-8d0b-502f3c74bdc0",
+      "task": "timeline.patch",
+      "stage": "queued",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:35:12.264+00:00",
+      "payload": {
+        "queueMode": "local_scope_direct_claim",
+        "runtimeScope": "local"
+      }
+    },
+    {
+      "id": "34ec74c9-5553-4383-a544-6344dc9020f1",
+      "trace_id": "timeline-proof-trace-1773282905505",
+      "task_id": "e078c587-2324-455a-8d0b-502f3c74bdc0",
+      "task": "timeline.patch",
+      "stage": "claimed",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:35:19.551+00:00",
+      "payload": {
+        "claimMode": "local_scope_direct_claim",
+        "runtimeScope": "local"
+      }
+    },
+    {
+      "id": "9d6adfd8-b2c1-43d4-ba61-673b4a42c6f2",
+      "trace_id": "timeline-proof-trace-1773282905505",
+      "task_id": "e078c587-2324-455a-8d0b-502f3c74bdc0",
+      "task": "timeline.patch",
+      "stage": "executing",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:35:19.551+00:00",
+      "payload": {
+        "model": null,
+        "route": "other",
+        "provider": "unknown",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "6902b5d7-9c1a-4c81-8a02-aea1f1acf21a",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
+        "providerRequestId": null
+      }
+    },
+    {
+      "id": "90ec9321-5d43-4d88-8544-a363f5909533",
+      "trace_id": "timeline-proof-trace-1773282905505",
+      "task_id": "e078c587-2324-455a-8d0b-502f3c74bdc0",
+      "task": "timeline.patch",
+      "stage": "completed",
+      "status": "succeeded",
+      "latency_ms": 6518,
+      "created_at": "2026-03-12T02:35:26.07+00:00",
+      "payload": {
+        "model": null,
+        "route": "other",
+        "deduped": false,
+        "lockKey": "widget:mcp-timeline-widget-proof",
+        "provider": "unknown",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "6902b5d7-9c1a-4c81-8a02-aea1f1acf21a",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
+        "providerRequestId": null
+      }
+    },
+    {
+      "id": "d84bb229-cbf6-4404-97f0-653ef081572a",
+      "trace_id": "timeline-turn-proof-trace-1773282927167",
+      "task_id": null,
+      "task": "fairy.intent",
+      "stage": "api_received",
+      "status": "ok",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:35:34.039+00:00",
+      "payload": {
+        "model": "claude-haiku-4-5",
+        "provider": "anthropic",
+        "providerPath": "primary",
+        "providerSource": "task_params",
+        "providerRequestId": null
+      }
+    },
+    {
+      "id": "188bed12-b11a-4d26-9c7f-73dad661bd97",
+      "trace_id": "timeline-turn-proof-trace-1773282927167",
+      "task_id": "da49d8af-002b-4bbe-8e2c-ad6066819627",
+      "task": "fairy.intent",
+      "stage": "queued",
+      "status": "queued",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:35:34.624+00:00",
+      "payload": null
+    },
+    {
+      "id": "85ef6647-399f-4f7a-a88b-1a12f03b0dd4",
+      "trace_id": "timeline-turn-proof-trace-1773282927167",
+      "task_id": "da49d8af-002b-4bbe-8e2c-ad6066819627",
+      "task": "fairy.intent",
+      "stage": "claimed",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:35:38.575+00:00",
+      "payload": null
+    },
+    {
+      "id": "53c35871-d29f-4970-b7d5-d73e044a0feb",
+      "trace_id": "timeline-turn-proof-trace-1773282927167",
+      "task_id": "da49d8af-002b-4bbe-8e2c-ad6066819627",
+      "task": "fairy.intent",
+      "stage": "executing",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:35:38.576+00:00",
+      "payload": {
+        "route": "visual",
+        "workerId": "conductor-36-98c8350c",
+        "workerPid": "36",
+        "leaseToken": "603c0240-575e-4240-865e-3ec590e85013",
+        "workerHost": "f8152f2e162b"
+      }
+    },
+    {
+      "id": "3c0a49b0-c569-4e72-82d3-d9a32ef25c57",
+      "trace_id": "timeline-turn-proof-trace-1773282927167",
+      "task_id": "3bf82b35-765b-49ec-9559-d3986ac22074",
+      "task": "canvas.followup",
+      "stage": "queued",
+      "status": "queued",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:35:50.496+00:00",
+      "payload": null
+    },
+    {
+      "id": "9ba22fa6-b096-4607-ba8e-2ec9f7eed596",
+      "trace_id": "timeline-turn-proof-trace-1773282927167",
+      "task_id": "da49d8af-002b-4bbe-8e2c-ad6066819627",
+      "task": "fairy.intent",
+      "stage": "completed",
+      "status": "succeeded",
+      "latency_ms": 20192,
+      "created_at": "2026-03-12T02:35:58.768+00:00",
+      "payload": {
+        "route": "visual",
+        "deduped": false,
+        "lockKey": "widget:mcp-timeline-widget-proof",
+        "workerId": "conductor-36-98c8350c",
+        "workerPid": "36",
+        "leaseToken": "603c0240-575e-4240-865e-3ec590e85013",
+        "workerHost": "f8152f2e162b"
+      }
+    },
+    {
+      "id": "84927921-2c30-4fb2-8563-067794e306c9",
+      "trace_id": "timeline-turn-proof-trace-1773282959944",
+      "task_id": "57c71390-6280-4f11-8946-b9e5b0de69f3",
+      "task": "timeline.turn",
+      "stage": "queued",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:36:00.232+00:00",
+      "payload": {
+        "queueMode": "local_scope_direct_claim",
+        "runtimeScope": "local"
+      }
+    },
+    {
+      "id": "8990b602-e45f-4b93-a395-629707d702e1",
+      "trace_id": "timeline-turn-proof-trace-1773282959944",
+      "task_id": "57c71390-6280-4f11-8946-b9e5b0de69f3",
+      "task": "timeline.turn",
+      "stage": "claimed",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:36:00.527+00:00",
+      "payload": {
+        "claimMode": "local_scope_direct_claim",
+        "runtimeScope": "local"
+      }
+    },
+    {
+      "id": "d865f0b4-b96a-4963-9e98-1b67195eb97a",
+      "trace_id": "timeline-turn-proof-trace-1773282959944",
+      "task_id": "57c71390-6280-4f11-8946-b9e5b0de69f3",
+      "task": "timeline.turn",
+      "stage": "executing",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:36:00.529+00:00",
+      "payload": {
+        "model": null,
+        "route": "other",
+        "provider": "unknown",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "695b1290-8c96-4ea9-b28d-cfd1db84e642",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
+        "providerRequestId": null
+      }
+    },
+    {
+      "id": "3e0e55cf-6506-4392-9f4f-66692fd05453",
+      "trace_id": "timeline-turn-proof-trace-1773282959944",
+      "task_id": "57c71390-6280-4f11-8946-b9e5b0de69f3",
+      "task": "timeline.turn",
+      "stage": "completed",
+      "status": "succeeded",
+      "latency_ms": 765,
+      "created_at": "2026-03-12T02:36:01.294+00:00",
+      "payload": {
+        "model": null,
+        "route": "other",
+        "deduped": false,
+        "lockKey": "widget:mcp-timeline-widget-proof",
+        "provider": "unknown",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "695b1290-8c96-4ea9-b28d-cfd1db84e642",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
+        "providerRequestId": null
+      }
+    },
+    {
+      "id": "b87c4f99-66d2-4ca9-8f9b-397f1a193d79",
+      "trace_id": "timeline-turn-proof-trace-1773282961683",
+      "task_id": "494f9d97-910a-448e-9a7a-1afba28d31c3",
+      "task": "timeline.turn",
+      "stage": "queued",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:36:01.933+00:00",
+      "payload": {
+        "queueMode": "local_scope_direct_claim",
+        "runtimeScope": "local"
+      }
+    },
+    {
+      "id": "ee52836b-2bc1-4a51-8312-ff51b4d53a61",
+      "trace_id": "timeline-turn-proof-trace-1773282961683",
+      "task_id": "494f9d97-910a-448e-9a7a-1afba28d31c3",
+      "task": "timeline.turn",
+      "stage": "claimed",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:36:02.112+00:00",
+      "payload": {
+        "claimMode": "local_scope_direct_claim",
+        "runtimeScope": "local"
+      }
+    },
+    {
+      "id": "5c0b5a7d-eccc-4689-a5a5-b9a5fafa1f4e",
+      "trace_id": "timeline-turn-proof-trace-1773282961683",
+      "task_id": "494f9d97-910a-448e-9a7a-1afba28d31c3",
+      "task": "timeline.turn",
+      "stage": "executing",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:36:02.113+00:00",
+      "payload": {
+        "model": null,
+        "route": "other",
+        "provider": "unknown",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "7c1fa370-ad12-44c5-9ab6-fcbe5d131289",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
+        "providerRequestId": null
+      }
+    },
+    {
+      "id": "3315e5c4-e212-4999-88ba-9c433f758668",
+      "trace_id": "timeline-turn-proof-trace-1773282961683",
+      "task_id": "494f9d97-910a-448e-9a7a-1afba28d31c3",
+      "task": "timeline.turn",
+      "stage": "completed",
+      "status": "succeeded",
+      "latency_ms": 597,
+      "created_at": "2026-03-12T02:36:02.71+00:00",
+      "payload": {
+        "model": null,
+        "route": "other",
+        "deduped": false,
+        "lockKey": "widget:mcp-timeline-widget-proof",
+        "provider": "unknown",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "7c1fa370-ad12-44c5-9ab6-fcbe5d131289",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
+        "providerRequestId": null
+      }
+    },
+    {
+      "id": "6cebdf35-4859-40a1-9891-b31fbfcf3007",
+      "trace_id": "timeline-turn-proof-trace-1773282963381",
+      "task_id": "0a719ce0-6905-4a93-a018-58c7221b6283",
+      "task": "timeline.turn",
+      "stage": "queued",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:36:03.645+00:00",
+      "payload": {
+        "queueMode": "local_scope_direct_claim",
+        "runtimeScope": "local"
+      }
+    },
+    {
+      "id": "0c09fdf8-d840-455f-888d-dd4d9fd2f11e",
+      "trace_id": "timeline-turn-proof-trace-1773282963381",
+      "task_id": "0a719ce0-6905-4a93-a018-58c7221b6283",
+      "task": "timeline.turn",
+      "stage": "claimed",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:36:04.575+00:00",
+      "payload": {
+        "claimMode": "local_scope_direct_claim",
+        "runtimeScope": "local"
+      }
+    },
+    {
+      "id": "af8ca1ac-0548-4e78-b7cf-4e4649ad1ac3",
+      "trace_id": "timeline-turn-proof-trace-1773282963381",
+      "task_id": "0a719ce0-6905-4a93-a018-58c7221b6283",
+      "task": "timeline.turn",
+      "stage": "executing",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-12T02:36:04.576+00:00",
+      "payload": {
+        "model": null,
+        "route": "other",
+        "provider": "unknown",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "4fbac721-193c-4aca-b8a6-e0a2c72dcede",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
+        "providerRequestId": null
+      }
+    },
+    {
+      "id": "3d4f0d68-6d5e-4676-aeed-d41a3292cf4e",
+      "trace_id": "timeline-turn-proof-trace-1773282963381",
+      "task_id": "0a719ce0-6905-4a93-a018-58c7221b6283",
+      "task": "timeline.turn",
+      "stage": "completed",
+      "status": "succeeded",
+      "latency_ms": 810,
+      "created_at": "2026-03-12T02:36:05.387+00:00",
+      "payload": {
+        "model": null,
+        "route": "other",
+        "deduped": false,
+        "lockKey": "widget:mcp-timeline-widget-proof",
+        "provider": "unknown",
+        "workerId": "conductor-45070-e20ef40a",
+        "workerPid": "45070",
+        "leaseToken": "4fbac721-193c-4aca-b8a6-e0a2c72dcede",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
+        "providerRequestId": null
+      }
+    }
+  ],
+  "screenshot": "/Users/bsteinher/.codex/worktrees/d3c3/PRESENT/docs/proof-artifacts/mcp-timeline-proof/timeline-widget-proof.png",
+  "video": "/Users/bsteinher/.codex/worktrees/d3c3/PRESENT/docs/proof-artifacts/mcp-timeline-proof/mcp-timeline-widget-demo.webm"
+}

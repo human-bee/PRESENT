@@ -18,6 +18,22 @@ create_component({
 })
 ```
 
+3. To mirror canonical roadmap timeline state into an MCP app surface, point the widget at the timeline document:
+
+```ts
+create_component({
+  type: 'McpAppWidget',
+  spec: {
+    title: 'Timeline Roadmap',
+    resourceUri: '/mcp-apps/timeline.html',
+    syncSource: 'timeline',
+    syncRoom: 'canvas-<canvas-id>',
+    syncComponentId: '<timeline-widget-component-id>',
+    syncIntervalMs: 2500,
+  }
+})
+```
+
 ## How it works
 
 - The host resolves the MCP tool metadata (`_meta.ui.resourceUri`) and loads the UI resource.
@@ -31,6 +47,10 @@ create_component({
 - `serverName` / `serverUrl`: which MCP server to use.
 - `resourceUri`: optional override for UI resource.
 - `args`: tool arguments.
+- `syncSource`: canonical sync source. Timeline uses `'timeline'`.
+- `syncRoom`: room used for canonical timeline lookup (`canvas-<id>`).
+- `syncComponentId`: timeline component id to read.
+- `syncIntervalMs`: polling cadence (1000-30000ms, default 3000).
 - `autoRun`: run on mount.
 - `runId`: change to force a re‑run.
 - `displayMode`: requested display mode (`inline`, `panel`, `modal`).
@@ -44,3 +64,5 @@ create_component({
 
 - If your MCP server does not support `resources/read` over HTTP, use the MCP proxy or update server transport.
 - Context updates from apps are stored in Context Documents (visible to the summary/infographic stewards).
+- Canonical timeline reads are available at `GET /api/steward/timeline?room=<room>&componentId=<id>` (auth + canvas membership required, except non-production dev bypass when `NEXT_PUBLIC_CANVAS_DEV_BYPASS=true`).
+- Timeline mutations enqueue through `POST /api/steward/runTimeline` and converge on the same canonical document used by the widget host.

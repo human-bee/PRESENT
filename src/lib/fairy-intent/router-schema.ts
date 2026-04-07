@@ -3,6 +3,7 @@ import { FAIRY_CONTEXT_PROFILES } from '@/lib/fairy-context/profiles';
 
 export const FAIRY_ROUTE_KINDS = [
   'canvas',
+  'timeline',
   'scorecard',
   'infographic',
   'kanban',
@@ -13,6 +14,7 @@ export const FAIRY_ROUTE_KINDS = [
   'none',
 ] as const;
 export const FAIRY_COMPONENT_TYPES = [
+  'McpAppWidget',
   'DebateScorecard',
   'InfographicWidget',
   'LinearKanbanBoard',
