@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import { getBooleanFlag } from '@/lib/feature-flags';
+import { buildAuthPageHref, getCurrentPathWithSearchAndHash } from '@/lib/auth/redirects';
 
 type ProviderId = 'openai' | 'anthropic' | 'google' | 'together' | 'cerebras';
 
@@ -96,7 +97,9 @@ export default function ModelKeysPage() {
     cerebras: false,
   });
   const [error, setError] = useState<string | null>(null);
-  const [providerLinks, setProviderLinks] = useState<Record<ProviderId, ProviderLinkState | undefined>>({
+  const [providerLinks, setProviderLinks] = useState<
+    Record<ProviderId, ProviderLinkState | undefined>
+  >({
     openai: undefined,
     anthropic: undefined,
     google: undefined,
@@ -112,7 +115,7 @@ export default function ModelKeysPage() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) router.push('/auth/signin');
+    if (!user) router.push(buildAuthPageHref('signin', getCurrentPathWithSearchAndHash()));
   }, [loading, user, router]);
 
   const refresh = useCallback(async () => {
@@ -134,7 +137,9 @@ export default function ModelKeysPage() {
         const linksRes = await fetchWithSupabaseAuth('/api/provider-links');
         if (linksRes.ok) {
           const linksJson = await linksRes.json();
-          const links = Array.isArray(linksJson?.links) ? (linksJson.links as ProviderLinkState[]) : [];
+          const links = Array.isArray(linksJson?.links)
+            ? (linksJson.links as ProviderLinkState[])
+            : [];
           const linkMap: Record<ProviderId, ProviderLinkState | undefined> = {
             openai: undefined,
             anthropic: undefined,
@@ -232,9 +237,7 @@ export default function ModelKeysPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
           <h1 className="text-2xl font-bold text-gray-900">Model Keys</h1>
-          <p className="mt-2 text-gray-700">
-            BYOK is disabled in this session.
-          </p>
+          <p className="mt-2 text-gray-700">BYOK is disabled in this session.</p>
           <div className="mt-6">
             <Link className="text-blue-600 underline" href="/canvases">
               Back to canvases
@@ -252,7 +255,8 @@ export default function ModelKeysPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Model Keys</h1>
             <p className="mt-1 text-gray-600">
-              Add your own provider API keys to share the cost of AI features. Keys are encrypted on the server; only status is shown here.
+              Add your own provider API keys to share the cost of AI features. Keys are encrypted on
+              the server; only status is shown here.
             </p>
             <p className="mt-1 text-sm text-blue-700">
               Unified model + knob controls are now available in{' '}
@@ -279,7 +283,9 @@ export default function ModelKeysPage() {
               const status = statusByProvider.get(p.id);
               const configured = status?.configured === true;
               const last4 = status?.last4 ? `••••${status.last4}` : '';
-              const updatedAt = status?.updatedAt ? new Date(status.updatedAt).toLocaleString() : '';
+              const updatedAt = status?.updatedAt
+                ? new Date(status.updatedAt).toLocaleString()
+                : '';
               const linkState = providerLinks[p.id];
               const isBusy = busy[p.id];
 
@@ -305,7 +311,8 @@ export default function ModelKeysPage() {
                       <div className="mt-1 text-xs text-slate-500">
                         {configured ? (
                           <>
-                            Configured {last4 ? `(${last4})` : ''}{updatedAt ? ` · Updated ${updatedAt}` : ''}
+                            Configured {last4 ? `(${last4})` : ''}
+                            {updatedAt ? ` · Updated ${updatedAt}` : ''}
                           </>
                         ) : (
                           'Not configured'
@@ -316,7 +323,12 @@ export default function ModelKeysPage() {
                           </span>
                         )}
                         <span className="ml-2">
-                          <a className="text-blue-600 underline" href={p.helpUrl} target="_blank" rel="noreferrer">
+                          <a
+                            className="text-blue-600 underline"
+                            href={p.helpUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
                             Get key
                           </a>
                         </span>
@@ -357,7 +369,8 @@ export default function ModelKeysPage() {
         </div>
 
         <div className="mt-6 text-xs text-slate-600">
-          Tip: after saving OpenAI, refresh your canvas or reconnect LiveKit so the voice agent can start.
+          Tip: after saving OpenAI, refresh your canvas or reconnect LiveKit so the voice agent can
+          start.
         </div>
       </div>
     </div>

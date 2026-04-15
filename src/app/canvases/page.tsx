@@ -20,6 +20,7 @@ import { supabase, type Canvas } from '@/lib/supabase';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import { getBooleanFlag } from '@/lib/feature-flags';
 import { Button } from '@/components/ui/button';
+import { buildAuthPageHref, getCurrentPathWithSearchAndHash } from '@/lib/auth/redirects';
 
 type UserCanvas = Canvas & { owner_id: string; membership_role: 'owner' | 'editor' | 'viewer' };
 
@@ -38,7 +39,7 @@ export default function CanvasesPage() {
   useEffect(() => {
     if (loading) return;
     if (!user) {
-      router.push('/auth/signin');
+      router.push(buildAuthPageHref('signin', getCurrentPathWithSearchAndHash()));
     }
   }, [user, loading, router]);
 
@@ -137,7 +138,8 @@ export default function CanvasesPage() {
           <div className="mb-6 rounded-lg border border-default bg-surface-secondary px-4 py-3 text-primary">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm">
-                <span className="font-semibold">OpenAI key missing.</span> Add your model keys to enable voice and stewards.
+                <span className="font-semibold">OpenAI key missing.</span> Add your model keys to
+                enable voice and stewards.
               </div>
               <Link
                 href="/settings/keys"

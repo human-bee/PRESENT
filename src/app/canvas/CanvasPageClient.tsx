@@ -36,6 +36,7 @@ import {
 } from '@/lib/journey-logger';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import { getBooleanFlag } from '@/lib/feature-flags';
+import { buildAuthPageHref, getCurrentPathWithSearchAndHash } from '@/lib/auth/redirects';
 import {
   buildCanvasRoomName,
   buildSyncContract,
@@ -484,7 +485,7 @@ export function CanvasPageClient() {
   useEffect(() => {
     if (loading) return;
     if (!user && !bypassAuth && !demoMode) {
-      router.push('/auth/signin');
+      router.push(buildAuthPageHref('signin', getCurrentPathWithSearchAndHash()));
     }
   }, [user, loading, router, bypassAuth, demoMode]);
 

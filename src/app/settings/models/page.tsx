@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
+import { buildAuthPageHref, getCurrentPathWithSearchAndHash } from '@/lib/auth/redirects';
 import { AdvancedJsonPanel } from './_components/advanced-json-panel';
 import { AdminKeyringPanel } from './_components/admin-keyring-panel';
 import { GuidedControlsPanel } from './_components/guided-controls-panel';
@@ -41,7 +42,9 @@ export default function ModelControlsPage() {
     }),
   );
 
-  const [adminScopeType, setAdminScopeType] = useState<'global' | 'room' | 'user' | 'task'>('global');
+  const [adminScopeType, setAdminScopeType] = useState<'global' | 'room' | 'user' | 'task'>(
+    'global',
+  );
   const [adminScopeId, setAdminScopeId] = useState('global');
   const [adminTaskPrefix, setAdminTaskPrefix] = useState('');
   const [adminPriority, setAdminPriority] = useState('100');
@@ -64,7 +67,7 @@ export default function ModelControlsPage() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) router.push('/auth/signin');
+    if (!user) router.push(buildAuthPageHref('signin', getCurrentPathWithSearchAndHash()));
   }, [loading, user, router]);
 
   const refresh = useCallback(async () => {
@@ -183,7 +186,15 @@ export default function ModelControlsPage() {
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Invalid admin profile config');
     }
-  }, [adminEnabled, adminPriority, adminScopeId, adminScopeType, adminTaskPrefix, guidedValues, runAction]);
+  }, [
+    adminEnabled,
+    adminPriority,
+    adminScopeId,
+    adminScopeType,
+    adminTaskPrefix,
+    guidedValues,
+    runAction,
+  ]);
 
   if (loading || !user) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -213,7 +224,9 @@ export default function ModelControlsPage() {
         </div>
 
         {error ? (
-          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
         ) : null}
 
         <StatusSummary status={status} busy={busy} onRefresh={() => void refresh()} />
@@ -223,7 +236,9 @@ export default function ModelControlsPage() {
           status={status}
           guidedValues={guidedValues}
           busy={busy}
-          onGuidedFieldChange={(path, value) => setGuidedValues((current) => ({ ...current, [path]: value }))}
+          onGuidedFieldChange={(path, value) =>
+            setGuidedValues((current) => ({ ...current, [path]: value }))
+          }
           onLoadEffectiveValues={onLoadEffectiveValues}
           onSaveGuidedUser={onSaveGuidedUser}
           onSaveGuidedAdmin={status?.isAdmin ? onSaveGuidedAdmin : undefined}
