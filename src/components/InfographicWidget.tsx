@@ -600,9 +600,16 @@ export function InfographicWidget({
       editorRef
         ?.getCurrentPageShapes?.()
         ?.find(
-          (shape) =>
-            shape.id === messageId ||
-            (shape.type === 'custom' && String(shape.props?.customComponent || '') === messageId),
+          (shape) => {
+            const customProps =
+              shape.props && typeof shape.props === 'object'
+                ? (shape.props as { customComponent?: string })
+                : null;
+            return (
+              shape.id === messageId ||
+              (shape.type === 'custom' && String(customProps?.customComponent || '') === messageId)
+            );
+          },
         ) ?? null;
 
     if (!widgetShape) return null;
