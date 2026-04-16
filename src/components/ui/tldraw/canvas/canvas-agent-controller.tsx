@@ -13,6 +13,7 @@ import { convertTldrawShapeToSimpleShape } from '@/lib/tldraw-agent/shared/forma
 import type { SimpleShape } from '@/lib/tldraw-agent/shared/format/SimpleShape';
 import type { ContextItem } from '@/lib/tldraw-agent/shared/types/ContextItem';
 import type { AgentInput } from '@/lib/tldraw-agent/shared/types/AgentInput';
+import { useCanvasRoomHost } from '../hooks/useCanvasRoomHost';
 
 interface CanvasAgentControllerProps {
   editor: Editor;
@@ -46,70 +47,6 @@ const debugWarn = (...args: Parameters<typeof console.warn>) => {
   }
 };
 
-interface AgentHostState {
-  isHost: boolean;
-  hostId: string | null;
-}
-
-function useIsAgentHost(room?: Room) {
-  const [hostState, setHostState] = useState<AgentHostState>({ isHost: false, hostId: null });
-
-  useEffect(() => {
-    if (!room) {
-      setHostState({ isHost: false, hostId: null });
-      return;
-    }
-
-    const getParticipantId = (participant: Participant | undefined) =>
-      participant?.identity || participant?.sid || '';
-    const isAgentParticipant = (participant: Participant | undefined) => {
-      const flagged = Boolean((participant as any)?.isAgent || (participant as any)?.permissions?.agent);
-      if (flagged) return true;
-      const identity = String(participant?.identity || participant?.name || '').toLowerCase();
-      if (!identity) return false;
-      if (identity.startsWith('agent-')) return true;
-      if (identity.includes('voice-agent')) return true;
-      return false;
-    };
-    const getEligibleId = (participant: Participant | undefined) => {
-      if (!participant || isAgentParticipant(participant)) return '';
-      return getParticipantId(participant);
-    };
-
-    const recompute = () => {
-      const localId = getEligibleId(room.localParticipant);
-      if (!localId) {
-        setHostState({ isHost: false, hostId: null });
-        return;
-      }
-
-      const ids = [localId];
-      room.remoteParticipants.forEach((participant) => {
-        const id = getEligibleId(participant);
-        if (id) ids.push(id);
-      });
-
-      ids.sort();
-      setHostState({ isHost: ids[0] === localId, hostId: ids[0] ?? null });
-    };
-
-    recompute();
-
-    const handleParticipantChange = () => recompute();
-    room.on('participantConnected', handleParticipantChange);
-    room.on('participantDisconnected', handleParticipantChange);
-    room.on('connectionStateChanged', handleParticipantChange);
-
-    return () => {
-      room.off('participantConnected', handleParticipantChange);
-      room.off('participantDisconnected', handleParticipantChange);
-      room.off('connectionStateChanged', handleParticipantChange);
-    };
-  }, [room]);
-
-  return hostState;
-}
-
 async function sendAgentTelemetry(event: 'agent_begin' | 'agent_end', payload: Record<string, unknown>) {
   try {
     await fetch('/api/agent/telemetry', {
@@ -124,7 +61,7 @@ async function sendAgentTelemetry(event: 'agent_begin' | 'agent_end', payload: R
 
 export function CanvasAgentController({ editor, room }: CanvasAgentControllerProps) {
   const agent = useTldrawAgent(editor, 'present-canvas-agent');
-  const { isHost, hostId } = useIsAgentHost(room);
+  const { isHost, hostId } = useCanvasRoomHost(room, { allowStandaloneHost: false });
   const bus = useMemo(() => (room ? createLiveKitBus(room) : null), [room]);
 
   const processedIdsRef = useRef<Set<string>>(new Set());

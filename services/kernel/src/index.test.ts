@@ -1,8 +1,11 @@
 import path from 'node:path';
 import {
   buildAgentInteropPack,
+  buildCanvasRuntimeSurface,
+  buildConnectorRegistrySnapshot,
   buildRuntimeManifest,
   completeTaskRun,
+  consumeApprovalRequest,
   createApprovalRequest,
   createArtifact,
   createTraceId,
@@ -13,6 +16,7 @@ import {
   listTraceEvents,
   openWorkspaceSession,
   resetKernelStateForTests,
+  resolveApprovalRequest,
 } from '@present/kernel';
 
 describe('reset kernel', () => {
@@ -46,6 +50,12 @@ describe('reset kernel', () => {
     });
 
     expect(listArtifacts(workspace.id).some((entry) => entry.id === artifact.id)).toBe(true);
+    expect(artifact.metadata['widgetRuntime']).toEqual(
+      expect.objectContaining({
+        hostKind: 'html_bundle',
+        displayMode: 'inline',
+      }),
+    );
   });
 
   it('records approval events into the trace ledger', () => {
@@ -68,6 +78,7 @@ describe('reset kernel', () => {
     expect(listApprovalRequests(workspace.id).some((entry) => entry.id === approval.id)).toBe(true);
     expect(listTraceEvents(traceId).some((event) => event.type === 'approval.requested')).toBe(true);
     expect(buildRuntimeManifest().mcp.serverName).toBe('present-mcp');
+    expect(buildRuntimeManifest(workspace).primarySurface).toBe('canvas');
   });
 
   it('persists task lifecycle across kernel reads', () => {
@@ -102,10 +113,69 @@ describe('reset kernel', () => {
     });
 
     const pack = buildAgentInteropPack(workspace);
+    const registry = buildConnectorRegistrySnapshot(workspace);
 
     expect(pack.workspaceSessionId).toBe(workspace.id);
     expect(pack.mcpServer.name).toBe('present-mcp');
     expect(pack.recommendedClients).toContain('OpenClaw');
     expect(pack.commands.startTurn.args).toContain('--prompt');
+    expect(pack.roomId).toBe(registry.roomId);
+    expect(buildRuntimeManifest(workspace).media.roomIdTemplate.replace('{workspaceSessionId}', workspace.id)).toBe(pack.roomId);
+    expect(registry.connectors.some((connector) => connector.id === 'codex-app-server')).toBe(true);
+  });
+
+  it('builds one consistent runtime snapshot per workspace', () => {
+    const workspace = openWorkspaceSession({
+      workspacePath: `/tmp/present-reset-runtime-surface-${Date.now()}`,
+      title: 'Runtime Surface Test',
+      branch: 'codex/reset',
+    });
+
+    const surface = buildCanvasRuntimeSurface(workspace);
+
+    expect(surface.manifest.generatedAt).toBe(surface.registry.generatedAt);
+    expect(surface.agentPack.generatedAt).toBe(surface.registry.generatedAt);
+    expect(surface.agentPack.roomId).toBe(surface.manifest.collaboration.defaultRoomId);
+  });
+
+  it('does not allow consumed approvals to be re-approved', () => {
+    const workspace = openWorkspaceSession({
+      workspacePath: `/tmp/present-reset-approval-guard-${Date.now()}`,
+      title: 'Approval Guard Test',
+      branch: 'codex/reset',
+    });
+    const traceId = createTraceId();
+
+    const approval = createApprovalRequest({
+      workspaceSessionId: workspace.id,
+      traceId,
+      kind: 'git_action',
+      title: 'Approve patch apply',
+      detail: 'Allow one patch apply.',
+      requestedBy: 'jest',
+    });
+
+    const approved = resolveApprovalRequest({
+      approvalRequestId: approval.id,
+      state: 'approved',
+      resolvedBy: 'jest',
+    });
+
+    expect(approved?.state).toBe('approved');
+
+    const consumed = consumeApprovalRequest({
+      approvalRequestId: approval.id,
+      workspaceSessionId: workspace.id,
+      resolvedBy: 'jest',
+    });
+
+    expect(consumed.state).toBe('expired');
+    expect(() =>
+      resolveApprovalRequest({
+        approvalRequestId: approval.id,
+        state: 'approved',
+        resolvedBy: 'jest',
+      }),
+    ).toThrow('Approval request can only be resolved while pending');
   });
 });

@@ -6,7 +6,7 @@ import { listExecutorSessions } from './executor-sessions';
 import { resolveKernelModelProfiles } from './model-profiles';
 import { listPresenceMembers } from './presence';
 import { listTaskRuns } from './tasks';
-import { listTraceEvents } from './traces';
+import { listTraceEvents, searchTraceEvents } from './traces';
 import { getWorkspaceSession } from './workspace-sessions';
 
 export type WorkspaceStateSnapshot = {
@@ -16,14 +16,27 @@ export type WorkspaceStateSnapshot = {
   artifacts: ReturnType<typeof listArtifacts>;
   approvals: ReturnType<typeof listApprovalRequests>;
   presence: ReturnType<typeof listPresenceMembers>;
-  traces: ReturnType<typeof listTraceEvents>;
+  traces?: ReturnType<typeof listTraceEvents>;
   modelProfiles: ModelProfile[];
-  manifest: ReturnType<typeof buildRuntimeManifest>;
+  manifest?: ReturnType<typeof buildRuntimeManifest>;
 };
 
-export async function getWorkspaceStateSnapshot(workspaceSessionId: string): Promise<WorkspaceStateSnapshot | null> {
+export type WorkspaceStateSnapshotOptions = {
+  includeTraces?: boolean;
+  traceQuery?: string;
+  traceLimit?: number;
+  includeManifest?: boolean;
+};
+
+export async function getWorkspaceStateSnapshot(
+  workspaceSessionId: string,
+  options: WorkspaceStateSnapshotOptions = {},
+): Promise<WorkspaceStateSnapshot | null> {
   const workspace = getWorkspaceSession(workspaceSessionId);
   if (!workspace) return null;
+
+  const includeTraces = options.includeTraces !== false;
+  const includeManifest = options.includeManifest !== false;
 
   return {
     workspace,
@@ -32,8 +45,18 @@ export async function getWorkspaceStateSnapshot(workspaceSessionId: string): Pro
     artifacts: listArtifacts(workspaceSessionId),
     approvals: listApprovalRequests(workspaceSessionId),
     presence: listPresenceMembers(workspaceSessionId),
-    traces: listTraceEvents().filter((event) => event.workspaceSessionId === workspaceSessionId),
+    traces: includeTraces
+      ? options.traceQuery?.trim()
+        ? searchTraceEvents(options.traceQuery, {
+            workspaceSessionId,
+            limit: options.traceLimit,
+          })
+        : listTraceEvents({
+            workspaceSessionId,
+            limit: options.traceLimit,
+          })
+      : undefined,
     modelProfiles: await resolveKernelModelProfiles(),
-    manifest: buildRuntimeManifest(),
+    manifest: includeManifest ? buildRuntimeManifest(workspace) : undefined,
   };
 }

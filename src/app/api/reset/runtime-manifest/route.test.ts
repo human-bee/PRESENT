@@ -59,8 +59,11 @@ describe('GET /api/reset/runtime-manifest', () => {
 
   it('returns a workspace-scoped BYO-agent interop pack', async () => {
     const hydrateResetKernelMock = jest.fn();
-    const buildRuntimeManifestMock = jest.fn(() => ({
+    const manifest = {
       generatedAt: new Date().toISOString(),
+      schemaVersion: 'canvas-os/v1',
+      runtimeCenter: 'responses',
+      primarySurface: 'canvas',
       codex: {
         appServerBaseUrl: 'http://127.0.0.1:4096',
         authModes: ['chatgpt', 'api_key', 'shared_key', 'byok'],
@@ -71,17 +74,72 @@ describe('GET /api/reset/runtime-manifest', () => {
         transport: 'stdio',
         command: ['npm', 'run', 'present:mcp'],
       },
+      connectors: [],
+      resources: [],
+      events: [],
+      approvalPolicies: [],
+      traceSchemaUri: 'present://schemas/trace-linkage',
+      registry: {
+        uri: 'present://runtime/registry',
+        updatedAt: new Date().toISOString(),
+        connectorCount: 0,
+      },
+      media: {
+        provider: 'livekit',
+        transport: 'webrtc',
+        supports: ['audio', 'video', 'screen', 'data_channel'],
+        roomIdTemplate: 'reset-{workspaceSessionId}',
+      },
       collaboration: {
         livekitEnabled: true,
         canvasEnabled: true,
         widgetsEnabled: true,
         dualClient: true,
+        canvasTransport: 'tldraw_sync',
+        sharedDocTransport: 'yjs_ws',
+        presenceTransport: 'webrtc',
+        operatorSurfaces: ['canvas', 'shell', 'archive'],
+        defaultRoomId: 'reset-ws_123',
       },
-    }));
-    const buildAgentInteropPackMock = jest.fn(() => ({
+    };
+    const registry = {
       generatedAt: new Date().toISOString(),
       workspaceSessionId: 'ws_123',
+      roomId: 'reset-ws_123',
+      connectors: [],
+      resources: [],
+      events: [],
+      approvalPolicies: [],
+    };
+    const agentPack = {
+      generatedAt: new Date().toISOString(),
+      surface: 'canvas',
+      workspaceSessionId: 'ws_123',
       workspacePath: '/tmp/present-reset',
+      manifestUri: 'present://runtime/manifest',
+      registryUri: 'present://runtime/registry',
+      resourceUris: {
+        manifest: 'present://runtime/manifest',
+        registry: 'present://runtime/registry',
+        canvasSession: 'present://canvas/session',
+        workspace: 'present://workspaces/state',
+        artifacts: 'present://artifacts/state',
+        approvals: 'present://approvals/state',
+        presence: 'present://presence/state',
+        traces: 'present://traces/state',
+        models: 'present://models/status',
+      },
+      eventUris: {
+        taskStreamTemplate: '/api/reset/tasks/{taskId}/events',
+        traces: '/api/reset/traces',
+        presence: '/api/reset/presence',
+        livekitCommentary: 'livekit:data-channel:reset-ws_123',
+      },
+      approvalUris: {
+        state: 'present://approvals/state',
+        resolve: '/api/reset/approvals',
+      },
+      roomId: 'reset-ws_123',
       mcpServer: {
         name: 'present-mcp',
         transport: 'stdio',
@@ -98,8 +156,15 @@ describe('GET /api/reset/runtime-manifest', () => {
         startTurn: { command: 'npm', args: ['run', 'fairy:cli'], cwd: process.cwd() },
         printManifest: { command: 'npm', args: ['run', 'fairy:cli'], cwd: process.cwd() },
       },
+      connectorHints: [],
       recommendedClients: ['OpenClaw'],
       notes: ['ChatGPT auth remains local-companion only.'],
+    };
+    const buildCanvasRuntimeSurfaceMock = jest.fn(() => ({
+      generatedAt: manifest.generatedAt,
+      manifest,
+      registry,
+      agentPack,
     }));
     const resolveKernelModelProfilesMock = jest.fn(async () => []);
     const getWorkspaceSessionMock = jest.fn(() => ({
@@ -120,8 +185,7 @@ describe('GET /api/reset/runtime-manifest', () => {
       hydrateResetKernel: hydrateResetKernelMock,
     }));
     jest.doMock('@present/kernel', () => ({
-      buildAgentInteropPack: buildAgentInteropPackMock,
-      buildRuntimeManifest: buildRuntimeManifestMock,
+      buildCanvasRuntimeSurface: buildCanvasRuntimeSurfaceMock,
       getWorkspaceSession: getWorkspaceSessionMock,
       resolveKernelModelProfiles: resolveKernelModelProfilesMock,
     }));
@@ -135,8 +199,9 @@ describe('GET /api/reset/runtime-manifest', () => {
 
     expect(hydrateResetKernelMock).toHaveBeenCalled();
     expect(getWorkspaceSessionMock).toHaveBeenCalledWith('ws_123');
-    expect(buildAgentInteropPackMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws_123' }));
+    expect(buildCanvasRuntimeSurfaceMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws_123' }));
     expect(payload.agentPack.workspaceSessionId).toBe('ws_123');
     expect(payload.agentPack.recommendedClients).toContain('OpenClaw');
+    expect(payload.registry.roomId).toBe('reset-ws_123');
   });
 });

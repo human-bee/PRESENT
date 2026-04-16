@@ -1,11 +1,14 @@
 'use client';
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import type { CanvasSessionSnapshot } from '@present/contracts';
 import { RoomScopedProviders } from '@/components/RoomScopedProviders';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
 import { RoomConnectorUI } from '@/components/ui/livekit/components';
 import { CanvasLiveKitContext } from '@/components/ui/livekit/livekit-room-connector';
+import { CanvasRuntimeShapeProvider } from '@/components/ui/tldraw/runtime/canvas-runtime-shape-context';
+import { runtimeShapeUtils } from '@/components/ui/tldraw/runtime/runtime-shape-utils';
 import { useLivekitConnection, useRoomEvents } from '@/components/ui/livekit/hooks';
 import { TldrawWithCollaboration } from '@/components/ui/tldraw/tldraw-with-collaboration';
 
@@ -22,17 +25,33 @@ type ResetRoomTelemetry = {
 };
 
 type ResetCollaborationSurfaceProps = {
+  canvasSession: CanvasSessionSnapshot;
+  canApplyLatestPatch?: boolean;
+  onApplyPatchArtifact?: (artifactId: string) => void;
+  onResolveApproval?: (approvalRequestId: string, state: 'approved' | 'rejected') => void;
+  onSelectedRuntimeNodeChange?: (nodeId: string | null) => void;
   workspaceSessionId: string;
+  roomId: string;
   operatorLabel: string;
   onTelemetryChange?: (telemetry: ResetRoomTelemetry) => void;
 };
 
 function ResetCollaborationSurfaceInner({
+  canvasSession,
+  canApplyLatestPatch,
+  onApplyPatchArtifact,
+  onResolveApproval,
+  onSelectedRuntimeNodeChange,
   workspaceSessionId,
   roomName,
   operatorLabel,
   onTelemetryChange,
 }: {
+  canvasSession: CanvasSessionSnapshot;
+  canApplyLatestPatch?: boolean;
+  onApplyPatchArtifact?: (artifactId: string) => void;
+  onResolveApproval?: (approvalRequestId: string, state: 'approved' | 'rejected') => void;
+  onSelectedRuntimeNodeChange?: (nodeId: string | null) => void;
   workspaceSessionId: string;
   roomName: string;
   operatorLabel: string;
@@ -96,13 +115,13 @@ function ResetCollaborationSurfaceInner({
 
   const copyResetInviteLink = useCallback(async () => {
     if (typeof window === 'undefined') return;
-    const link = `${window.location.origin}/?room=${encodeURIComponent(roomName)}`;
+    const link = `${window.location.origin}/?workspace=${encodeURIComponent(workspaceSessionId)}`;
     try {
       await navigator.clipboard.writeText(link);
     } catch (error) {
       console.error(`[present-reset] Failed to copy room link for ${roomName}:`, error);
     }
-  }, [roomName]);
+  }, [roomName, workspaceSessionId]);
 
   const roomContext = useMemo(
     () => ({
@@ -133,7 +152,10 @@ function ResetCollaborationSurfaceInner({
                 Mounted directly in the reset shell. Use the archived canvas route only for reference or parity checks.
               </div>
               <div className="reset-inline-actions">
-                <a href="/canvas?legacy=1" className="reset-button reset-button--ghost">
+                <a
+                  href={`/canvas?legacy=1&workspace=${encodeURIComponent(workspaceSessionId)}`}
+                  className="reset-button reset-button--ghost"
+                >
                   Open Archived Canvas
                 </a>
               </div>
@@ -141,9 +163,21 @@ function ResetCollaborationSurfaceInner({
             <div className="reset-collaboration-surface__board">
               <div className="reset-frame-title">Reset Board</div>
               <strong>Server-owned TLDraw collaboration</strong>
-              <p>Room-aware canvas sync and agent action playback now live inside `/` instead of an iframe bridge.</p>
+              <p>Runtime objects now reconcile directly into TLDraw shapes, so layout and selection live on the board itself.</p>
               <div className="reset-board-stage">
-                <TldrawWithCollaboration />
+                <CanvasRuntimeShapeProvider
+                  session={canvasSession}
+                  canApplyLatestPatch={canApplyLatestPatch}
+                  onApplyPatchArtifact={onApplyPatchArtifact}
+                  onResolveApproval={onResolveApproval}
+                >
+                  <TldrawWithCollaboration
+                    shapeUtils={runtimeShapeUtils}
+                    onRuntimeSelectionChange={(selection) => {
+                      onSelectedRuntimeNodeChange?.(selection.nodeId);
+                    }}
+                  />
+                </CanvasRuntimeShapeProvider>
               </div>
             </div>
           </div>
@@ -155,28 +189,21 @@ function ResetCollaborationSurfaceInner({
 }
 
 export function ResetCollaborationSurface({
+  canvasSession,
+  canApplyLatestPatch,
+  onApplyPatchArtifact,
+  onResolveApproval,
+  onSelectedRuntimeNodeChange,
   workspaceSessionId,
+  roomId,
   operatorLabel,
   onTelemetryChange,
 }: ResetCollaborationSurfaceProps) {
-  const [roomOverride, setRoomOverride] = useState<string | null>(null);
   const serverUrl =
     process.env.NEXT_PUBLIC_LIVEKIT_URL ??
     process.env.NEXT_PUBLIC_LK_SERVER_URL ??
     '';
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const nextRoom = new URLSearchParams(window.location.search).get('room')?.trim();
-    if (nextRoom) {
-      setRoomOverride(nextRoom);
-    }
-  }, []);
-
-  const roomName = useMemo(() => {
-    const fallback = `reset-${workspaceSessionId.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 24)}`;
-    return roomOverride || fallback;
-  }, [roomOverride, workspaceSessionId]);
+  const roomName = useMemo(() => roomId, [roomId]);
 
   if (!serverUrl) {
     return (
@@ -190,7 +217,10 @@ export function ResetCollaborationSurface({
         <div className="reset-collaboration-surface__board">
           <div className="reset-frame-title">Reset Board</div>
           <strong>Server-owned TLDraw collaboration</strong>
-          <p>Room-aware canvas sync lives in the reset shell. Configure LiveKit to turn on the interactive board.</p>
+          <p>Configure LiveKit to turn on the interactive board. The shell still exposes the canonical runtime state.</p>
+          <div className="reset-board-stage">
+            <div className="reset-empty">TLDraw-native runtime shapes appear here once the room transport is available.</div>
+          </div>
         </div>
       </div>
     );
@@ -199,6 +229,11 @@ export function ResetCollaborationSurface({
   return (
     <LiveKitRoom connect={false} audio={false} video={false} token={undefined} serverUrl={serverUrl}>
       <ResetCollaborationSurfaceInner
+        canvasSession={canvasSession}
+        canApplyLatestPatch={canApplyLatestPatch}
+        onApplyPatchArtifact={onApplyPatchArtifact}
+        onResolveApproval={onResolveApproval}
+        onSelectedRuntimeNodeChange={onSelectedRuntimeNodeChange}
         workspaceSessionId={workspaceSessionId}
         roomName={roomName}
         operatorLabel={operatorLabel}

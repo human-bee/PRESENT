@@ -21,6 +21,8 @@ describe('present MCP toolkit', () => {
   afterEach(() => {
     resetKernelStateForTests();
     delete process.env.PRESENT_RESET_STATE_PATH;
+    delete process.env.PRESENT_RESET_WORKSPACE_SESSION_ID;
+    delete process.env.PRESENT_RESET_WORKSPACE_PATH;
     fs.rmSync(workspacePath, { recursive: true, force: true });
   });
 
@@ -56,6 +58,12 @@ describe('present MCP toolkit', () => {
     const resources = await listPresentMcpResources();
 
     expect(artifactResult.artifact.id).toBe(widgetResult.artifact.id);
+    expect(widgetResult.artifact.metadata['widgetRuntime']).toEqual(
+      expect.objectContaining({
+        hostKind: 'html_bundle',
+        displayMode: 'inline',
+      }),
+    );
     expect(workspaceFiles.files.map((entry) => entry.name)).toContain('README.md');
     expect(workspaceDocument.document.content).toContain('# PRESENT');
     expect(patchResult.artifact.kind).toBe('file_patch');
@@ -63,7 +71,9 @@ describe('present MCP toolkit', () => {
     expect(resources.map((resource) => resource.uri)).toEqual(
       expect.arrayContaining([
         'present://runtime/manifest',
+        'present://runtime/registry',
         'present://runtime/interop',
+        'present://canvas/session',
         'present://workspace/files',
         'present://artifact/diff',
         'present://executors/state',
@@ -71,5 +81,97 @@ describe('present MCP toolkit', () => {
         'present://models/status',
       ]),
     );
+  });
+
+  it('scopes runtime resources to the requested workspace session', async () => {
+    const firstWorkspace = openWorkspaceSession({
+      workspacePath,
+      title: 'First Workspace',
+      branch: 'codex/reset',
+    });
+    const secondWorkspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'present-reset-mcp-second-'));
+    fs.writeFileSync(path.join(secondWorkspacePath, 'SECOND.md'), '# SECOND\n', 'utf8');
+    const secondWorkspace = openWorkspaceSession({
+      workspacePath: secondWorkspacePath,
+      title: 'Second Workspace',
+      branch: 'codex/reset',
+    });
+
+    process.env.PRESENT_RESET_WORKSPACE_SESSION_ID = secondWorkspace.id;
+
+    const resources = await listPresentMcpResources();
+    const workspaceState = JSON.parse(resources.find((resource) => resource.uri === 'present://workspaces/state')?.text ?? '[]');
+    const interop = JSON.parse(resources.find((resource) => resource.uri === 'present://runtime/interop')?.text ?? '{}');
+    const canvasSession = JSON.parse(resources.find((resource) => resource.uri === 'present://canvas/session')?.text ?? 'null');
+
+    expect(firstWorkspace.id).not.toBe(secondWorkspace.id);
+    expect(workspaceState).toHaveLength(1);
+    expect(workspaceState[0]?.id).toBe(secondWorkspace.id);
+    expect(interop.workspaceSessionId).toBe(secondWorkspace.id);
+    expect(canvasSession?.workspace?.id).toBe(secondWorkspace.id);
+
+    fs.rmSync(secondWorkspacePath, { recursive: true, force: true });
+  });
+
+  it('rejects tool access outside the configured workspace scope', async () => {
+    const firstWorkspace = openWorkspaceSession({
+      workspacePath,
+      title: 'First Workspace',
+      branch: 'codex/reset',
+    });
+    const secondWorkspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'present-reset-mcp-guarded-'));
+    fs.writeFileSync(path.join(secondWorkspacePath, 'SECOND.md'), '# SECOND\n', 'utf8');
+    const secondWorkspace = openWorkspaceSession({
+      workspacePath: secondWorkspacePath,
+      title: 'Second Workspace',
+      branch: 'codex/reset',
+    });
+
+    process.env.PRESENT_RESET_WORKSPACE_SESSION_ID = secondWorkspace.id;
+
+    await expect(
+      presentMcpTools.workspaceReadFile.run({
+        workspaceSessionId: firstWorkspace.id,
+        filePath: 'README.md',
+      }),
+    ).rejects.toThrow('Workspace session is outside the current MCP scope');
+
+    fs.rmSync(secondWorkspacePath, { recursive: true, force: true });
+  });
+
+  it('rejects invalid mcp_app widgets without a resource URI or tool binding', async () => {
+    const workspace = openWorkspaceSession({
+      workspacePath,
+      title: 'Invalid MCP Widget',
+      branch: 'codex/reset',
+    });
+
+    await expect(
+      presentMcpTools.widgetCreate.run({
+        workspaceSessionId: workspace.id,
+        title: 'Broken MCP Widget',
+        hostKind: 'mcp_app',
+        serverName: 'present-mcp',
+      }),
+    ).rejects.toThrow('mcp_app widgets require resourceUri or toolName');
+  });
+
+  it('fails closed when the configured workspace scope is stale', async () => {
+    openWorkspaceSession({
+      workspacePath,
+      title: 'Scoped Workspace',
+      branch: 'codex/reset',
+    });
+
+    process.env.PRESENT_RESET_WORKSPACE_SESSION_ID = 'ws_missing';
+
+    const resources = await listPresentMcpResources();
+    const workspaceState = JSON.parse(resources.find((resource) => resource.uri === 'present://workspaces/state')?.text ?? '[]');
+    const artifactState = JSON.parse(resources.find((resource) => resource.uri === 'present://artifacts/state')?.text ?? '[]');
+    const canvasSession = JSON.parse(resources.find((resource) => resource.uri === 'present://canvas/session')?.text ?? 'null');
+
+    expect(workspaceState).toEqual([]);
+    expect(artifactState).toEqual([]);
+    expect(canvasSession).toBeNull();
   });
 });

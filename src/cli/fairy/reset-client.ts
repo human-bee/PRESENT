@@ -119,10 +119,14 @@ export async function createResetPatchArtifact(
 
 export async function applyResetPatchArtifact(
   options: ClientOptions,
-  input: { artifactId: string },
+  input: { artifactId: string; approvalRequestId: string; resolvedBy?: string },
 ) {
   return requestResetJson(options, `/api/reset/artifacts/${encodeURIComponent(input.artifactId)}/apply`, {
     method: 'POST',
+    body: JSON.stringify({
+      approvalRequestId: input.approvalRequestId,
+      resolvedBy: input.resolvedBy,
+    }),
   });
 }
 

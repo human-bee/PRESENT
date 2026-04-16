@@ -1,7 +1,9 @@
 export * from './agent-interop';
 export * from './approvals';
 export * from './artifacts';
+export * from './board-projection';
 export * from './collaboration-docs';
+export * from './connector-registry';
 export * from './executor-leases';
 export * from './executor-sessions';
 export * from './ids';
@@ -9,6 +11,7 @@ export * from './model-profiles';
 export * from './persistence';
 export * from './presence';
 export * from './runtime-manifest';
+export * from './runtime-surface';
 export * from './tasks';
 export * from './traces';
 export * from './workspace-sessions';

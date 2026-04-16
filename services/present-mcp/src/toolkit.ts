@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import {
   applyArtifactPatch,
-  buildAgentInteropPack,
-  buildRuntimeManifest,
+  buildCanvasRuntimeSurface,
+  getCanvasSessionSnapshot,
   createApprovalRequest,
   createArtifact,
   createWorkspacePatchArtifact,
   getArtifact,
+  getWorkspaceSession,
   listApprovalRequests,
   listArtifacts,
   listExecutorSessions,
@@ -24,6 +25,69 @@ import {
 } from '@present/kernel';
 import { startCodexTurn } from '@present/codex-adapter';
 
+function resolveScopedWorkspaceContext() {
+  const scopedWorkspaceSessionId = process.env.PRESENT_RESET_WORKSPACE_SESSION_ID?.trim() || null;
+  if (scopedWorkspaceSessionId) {
+    const workspace = getWorkspaceSession(scopedWorkspaceSessionId);
+    return {
+      workspace,
+      error: workspace ? null : `Configured workspace session ${scopedWorkspaceSessionId} was not found`,
+    };
+  }
+
+  const scopedWorkspacePath = process.env.PRESENT_RESET_WORKSPACE_PATH?.trim() || null;
+  if (scopedWorkspacePath) {
+    const workspace = listWorkspaceSessions().find((candidate) => candidate.workspacePath === scopedWorkspacePath) ?? null;
+    return {
+      workspace,
+      error: workspace ? null : `Configured workspace path ${scopedWorkspacePath} was not found`,
+    };
+  }
+
+  return {
+    workspace: null,
+    error: null,
+  };
+}
+
+function requireWorkspaceAccess(workspaceSessionId: string) {
+  const scoped = resolveScopedWorkspaceContext();
+  if (scoped.error) {
+    throw new Error(scoped.error);
+  }
+
+  if (scoped.workspace) {
+    if (scoped.workspace.id !== workspaceSessionId) {
+      throw new Error('Workspace session is outside the current MCP scope');
+    }
+    return scoped.workspace;
+  }
+
+  const workspace = getWorkspaceSession(workspaceSessionId);
+  if (!workspace) {
+    throw new Error('Workspace session not found');
+  }
+  return workspace;
+}
+
+function requireArtifactAccess(artifactId: string) {
+  const artifact = getArtifact(artifactId);
+  if (!artifact) {
+    throw new Error('Artifact not found');
+  }
+  requireWorkspaceAccess(artifact.workspaceSessionId);
+  return artifact;
+}
+
+function requireApprovalAccess(approvalRequestId: string) {
+  const approval = listApprovalRequests().find((entry) => entry.id === approvalRequestId) ?? null;
+  if (!approval) {
+    throw new Error('Approval request not found');
+  }
+  requireWorkspaceAccess(approval.workspaceSessionId);
+  return approval;
+}
+
 export const presentMcpTools = {
   workspaceOpen: {
     name: 'workspace.open',
@@ -34,6 +98,16 @@ export const presentMcpTools = {
       title: z.string().optional(),
     },
     async run(input: { workspacePath: string; branch?: string; title?: string }) {
+      const scoped = resolveScopedWorkspaceContext();
+      if (scoped.error) {
+        throw new Error(scoped.error);
+      }
+      if (scoped.workspace) {
+        if (scoped.workspace.workspacePath !== input.workspacePath) {
+          throw new Error('Workspace session is outside the current MCP scope');
+        }
+        return { workspace: scoped.workspace };
+      }
       return { workspace: openWorkspaceSession(input) };
     },
   },
@@ -46,6 +120,7 @@ export const presentMcpTools = {
       limit: z.number().int().positive().max(500).optional(),
     },
     async run(input: { workspaceSessionId: string; directoryPath?: string; limit?: number }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         files: listWorkspaceFiles({
           workspaceSessionId: input.workspaceSessionId,
@@ -63,6 +138,7 @@ export const presentMcpTools = {
       filePath: z.string().min(1),
     },
     async run(input: { workspaceSessionId: string; filePath: string }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         document: readWorkspaceFile({
           workspaceSessionId: input.workspaceSessionId,
@@ -88,6 +164,7 @@ export const presentMcpTools = {
       traceId?: string;
       title?: string;
     }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         artifact: createWorkspacePatchArtifact({
           workspaceSessionId: input.workspaceSessionId,
@@ -114,6 +191,7 @@ export const presentMcpTools = {
       taskType: string;
       prompt?: string;
     }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         taskRun: await enqueueTaskRun({
           workspaceSessionId: input.workspaceSessionId,
@@ -141,6 +219,7 @@ export const presentMcpTools = {
       executorSessionId?: string;
       model?: string;
     }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         taskRun: await startCodexTurn({
           workspaceSessionId: input.workspaceSessionId,
@@ -161,6 +240,7 @@ export const presentMcpTools = {
       summary: z.string().optional(),
     },
     async run(input: { workspaceSessionId: string; prompt: string; summary?: string }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return {
         taskRun: await enqueueTaskRun({
           workspaceSessionId: input.workspaceSessionId,
@@ -173,20 +253,69 @@ export const presentMcpTools = {
   },
   widgetCreate: {
     name: 'widget.create',
-    description: 'Create a server-owned iframe widget artifact.',
+    description: 'Create a server-owned widget bundle artifact for the board runtime.',
     schema: {
       workspaceSessionId: z.string().min(1),
       title: z.string().min(1),
-      html: z.string().min(1),
+      html: z.string().optional(),
+      hostKind: z.enum(['mcp_app', 'component', 'html_bundle']).optional(),
+      componentType: z.string().optional(),
+      componentProps: z.record(z.string(), z.unknown()).optional(),
+      resourceUri: z.string().optional(),
+      serverName: z.string().optional(),
+      toolName: z.string().optional(),
+      args: z.record(z.string(), z.unknown()).optional(),
+      displayMode: z.enum(['inline', 'pip', 'fullscreen']).optional(),
+      contextKey: z.string().optional(),
+      mimeType: z.string().optional(),
     },
-    async run(input: { workspaceSessionId: string; title: string; html: string }) {
+    async run(input: {
+      workspaceSessionId: string;
+      title: string;
+      html?: string;
+      hostKind?: 'mcp_app' | 'component' | 'html_bundle';
+      componentType?: string;
+      componentProps?: Record<string, unknown>;
+      resourceUri?: string;
+      serverName?: string;
+      toolName?: string;
+      args?: Record<string, unknown>;
+      displayMode?: 'inline' | 'pip' | 'fullscreen';
+      contextKey?: string;
+      mimeType?: string;
+    }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
+      const hostKind = input.hostKind ?? (input.html ? 'html_bundle' : 'component');
+      if (hostKind === 'component' && !input.componentType?.trim()) {
+        throw new Error('component widgets require componentType');
+      }
+      if (
+        hostKind === 'mcp_app' &&
+        !input.resourceUri?.trim() &&
+        !input.toolName?.trim()
+      ) {
+        throw new Error('mcp_app widgets require resourceUri or toolName');
+      }
       return {
         artifact: createArtifact({
           workspaceSessionId: input.workspaceSessionId,
           kind: 'widget_bundle',
           title: input.title,
-          mimeType: 'text/html',
-          content: input.html,
+          mimeType: input.mimeType ?? (input.html ? 'text/html' : 'application/json'),
+          content: input.html ?? '',
+          metadata: {
+            widgetRuntime: {
+              hostKind,
+              componentType: input.componentType ?? null,
+              componentProps: input.componentProps ?? {},
+              resourceUri: input.resourceUri ?? null,
+              serverName: input.serverName ?? null,
+              toolName: input.toolName ?? null,
+              args: input.args ?? null,
+              displayMode: input.displayMode ?? (hostKind === 'html_bundle' ? 'inline' : null),
+              contextKey: input.contextKey ?? 'canvas',
+            },
+          },
         }),
       };
     },
@@ -198,21 +327,30 @@ export const presentMcpTools = {
       artifactId: z.string().min(1),
     },
     async run(input: { artifactId: string }) {
-      const artifact = getArtifact(input.artifactId);
-      if (!artifact) {
-        throw new Error('Artifact not found');
-      }
-      return { artifact };
+      return { artifact: requireArtifactAccess(input.artifactId) };
     },
   },
   artifactApplyPatch: {
     name: 'artifact.applyPatch',
-    description: 'Apply a reset file patch artifact into the workspace via git apply.',
+    description: 'Apply an approved reset file patch artifact into the workspace via git apply.',
     schema: {
       artifactId: z.string().min(1),
+      approvalRequestId: z.string().min(1),
+      resolvedBy: z.string().min(1).optional(),
     },
-    async run(input: { artifactId: string }) {
-      return { artifact: applyArtifactPatch(input.artifactId) };
+    async run(input: { artifactId: string; approvalRequestId: string; resolvedBy?: string }) {
+      const artifact = requireArtifactAccess(input.artifactId);
+      const approval = requireApprovalAccess(input.approvalRequestId);
+      if (approval.workspaceSessionId !== artifact.workspaceSessionId) {
+        throw new Error('Approval request does not match artifact workspace');
+      }
+      return {
+        artifact: applyArtifactPatch({
+          artifactId: artifact.id,
+          approvalRequestId: approval.id,
+          resolvedBy: input.resolvedBy ?? 'present-mcp',
+        }),
+      };
     },
   },
   approvalRequest: {
@@ -234,6 +372,7 @@ export const presentMcpTools = {
       detail: string;
       requestedBy: string;
     }) {
+      requireWorkspaceAccess(input.workspaceSessionId);
       return { approval: createApprovalRequest(input) };
     },
   },
@@ -246,6 +385,7 @@ export const presentMcpTools = {
       resolvedBy: z.string().min(1),
     },
     async run(input: { approvalRequestId: string; state: 'approved' | 'rejected' | 'expired'; resolvedBy: string }) {
+      requireApprovalAccess(input.approvalRequestId);
       const approval = resolveApprovalRequest(input);
       if (!approval) {
         throw new Error('Approval request not found');
@@ -260,47 +400,81 @@ export const presentMcpTools = {
       query: z.string().default(''),
     },
     async run(input: { query?: string }) {
-      return { events: searchTraceEvents(input.query ?? '') };
+      const scoped = resolveScopedWorkspaceContext();
+      if (scoped.error) {
+        throw new Error(scoped.error);
+      }
+      const events = searchTraceEvents(input.query ?? '');
+      return {
+        events: scoped.workspace
+          ? events.filter((event) => event.workspaceSessionId === scoped.workspace.id)
+          : events,
+      };
     },
   },
 };
 
 export async function listPresentMcpResources() {
   const modelProfiles = await resolveKernelModelProfiles();
-  const artifacts = listArtifacts();
-  const workspace = listWorkspaceSessions()[0] ?? null;
+  const scoped = resolveScopedWorkspaceContext();
+  const workspace = scoped.error ? null : scoped.workspace;
+  const workspaces = scoped.error ? [] : workspace ? [workspace] : listWorkspaceSessions();
+  const executors = scoped.error ? [] : workspace ? listExecutorSessions(workspace.id) : listExecutorSessions();
+  const tasks = scoped.error ? [] : workspace ? listTaskRuns(workspace.id) : listTaskRuns();
+  const artifacts = scoped.error ? [] : workspace ? listArtifacts(workspace.id) : listArtifacts();
+  const approvals = scoped.error ? [] : workspace ? listApprovalRequests(workspace.id) : listApprovalRequests();
+  const presence = scoped.error ? [] : workspace ? listPresenceMembers(workspace.id) : listPresenceMembers();
+  const traces = scoped.error
+    ? []
+    : workspace
+      ? listTraceEvents().filter((event) => event.workspaceSessionId === workspace.id)
+      : listTraceEvents();
   const latestPatchArtifact = artifacts.find((artifact) => artifact.kind === 'file_patch') ?? null;
+  const runtimeSurface = buildCanvasRuntimeSurface(workspace);
+  const canvasSession = workspace ? getCanvasSessionSnapshot(workspace.id, { runtimeSurface }) : null;
 
   return [
     {
       uri: 'present://runtime/manifest',
       name: 'runtime.manifest',
       mimeType: 'application/json',
-      text: JSON.stringify(buildRuntimeManifest(), null, 2),
+      text: JSON.stringify(runtimeSurface.manifest, null, 2),
+    },
+    {
+      uri: 'present://runtime/registry',
+      name: 'runtime.registry',
+      mimeType: 'application/json',
+      text: JSON.stringify(runtimeSurface.registry, null, 2),
     },
     {
       uri: 'present://runtime/interop',
       name: 'runtime.interop',
       mimeType: 'application/json',
-      text: JSON.stringify(buildAgentInteropPack(workspace), null, 2),
+      text: JSON.stringify(runtimeSurface.agentPack, null, 2),
+    },
+    {
+      uri: 'present://canvas/session',
+      name: 'canvas.session',
+      mimeType: 'application/json',
+      text: JSON.stringify(canvasSession, null, 2),
     },
     {
       uri: 'present://workspaces/state',
       name: 'workspace.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listWorkspaceSessions(), null, 2),
+      text: JSON.stringify(workspaces, null, 2),
     },
     {
       uri: 'present://executors/state',
       name: 'executor.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listExecutorSessions(), null, 2),
+      text: JSON.stringify(executors, null, 2),
     },
     {
       uri: 'present://tasks/state',
       name: 'task.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listTaskRuns(), null, 2),
+      text: JSON.stringify(tasks, null, 2),
     },
     {
       uri: 'present://artifacts/state',
@@ -313,10 +487,10 @@ export async function listPresentMcpResources() {
       name: 'workspace.files',
       mimeType: 'application/json',
       text: JSON.stringify(
-        listWorkspaceSessions().map((workspace) => ({
-          workspaceSessionId: workspace.id,
-          workspacePath: workspace.workspacePath,
-          files: listWorkspaceFiles({ workspaceSessionId: workspace.id, limit: 120 }),
+        workspaces.map((scopedWorkspace) => ({
+          workspaceSessionId: scopedWorkspace.id,
+          workspacePath: scopedWorkspace.workspacePath,
+          files: listWorkspaceFiles({ workspaceSessionId: scopedWorkspace.id, limit: 120 }),
         })),
         null,
         2,
@@ -332,19 +506,19 @@ export async function listPresentMcpResources() {
       uri: 'present://approvals/state',
       name: 'approval.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listApprovalRequests(), null, 2),
+      text: JSON.stringify(approvals, null, 2),
     },
     {
       uri: 'present://presence/state',
       name: 'presence.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listPresenceMembers(), null, 2),
+      text: JSON.stringify(presence, null, 2),
     },
     {
       uri: 'present://traces/state',
       name: 'trace.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listTraceEvents(), null, 2),
+      text: JSON.stringify(traces, null, 2),
     },
     {
       uri: 'present://models/status',

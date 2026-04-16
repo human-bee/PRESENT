@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSync, type RemoteTLStoreWithStatus } from '@tldraw/sync';
-import type { customShapeUtil } from '../tldraw-canvas';
+import type { AnyShapeUtilConstructor } from '../tldraw-canvas';
 import { createLogger } from '@/lib/utils';
 import { buildSyncContract, getCanvasIdFromCurrentUrl } from '@/lib/realtime/sync-contract';
 import {
@@ -242,7 +242,7 @@ export async function createBookmarkAsset(host: string, url: string): Promise<TL
 
 export function useTLDrawSync(
   roomName: string,
-  shapeUtils?: readonly (typeof customShapeUtil)[],
+  shapeUtils?: readonly AnyShapeUtilConstructor[],
 ): RemoteTLStoreWithStatus {
   const rawEnvHost =
     process.env.NEXT_PUBLIC_TLDRAW_SYNC_URL || process.env.NEXT_PUBLIC_TLDRAW_SYNC_HOST;

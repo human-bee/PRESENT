@@ -125,6 +125,55 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     contextKey,
   }));
 
+  useEffect(() => {
+    setState((prev) => {
+      const next: McpAppWidgetState = {
+        ...prev,
+        title: rest.title,
+        toolName: rest.toolName,
+        serverUrl: rest.serverUrl,
+        serverName: rest.serverName,
+        resourceUri: rest.resourceUri,
+        args: rest.args,
+        autoRun: rest.autoRun,
+        runId: rest.runId,
+        displayMode: rest.displayMode,
+        className,
+        contextKey,
+      };
+
+      if (
+        prev.title === next.title &&
+        prev.toolName === next.toolName &&
+        prev.serverUrl === next.serverUrl &&
+        prev.serverName === next.serverName &&
+        prev.resourceUri === next.resourceUri &&
+        prev.args === next.args &&
+        prev.autoRun === next.autoRun &&
+        prev.runId === next.runId &&
+        prev.displayMode === next.displayMode &&
+        prev.className === next.className &&
+        prev.contextKey === next.contextKey
+      ) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [
+    className,
+    contextKey,
+    rest.args,
+    rest.autoRun,
+    rest.displayMode,
+    rest.resourceUri,
+    rest.runId,
+    rest.serverName,
+    rest.serverUrl,
+    rest.title,
+    rest.toolName,
+  ]);
+
   const [toolDescriptor, setToolDescriptor] = useState<McpAppToolDescriptor | undefined>();
   const [resourceHtml, setResourceHtml] = useState<string>('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');

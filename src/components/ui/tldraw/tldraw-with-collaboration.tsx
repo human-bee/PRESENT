@@ -7,9 +7,10 @@ import { useRoomContext } from '@livekit/components-react';
 import type { Room } from 'livekit-client';
 import { CanvasLiveKitContext } from '../livekit/livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
-import type { customShapeUtil } from './tldraw-canvas';
+import type { AnyShapeUtilConstructor } from './tldraw-canvas';
 import {
   useCanvasEventHandlers,
+  useCanvasRoomHost,
   useCollaborationSession,
   useEditorReady,
   useTldrawEditorBridge,
@@ -19,18 +20,22 @@ import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persi
 import { CollaborationLoadingOverlay } from './components';
 import { CanvasAgentController } from './canvas/canvas-agent-controller';
 import { FairyIntegration } from './fairy/fairy-integration';
+import { useCanvasRuntimeShapeContext } from './runtime/canvas-runtime-shape-context';
+import { useCanvasRuntimeShapeReconciler } from './runtime/use-canvas-runtime-shape-reconciler';
+import { subscribeToRuntimeSelection } from './runtime/runtime-selection';
 import { getBooleanFlag } from '@/lib/feature-flags';
 import { usePresentTheme } from '@/components/ui/system/theme-provider';
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
-  shapeUtils?: readonly (typeof customShapeUtil)[];
+  shapeUtils?: readonly AnyShapeUtilConstructor[];
   componentStore?: Map<string, ReactNode>;
   className?: string;
   onTranscriptToggle?: () => void;
   onHelpClick?: () => void;
   onComponentToolboxToggle?: () => void;
   readOnly?: boolean;
+  onRuntimeSelectionChange?: (selection: { shapeId: string | null; nodeId: string | null }) => void;
 }
 
 export function TldrawWithCollaboration({
@@ -42,6 +47,7 @@ export function TldrawWithCollaboration({
   onHelpClick,
   onComponentToolboxToggle,
   readOnly = false,
+  onRuntimeSelectionChange,
 }: TldrawWithCollaborationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const livekitCtx = useContext(CanvasLiveKitContext);
@@ -109,7 +115,12 @@ export function TldrawWithCollaboration({
             overrides={overrides}
             forceMobile
           >
-            <CollaborationEditorEffects room={room} containerRef={containerRef} onMount={onMount} />
+            <CollaborationEditorEffects
+              room={room}
+              containerRef={containerRef}
+              onMount={onMount}
+              onRuntimeSelectionChange={onRuntimeSelectionChange}
+            />
           </Tldraw>
         </ComponentStoreContext.Provider>
       </TldrawUiToastsProvider>
@@ -123,19 +134,24 @@ interface CollaborationEditorEffectsProps {
   room: Room | undefined;
   containerRef: RefObject<HTMLDivElement | null>;
   onMount?: (editor: Editor) => void;
+  onRuntimeSelectionChange?: (selection: { shapeId: string | null; nodeId: string | null }) => void;
 }
 
 function CollaborationEditorEffects({
   room,
   containerRef,
   onMount,
+  onRuntimeSelectionChange,
 }: CollaborationEditorEffectsProps) {
   const { editor, ready } = useEditorReady();
   const isFairyEnabled = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, false);
   const theme = usePresentTheme();
+  const runtimeShapes = useCanvasRuntimeShapeContext();
+  const { isHost } = useCanvasRoomHost(room, { allowStandaloneHost: true });
 
   useTldrawEditorBridge(editor, { onMount });
   useCanvasEventHandlers(editor, room, containerRef, { enabled: ready });
+  useCanvasRuntimeShapeReconciler(editor, runtimeShapes?.session, { isHost: Boolean(runtimeShapes) && isHost });
 
   // Keep TLDraw's internal color scheme aligned with the app theme.
   // Without this, TLDraw can stay in "light" while the app is "dark" (or vice versa),
@@ -157,6 +173,16 @@ function CollaborationEditorEffects({
       (window as any).__tldrawEditor = editor;
     }
   }, [editor, ready]);
+
+  useEffect(() => {
+    if (!ready || !editor || !onRuntimeSelectionChange) return;
+    const unsubscribe = subscribeToRuntimeSelection(editor, onRuntimeSelectionChange);
+
+    return () => {
+      unsubscribe();
+      onRuntimeSelectionChange({ shapeId: null, nodeId: null });
+    };
+  }, [editor, onRuntimeSelectionChange, ready]);
 
   useEffect(() => {
     return () => {

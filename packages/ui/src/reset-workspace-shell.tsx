@@ -11,18 +11,23 @@ import {
   useDeferredValue,
   type ComponentType,
 } from 'react';
-import type {
-  ApprovalRequest,
-  AgentInteropPack,
-  Artifact,
-  ExecutorSession,
-  ModelProfile,
-  PresenceMember,
-  RuntimeManifest,
-  TaskRun,
-  WorkspaceFileDocument,
-  WorkspaceFileEntry,
-  WorkspaceSession,
+import {
+  type CanvasSessionNode,
+  type CanvasSessionSnapshot,
+  resolveCanvasRoomId,
+  type ApprovalRequest,
+  type AgentInteropPack,
+  type Artifact,
+  type ConnectorRegistrySnapshot,
+  type ExecutorSession,
+  type ModelProfile,
+  type PresenceMember,
+  type RuntimeManifest,
+  type TaskRun,
+  type WidgetInstance,
+  type WorkspaceFileDocument,
+  type WorkspaceFileEntry,
+  type WorkspaceSession,
 } from '@present/contracts';
 import { ArtifactPreviewFrame } from './artifact-preview-frame';
 import { ResetCollaborationSurface } from './reset-collaboration-surface';
@@ -99,7 +104,9 @@ async function requestJson<T>(url: string, init?: RequestInit) {
 
 type ResetWorkspaceShellProps = {
   initialManifest: RuntimeManifest;
+  initialRegistry: ConnectorRegistrySnapshot;
   initialAgentPack: AgentInteropPack;
+  initialCanvasSession: CanvasSessionSnapshot;
   initialWorkspace: WorkspaceSession;
   initialWorkspaces: WorkspaceSession[];
   initialExecutors: ExecutorSession[];
@@ -118,9 +125,9 @@ type WorkspaceSnapshotResponse = {
   artifacts: Artifact[];
   approvals: ApprovalRequest[];
   presence: PresenceMember[];
-  traces: Array<Record<string, unknown>>;
+  traces?: Array<Record<string, unknown>>;
   modelProfiles: ModelProfile[];
-  manifest: RuntimeManifest;
+  manifest?: RuntimeManifest;
 };
 
 type WorkspaceFilesResponse = {
@@ -137,12 +144,23 @@ type WorkspaceCatalogResponse = {
 
 type RuntimeManifestResponse = {
   manifest: RuntimeManifest;
+  registry: ConnectorRegistrySnapshot;
   agentPack: AgentInteropPack;
 };
 
+type CanvasSessionResponse = CanvasSessionSnapshot;
+
+type TraceEventsResponse = {
+  events: Array<Record<string, unknown>>;
+};
+
+const TRACE_EVENT_LIMIT = 80;
+
 export function ResetWorkspaceShell({
   initialManifest,
+  initialRegistry,
   initialAgentPack,
+  initialCanvasSession,
   initialWorkspace,
   initialWorkspaces,
   initialExecutors,
@@ -155,7 +173,10 @@ export function ResetWorkspaceShell({
 }: ResetWorkspaceShellProps) {
   const router = useRouter();
   const [MonacoEditorComponent, setMonacoEditorComponent] = useState<null | ComponentType<ResetMonacoEditorProps>>(null);
+  const [manifest, setManifest] = useState(initialManifest);
+  const [registry, setRegistry] = useState(initialRegistry);
   const [agentPack, setAgentPack] = useState(initialAgentPack);
+  const [canvasSession, setCanvasSession] = useState(initialCanvasSession);
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [recentWorkspaces, setRecentWorkspaces] = useState(initialWorkspaces);
   const [executors, setExecutors] = useState(initialExecutors);
@@ -173,6 +194,9 @@ export function ResetWorkspaceShell({
   const [widgetHtml, setWidgetHtml] = useState(defaultWidgetHtml('Reset Brief'));
   const [traceQuery, setTraceQuery] = useState('');
   const [directoryPath, setDirectoryPath] = useState('');
+  const [operatorDockOpen, setOperatorDockOpen] = useState(false);
+  const [selectedRuntimeNodeId, setSelectedRuntimeNodeId] = useState<string | null>(null);
+  const [revealedWidgetArtifactId, setRevealedWidgetArtifactId] = useState<string | null>(null);
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileEntry[]>([]);
   const [activeDocument, setActiveDocument] = useState<WorkspaceFileDocument | null>(null);
   const [localIdentity, setLocalIdentity] = useState('');
@@ -185,7 +209,8 @@ export function ResetWorkspaceShell({
     agentStatus: string;
     media: PresenceMember['media'];
   }>({
-    roomName: null,
+    roomName:
+      initialAgentPack.roomId ?? initialRegistry.roomId ?? initialManifest.collaboration.defaultRoomId ?? null,
     connectionState: 'disconnected',
     participantCount: 0,
     agentStatus: 'not-requested',
@@ -198,6 +223,7 @@ export function ResetWorkspaceShell({
   const [isBusy, setIsBusy] = useState(false);
   const deferredTraceQuery = useDeferredValue(traceQuery);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const canvasRefreshTimeoutRef = useRef<number | null>(null);
   const localIdentityRef = useRef('');
   const localDisplayNameRef = useRef('Mission Control');
 
@@ -209,6 +235,14 @@ export function ResetWorkspaceShell({
     () => artifacts.find((artifact) => artifact.kind === 'file_patch') ?? null,
     [artifacts],
   );
+  const projectedRunLane = useMemo(
+    () => canvasSession.nodes.find((node) => node.kind === 'run-lane') ?? null,
+    [canvasSession.nodes],
+  );
+  const selectedRuntimeNode = useMemo(
+    () => (selectedRuntimeNodeId ? canvasSession.nodes.find((node) => node.id === selectedRuntimeNodeId) ?? null : null),
+    [canvasSession.nodes, selectedRuntimeNodeId],
+  );
   const activeFileBreadcrumbs = useMemo(
     () => activeDocument?.path.split('/').filter(Boolean) ?? [],
     [activeDocument],
@@ -217,17 +251,48 @@ export function ResetWorkspaceShell({
     () => (activeDocument ? `${activeDocument.path}:${activeDocument.updatedAt}` : 'no-file'),
     [activeDocument],
   );
+  const effectiveActiveTaskId = activeTaskId ?? tasks[0]?.id ?? null;
+  const effectiveActiveTask = useMemo(
+    () => (effectiveActiveTaskId ? tasks.find((task) => task.id === effectiveActiveTaskId) ?? null : null),
+    [effectiveActiveTaskId, tasks],
+  );
+  const canonicalRoomId = useMemo(
+    () =>
+      resolveCanvasRoomId({
+        workspaceSessionId: workspace.id,
+        preferredRoomId: agentPack.roomId ?? registry.roomId ?? manifest.collaboration.defaultRoomId,
+      }),
+    [agentPack.roomId, manifest.collaboration.defaultRoomId, registry.roomId, workspace.id],
+  );
+  const approvedWriteApproval = useMemo(
+    () =>
+      approvals.find(
+        (approval) =>
+          approval.workspaceSessionId === workspace.id &&
+          approval.state === 'approved' &&
+          (approval.kind === 'file_write' || approval.kind === 'git_action'),
+      ) ?? null,
+    [approvals, workspace.id],
+  );
+
+  useEffect(() => {
+    setRoomTelemetry((current) => ({
+      ...current,
+      roomName: canonicalRoomId,
+    }));
+  }, [canonicalRoomId]);
+
   const formatCommand = (command: AgentInteropPack['commands'][keyof AgentInteropPack['commands']]) =>
     [command.command, ...command.args].join(' ');
 
-  const refreshWorkspaceState = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
+  const refreshWorkspaceSnapshot = useEffectEvent(async (workspaceSessionId: string) => {
+    const search = new URLSearchParams({
+      includeTraces: 'false',
+      includeManifest: 'false',
+    });
     const snapshot = await requestJson<WorkspaceSnapshotResponse>(
-      `/api/reset/workspaces/${encodeURIComponent(workspaceSessionId)}/state`,
+      `/api/reset/workspaces/${encodeURIComponent(workspaceSessionId)}/state?${search.toString()}`,
     );
-    const traces =
-      activeQuery && activeQuery.trim()
-        ? snapshot.traces.filter((event) => JSON.stringify(event).toLowerCase().includes(activeQuery.trim().toLowerCase()))
-        : snapshot.traces;
 
     setWorkspace(snapshot.workspace);
     setExecutors(snapshot.executors);
@@ -235,8 +300,47 @@ export function ResetWorkspaceShell({
     setArtifacts(snapshot.artifacts);
     setApprovals(snapshot.approvals);
     setPresence(snapshot.presence);
-    setTraceEvents(traces);
     setActiveTaskId((current) => current ?? snapshot.tasks[0]?.id ?? null);
+  });
+
+  const refreshTraceEvents = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
+    const search = new URLSearchParams({
+      workspaceSessionId,
+      limit: String(TRACE_EVENT_LIMIT),
+    });
+    if (activeQuery?.trim()) {
+      search.set('query', activeQuery.trim());
+    }
+    const payload = await requestJson<TraceEventsResponse>(`/api/reset/traces?${search.toString()}`);
+    setTraceEvents(Array.isArray(payload.events) ? payload.events : []);
+  });
+
+  const refreshCanvasSession = useEffectEvent(async (workspaceSessionId: string) => {
+    const search = new URLSearchParams({
+      traceLimit: '24',
+    });
+    const payload = await requestJson<CanvasSessionResponse>(
+      `/api/reset/workspaces/${encodeURIComponent(workspaceSessionId)}/canvas-session?${search.toString()}`,
+    );
+    setCanvasSession(payload);
+  });
+
+  const refreshWorkspaceState = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
+    await Promise.all([
+      refreshWorkspaceSnapshot(workspaceSessionId),
+      refreshTraceEvents(workspaceSessionId, activeQuery),
+      refreshCanvasSession(workspaceSessionId),
+    ]);
+  });
+
+  const scheduleCanvasSessionRefresh = useEffectEvent((workspaceSessionId: string) => {
+    if (canvasRefreshTimeoutRef.current !== null) {
+      return;
+    }
+    canvasRefreshTimeoutRef.current = window.setTimeout(() => {
+      canvasRefreshTimeoutRef.current = null;
+      void refreshCanvasSession(workspaceSessionId);
+    }, 750);
   });
 
   const refreshWorkspaceCatalog = useEffectEvent(async () => {
@@ -244,9 +348,11 @@ export function ResetWorkspaceShell({
     setRecentWorkspaces(payload.workspaces.slice(0, 6));
   });
 
-  const refreshAgentPack = useEffectEvent(async (workspaceSessionId: string) => {
+  const refreshRuntimeSurface = useEffectEvent(async (workspaceSessionId: string) => {
     const search = new URLSearchParams({ workspaceSessionId });
     const payload = await requestJson<RuntimeManifestResponse>(`/api/reset/runtime-manifest?${search.toString()}`);
+    setManifest(payload.manifest);
+    setRegistry(payload.registry);
     setAgentPack(payload.agentPack);
   });
 
@@ -268,7 +374,7 @@ export function ResetWorkspaceShell({
     await loadWorkspaceFiles(nextWorkspace.id, '');
     await loadDefaultWorkspaceFile(nextWorkspace.id);
     await refreshWorkspaceCatalog();
-    await refreshAgentPack(nextWorkspace.id);
+    await refreshRuntimeSurface(nextWorkspace.id);
   });
 
   const loadWorkspaceFiles = useEffectEvent(async (workspaceSessionId: string, nextDirectoryPath = '') => {
@@ -331,7 +437,7 @@ export function ResetWorkspaceShell({
             activeFilePath: activeDocument?.path ?? null,
             editorMode: 'reset_shell',
             draftSyncEnabled: false,
-            roomName: roomTelemetry.roomName,
+            roomName: canonicalRoomId,
             roomConnectionState: roomTelemetry.connectionState,
             roomParticipantCount: roomTelemetry.participantCount,
             roomAgentStatus: roomTelemetry.agentStatus,
@@ -348,8 +454,8 @@ export function ResetWorkspaceShell({
   );
 
   useEffect(() => {
-    void refreshWorkspaceState(workspace.id, deferredTraceQuery);
-  }, [deferredTraceQuery, refreshWorkspaceState, workspace.id]);
+    void refreshTraceEvents(workspace.id, deferredTraceQuery);
+  }, [deferredTraceQuery, refreshTraceEvents, workspace.id]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -395,11 +501,22 @@ export function ResetWorkspaceShell({
 
     const visibilityHandler = () => {
       void syncPresence(document.hidden ? 'away' : 'connected');
+      if (!document.hidden) {
+        void refreshWorkspaceState(workspace.id, deferredTraceQuery);
+      }
     };
     const heartbeat = window.setInterval(() => {
       void syncPresence(document.hidden ? 'idle' : 'connected');
-      void refreshWorkspaceState(workspace.id, deferredTraceQuery);
+      void refreshTraceEvents(workspace.id, deferredTraceQuery);
     }, 15000);
+    const snapshotRefresh = window.setInterval(() => {
+      if (!document.hidden) {
+        void Promise.all([
+          refreshWorkspaceSnapshot(workspace.id),
+          refreshCanvasSession(workspace.id),
+        ]);
+      }
+    }, 60000);
     const cleanup = () => {
       void requestJson('/api/reset/presence', {
         method: 'POST',
@@ -419,11 +536,21 @@ export function ResetWorkspaceShell({
 
     return () => {
       window.clearInterval(heartbeat);
+      window.clearInterval(snapshotRefresh);
       window.removeEventListener('visibilitychange', visibilityHandler);
       window.removeEventListener('pagehide', cleanup);
       cleanup();
     };
-  }, [deferredTraceQuery, localIdentity, refreshWorkspaceState, syncPresence, workspace.id]);
+  }, [
+    deferredTraceQuery,
+    localIdentity,
+    refreshCanvasSession,
+    refreshTraceEvents,
+    refreshWorkspaceSnapshot,
+    refreshWorkspaceState,
+    syncPresence,
+    workspace.id,
+  ]);
 
   useEffect(() => {
     if (!localIdentity) return;
@@ -431,17 +558,14 @@ export function ResetWorkspaceShell({
   }, [activeDocument?.path, localIdentity, roomTelemetry, syncPresence]);
 
   useEffect(() => {
-    const currentTaskId = activeTaskId ?? tasks[0]?.id ?? null;
-    const currentTask = tasks.find((task) => task.id === currentTaskId) ?? null;
-
-    if (!currentTaskId || !currentTask || !['queued', 'running'].includes(currentTask.status)) {
+    if (!effectiveActiveTaskId || !effectiveActiveTask || !['queued', 'running'].includes(effectiveActiveTask.status)) {
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       return;
     }
 
     eventSourceRef.current?.close();
-    const eventSource = new EventSource(`/api/reset/tasks/${encodeURIComponent(currentTaskId)}/events`);
+    const eventSource = new EventSource(`/api/reset/tasks/${encodeURIComponent(effectiveActiveTaskId)}/events`);
     eventSourceRef.current = eventSource;
 
     eventSource.addEventListener('task', (event) => {
@@ -451,11 +575,20 @@ export function ResetWorkspaceShell({
           right.updatedAt.localeCompare(left.updatedAt),
         ),
       );
+      void refreshCanvasSession(workspace.id);
     });
 
     eventSource.addEventListener('trace', (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as Record<string, unknown>;
+      const normalizedTraceQuery = deferredTraceQuery.trim().toLowerCase();
+      if (
+        normalizedTraceQuery &&
+        !JSON.stringify(payload).toLowerCase().includes(normalizedTraceQuery)
+      ) {
+        return;
+      }
       setTraceEvents((previous) => [payload, ...previous.filter((entry) => entry['id'] !== payload['id'])]);
+      scheduleCanvasSessionRefresh(workspace.id);
     });
 
     eventSource.addEventListener('done', () => {
@@ -477,7 +610,35 @@ export function ResetWorkspaceShell({
         eventSourceRef.current = null;
       }
     };
-  }, [activeTaskId, deferredTraceQuery, refreshWorkspaceState, tasks, workspace.id]);
+  }, [
+    deferredTraceQuery,
+    effectiveActiveTask?.status,
+    effectiveActiveTaskId,
+    refreshCanvasSession,
+    refreshWorkspaceState,
+    scheduleCanvasSessionRefresh,
+    workspace.id,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (canvasRefreshTimeoutRef.current !== null) {
+        window.clearTimeout(canvasRefreshTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRuntimeNodeId) return;
+    if (canvasSession.nodes.some((node) => node.id === selectedRuntimeNodeId)) return;
+    setSelectedRuntimeNodeId(null);
+  }, [canvasSession.nodes, selectedRuntimeNodeId]);
+
+  useEffect(() => {
+    if (!selectedRuntimeNodeId) {
+      setRevealedWidgetArtifactId(null);
+    }
+  }, [selectedRuntimeNodeId]);
 
   const runAction = async (action: () => Promise<void>) => {
     setIsBusy(true);
@@ -518,6 +679,17 @@ export function ResetWorkspaceShell({
     });
   };
 
+  const pendingApprovalCount = approvals.filter((approval) => approval.state === 'pending').length;
+  const healthyConnectorCount = registry.connectors.filter((connector) => connector.health === 'healthy').length;
+  const visibleConnectors = useMemo(() => {
+    const priorityOrder = ['codex-app-server', 'livekit-room', 'present-mcp', 'openclaw-acp'];
+    const prioritized = priorityOrder
+      .map((connectorId) => registry.connectors.find((connector) => connector.id === connectorId))
+      .filter((connector): connector is (typeof registry.connectors)[number] => Boolean(connector));
+    return prioritized.slice(0, 3);
+  }, [registry.connectors]);
+  const hiddenConnectorCount = Math.max(0, registry.connectors.length - visibleConnectors.length);
+
   const registerLocalExecutor = async () => {
     await runAction(async () => {
       const result = await requestJson<{ executorSession: ExecutorSession }>('/api/reset/executors/register', {
@@ -528,7 +700,7 @@ export function ResetWorkspaceShell({
           identity: 'local-companion',
           kind: 'local_companion',
           authMode: 'chatgpt',
-          codexBaseUrl: initialManifest.codex.appServerBaseUrl,
+          codexBaseUrl: manifest.codex.appServerBaseUrl,
           capabilities: ['code_edit', 'code_review', 'canvas_edit', 'widget_render', 'room_presence', 'mcp_server'],
         }),
       });
@@ -588,8 +760,35 @@ export function ResetWorkspaceShell({
           title: widgetTitle,
           mimeType: 'text/html',
           content: widgetHtml,
+          metadata: {
+            widgetRuntime: {
+              hostKind: 'html_bundle',
+              componentType: null,
+              componentProps: {},
+              resourceUri: null,
+              serverName: null,
+              toolName: null,
+              args: null,
+              displayMode: 'inline',
+              contextKey: 'canvas',
+            },
+          },
         }),
       });
+      await refreshWorkspaceState(workspace.id, deferredTraceQuery);
+    });
+  };
+
+  const copyTextValue = async (value: string | null | undefined) => {
+    if (!value || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    await navigator.clipboard.writeText(value);
+  };
+
+  const reloadWidgetArtifact = async (artifactId: string) => {
+    await runAction(async () => {
+      await requestJson(
+        `/api/reset/artifacts/${encodeURIComponent(artifactId)}?workspaceSessionId=${encodeURIComponent(workspace.id)}`,
+      );
       await refreshWorkspaceState(workspace.id, deferredTraceQuery);
     });
   };
@@ -632,9 +831,17 @@ export function ResetWorkspaceShell({
   };
 
   const applyPatchArtifact = async (artifactId: string) => {
+    if (!approvedWriteApproval) {
+      throw new Error('Approve a pending write request before applying a patch artifact.');
+    }
     await runAction(async () => {
       await requestJson(`/api/reset/artifacts/${encodeURIComponent(artifactId)}/apply`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approvalRequestId: approvedWriteApproval.id,
+          resolvedBy: 'mission-control',
+        }),
       });
       await refreshWorkspaceState(workspace.id, deferredTraceQuery);
       if (activeDocument) {
@@ -692,27 +899,337 @@ export function ResetWorkspaceShell({
     });
   };
 
+  const renderSelectionInspector = (node: CanvasSessionNode | null) => {
+    if (!node) {
+      return (
+        <div className="reset-list">
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Run Lane</div>
+            <strong>{projectedRunLane?.title ?? 'No active run'}</strong>
+            <p>
+              {projectedRunLane?.kind === 'run-lane'
+                ? projectedRunLane.status
+                : 'Select a runtime shape on the board to inspect it here.'}
+            </p>
+          </article>
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Widget Frames</div>
+            <strong>{canvasSession.summary.widgets}</strong>
+            <p>Widgets and artifacts now live as TLDraw objects with shared layout and selection.</p>
+          </article>
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Trace Rails</div>
+            <strong>{canvasSession.summary.traceRails}</strong>
+            <p>The board keeps a fixed live replay window while the ledger search stays dock-only.</p>
+          </article>
+        </div>
+      );
+    }
+
+    const metadataEntries = Object.entries(node.metadata ?? {}).filter(([, value]) => {
+      if (value == null) return false;
+      if (Array.isArray(value)) return value.length > 0;
+      if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+      return true;
+    });
+    const nodeTitle =
+      node.kind === 'agent-seat'
+        ? node.label
+        : node.kind === 'media-tile'
+          ? node.participantIdentity
+          : node.title;
+
+    return (
+      <div className="reset-list">
+        <article className="reset-list-card">
+          <div className="reset-list-card__eyebrow">{node.kind}</div>
+          <strong>{nodeTitle}</strong>
+          <p>Sync version: {node.syncVersion}</p>
+          <p>
+            {node.retention} · {node.layoutHint.zone.replace('_', ' ')}
+          </p>
+        </article>
+
+        {node.kind === 'approval-chip' ? (
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Approval Actions</div>
+            <strong>{node.state}</strong>
+            <p>{node.detail}</p>
+            {node.state === 'pending' ? (
+              <div className="reset-inline-actions">
+                <button
+                  type="button"
+                  className="reset-button reset-button--ghost"
+                  onClick={() => {
+                    void resolveApproval(node.approvalRequestId, 'approved');
+                  }}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  className="reset-button reset-button--secondary"
+                  onClick={() => {
+                    void resolveApproval(node.approvalRequestId, 'rejected');
+                  }}
+                >
+                  Reject
+                </button>
+              </div>
+            ) : null}
+          </article>
+        ) : null}
+
+        {node.kind === 'artifact-card' ? (
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Artifact Actions</div>
+            <strong>{String(node.metadata['kind'] ?? node.mimeType)}</strong>
+            <p>{String(node.metadata['filePath'] ?? node.metadata['preview'] ?? node.mimeType)}</p>
+            {String(node.metadata['kind'] ?? '') === 'file_patch' ? (
+              <div className="reset-inline-actions">
+                <button
+                  type="button"
+                  className="reset-button reset-button--ghost"
+                  disabled={!approvedWriteApproval}
+                  onClick={() => {
+                    void applyPatchArtifact(node.artifactId);
+                  }}
+                >
+                  Apply Patch
+                </button>
+              </div>
+            ) : null}
+          </article>
+        ) : null}
+
+        {node.kind === 'widget-frame' ? (
+          <article className="reset-list-card">
+            {(() => {
+              const widgetNode = node as WidgetInstance;
+              const widgetResourceUri = widgetNode.resourceUri;
+              const artifactUri = widgetNode.artifactUri;
+              return (
+                <>
+            <div className="reset-list-card__eyebrow">Widget Runtime</div>
+            <strong>{widgetNode.widgetRuntime.hostKind}</strong>
+            <p>
+              {widgetNode.widgetRuntime.componentType
+                ? `${widgetNode.widgetRuntime.componentType} · ${widgetNode.bridgeState.status}`
+                : widgetNode.bridgeState.status}
+            </p>
+            <p>{widgetResourceUri ?? 'No model-visible resource URI available yet.'}</p>
+            <p>
+              {widgetNode.widgetRuntime.serverName || widgetNode.widgetRuntime.toolName
+                ? `Binding: ${widgetNode.widgetRuntime.serverName ?? 'unknown server'} / ${widgetNode.widgetRuntime.toolName ?? 'no tool'}`
+                : 'Binding: component or legacy HTML bundle'}
+            </p>
+            <p>Artifact route: {artifactUri ?? 'n/a'}</p>
+            <p>
+              Display: {widgetNode.widgetRuntime.displayMode ?? 'default'} · Hydrated:{' '}
+              {widgetNode.bridgeState.lastHydratedAt ?? 'pending'}
+            </p>
+            <div className="reset-inline-actions">
+              <button
+                type="button"
+                className="reset-button reset-button--ghost"
+                disabled={!widgetNode.artifactId || isBusy}
+                onClick={() => {
+                  if (!widgetNode.artifactId) return;
+                  void reloadWidgetArtifact(widgetNode.artifactId);
+                }}
+              >
+                Reload Widget
+              </button>
+              <button
+                type="button"
+                className="reset-button reset-button--ghost"
+                disabled={!widgetResourceUri}
+                onClick={() => {
+                  void copyTextValue(widgetResourceUri);
+                }}
+              >
+                Copy Resource URI
+              </button>
+              <button
+                type="button"
+                className="reset-button reset-button--secondary"
+                disabled={!widgetNode.artifactId}
+                onClick={() => {
+                  setRevealedWidgetArtifactId((current) =>
+                    current === widgetNode.artifactId ? null : widgetNode.artifactId ?? null,
+                  );
+                }}
+              >
+                Reveal Artifact ID
+              </button>
+            </div>
+            {revealedWidgetArtifactId === widgetNode.artifactId ? (
+              <pre className="reset-command-block">{`artifactId: ${widgetNode.artifactId}\nartifactUri: ${artifactUri ?? 'n/a'}\nresourceUri: ${widgetResourceUri ?? 'n/a'}`}</pre>
+            ) : null}
+                </>
+              );
+            })()}
+          </article>
+        ) : null}
+
+        {node.kind === 'trace-rail' && Array.isArray(node.metadata['preview']) ? (
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Trace Preview</div>
+            <strong>{node.eventCount} event(s)</strong>
+            <p>{node.latestEventType ?? 'trace'}</p>
+            <div className="reset-list">
+              {(node.metadata['preview'] as Array<Record<string, unknown>>).slice(0, 3).map((entry) => (
+                <article className="reset-list-card" key={String(entry['id'] ?? entry['emittedAt'] ?? Math.random())}>
+                  <div className="reset-list-card__eyebrow">{String(entry['type'] ?? 'event')}</div>
+                  <strong>{String(entry['title'] ?? 'Trace Event')}</strong>
+                  <p>{String(entry['detail'] ?? '')}</p>
+                </article>
+              ))}
+            </div>
+          </article>
+        ) : null}
+
+        {metadataEntries.length > 0 ? (
+          <article className="reset-list-card">
+            <div className="reset-list-card__eyebrow">Metadata</div>
+            <strong>{metadataEntries.length} field(s)</strong>
+            <p>
+              {metadataEntries
+                .slice(0, 4)
+                .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+                .join(' · ')}
+            </p>
+          </article>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <div className="reset-shell">
       <div className="reset-shell__backdrop" />
       <header className="reset-hero">
         <div>
-          <div className="reset-eyebrow">PRESENT RESET / CODEX-NATIVE WORKSPACE</div>
-          <h1>Editorial mission control for code, canvas, rooms, widgets, and external agents.</h1>
-          <p>
-            The legacy canvas runtime is still in the repo, but the root product now runs on reset-era
-            kernel contracts, Codex app-server assumptions, and a server-owned MCP boundary.
-          </p>
+          <div className="reset-eyebrow">PRESENT CANVAS OS / HUMAN + AGENT COLLABORATION</div>
+          <h1>Canvas OS for rooms, agents, widgets, and live code.</h1>
+          <p>The board is primary. The shell is an operator dock over the same runtime state.</p>
         </div>
         <div className="reset-hero__badges">
-          <span>Dual Client</span>
-          <span>Small Teams</span>
-          <span>{initialManifest.codex.recommendedModels.join(' / ')}</span>
+          <span>{manifest.primarySurface.toUpperCase()} OS</span>
+          <span>{manifest.runtimeCenter}</span>
+          <span>{manifest.collaboration.dualClient ? 'web + desktop' : 'single client'}</span>
+          <span>{manifest.codex.recommendedModels.join(' / ')}</span>
+          <button
+            type="button"
+            className="reset-button reset-button--ghost"
+            onClick={() => setOperatorDockOpen((current) => !current)}
+          >
+            {operatorDockOpen ? 'Hide Operator Dock' : 'Show Operator Dock'}
+          </button>
         </div>
       </header>
 
-      <section className="reset-topline">
-        <article className="reset-panel">
+      <section className="reset-canvas-os">
+        <article className="reset-panel reset-panel--canvas-os">
+          <div className="reset-panel__header">
+            <div>
+              <div className="reset-panel__eyebrow">Canvas OS</div>
+              <h2>Shared Spatial Runtime</h2>
+            </div>
+            <div className="reset-panel__microcopy">
+              LiveKit handles the ephemeral lane, TLDraw carries the durable board, and MCP-backed widgets stay
+              server-owned inside the same room-shaped workspace.
+            </div>
+          </div>
+          <div className="reset-room-grid">
+            <div className="reset-room-card">
+              <span>Room</span>
+              <strong>{canonicalRoomId ?? roomTelemetry.roomName ?? 'pending'}</strong>
+            </div>
+            <div className="reset-room-card">
+              <span>Participants</span>
+              <strong>{roomTelemetry.participantCount || presence.length}</strong>
+            </div>
+            <div className="reset-room-card">
+              <span>Connectors</span>
+              <strong>
+                {healthyConnectorCount}/{registry.connectors.length}
+              </strong>
+            </div>
+            <div className="reset-room-card">
+              <span>Approvals</span>
+              <strong>{pendingApprovalCount}</strong>
+            </div>
+          </div>
+          <div className="reset-frame-shell">
+            <ResetCollaborationSurface
+              canvasSession={canvasSession}
+              canApplyLatestPatch={Boolean(approvedWriteApproval && latestPatchArtifact)}
+              onApplyPatchArtifact={(artifactId) => {
+                void applyPatchArtifact(artifactId);
+              }}
+              onResolveApproval={(approvalRequestId, state) => {
+                void resolveApproval(approvalRequestId, state);
+              }}
+              workspaceSessionId={workspace.id}
+              roomId={canonicalRoomId}
+              operatorLabel={localPresenceLabel}
+              onSelectedRuntimeNodeChange={setSelectedRuntimeNodeId}
+              onTelemetryChange={(telemetry) => {
+                setRoomTelemetry({
+                  roomName: telemetry.roomName,
+                  connectionState: telemetry.connectionState,
+                  participantCount: telemetry.participantCount,
+                  agentStatus: telemetry.agentStatus,
+                  media: telemetry.media,
+                });
+              }}
+            />
+          </div>
+        </article>
+
+        <aside className="reset-canvas-os__rail">
+          <article className="reset-panel reset-panel--stack">
+            <div className="reset-panel__header">
+              <div>
+                <div className="reset-panel__eyebrow">Selection Inspector</div>
+                <h2>{selectedRuntimeNode ? 'Board-Owned Runtime Object' : 'Board Runtime Summary'}</h2>
+              </div>
+            </div>
+            {renderSelectionInspector(selectedRuntimeNode)}
+          </article>
+
+          <article className="reset-panel reset-panel--stack">
+            <div className="reset-panel__header">
+              <div>
+                <div className="reset-panel__eyebrow">Connector Registry</div>
+                <h2>External Lanes</h2>
+              </div>
+            </div>
+            <div className="reset-list">
+              {visibleConnectors.map((connector) => (
+                <article className="reset-list-card" key={connector.id}>
+                  <div className="reset-list-card__eyebrow">{connector.lane}</div>
+                  <strong>{connector.label}</strong>
+                  <p>{connector.health === 'healthy' ? connector.transport : connector.endpoint ?? connector.transport}</p>
+                  <span className={`reset-pill reset-pill--${connector.health}`}>{connector.health}</span>
+                </article>
+              ))}
+              {hiddenConnectorCount > 0 ? (
+                <article className="reset-list-card">
+                  <div className="reset-list-card__eyebrow">Additional Connectors</div>
+                  <strong>+{hiddenConnectorCount} more</strong>
+                  <p>Healthy lanes are collapsed by default so the board stays visually primary.</p>
+                </article>
+              ) : null}
+            </div>
+          </article>
+        </aside>
+      </section>
+
+      {operatorDockOpen ? (
+        <section className="reset-topline">
+          <article className="reset-panel">
           <label className="reset-field-label">Workspace Path</label>
           <div className="reset-inline-form">
             <input
@@ -765,9 +1282,9 @@ export function ResetWorkspaceShell({
               </article>
             ))}
           </div>
-        </article>
+          </article>
 
-        <article className="reset-panel">
+          <article className="reset-panel">
           <label className="reset-field-label">Codex Task</label>
           <input
             className="reset-input"
@@ -790,8 +1307,9 @@ export function ResetWorkspaceShell({
               Queue Canvas Task
             </button>
           </div>
-        </article>
-      </section>
+          </article>
+        </section>
+      ) : null}
 
       <section className="reset-main-grid">
         <article className="reset-panel reset-panel--editor">
@@ -899,25 +1417,13 @@ export function ResetWorkspaceShell({
         <article className="reset-panel reset-panel--canvas">
           <div className="reset-panel__header">
             <div>
-              <div className="reset-panel__eyebrow">Canvas / Widget Rail</div>
-              <h2>Server-Owned Preview</h2>
+              <div className="reset-panel__eyebrow">Widget OS / Artifact Rail</div>
+              <h2>GenUI Dock</h2>
             </div>
-            <div className="reset-panel__microcopy">Reset-native TLDraw collaboration, widget artifacts, and patch review now live in the shell without ceding `/` back to the archived canvas route.</div>
-          </div>
-          <div className="reset-frame-shell">
-            <ResetCollaborationSurface
-              workspaceSessionId={workspace.id}
-              operatorLabel={localPresenceLabel}
-              onTelemetryChange={(telemetry) => {
-                setRoomTelemetry({
-                  roomName: telemetry.roomName,
-                  connectionState: telemetry.connectionState,
-                  participantCount: telemetry.participantCount,
-                  agentStatus: telemetry.agentStatus,
-                  media: telemetry.media,
-                });
-              }}
-            />
+            <div className="reset-panel__microcopy">
+              Paired data-tool and render-tool flows land here as server-owned widget bundles, diff artifacts, and
+              approval-aware previews without leaving the board.
+            </div>
           </div>
           <div className="reset-widget-form">
             <input
@@ -955,7 +1461,12 @@ export function ResetWorkspaceShell({
               <>
                 <pre className="reset-diff-view">{latestPatchArtifact.content}</pre>
                 <div className="reset-inline-actions">
-                  <button type="button" onClick={() => applyPatchArtifact(latestPatchArtifact.id)} className="reset-button reset-button--ghost" disabled={isBusy}>
+                  <button
+                    type="button"
+                    onClick={() => applyPatchArtifact(latestPatchArtifact.id)}
+                    className="reset-button reset-button--ghost"
+                    disabled={isBusy || !approvedWriteApproval}
+                  >
                     Apply Latest Patch
                   </button>
                 </div>
@@ -1082,7 +1593,7 @@ export function ResetWorkspaceShell({
           <div className="reset-panel__header">
             <div>
               <div className="reset-panel__eyebrow">BYO Agent</div>
-              <h2>OpenClaw + MCP Pack</h2>
+              <h2>Canvas Interop Pack</h2>
             </div>
             <div className="reset-panel__microcopy">
               Machine-readable entry points for external agents and local operator tooling.
@@ -1093,6 +1604,13 @@ export function ResetWorkspaceShell({
               <div className="reset-list-card__eyebrow">Recommended Clients</div>
               <strong>{agentPack.recommendedClients.join(' / ')}</strong>
               <p>{agentPack.notes[0] ?? 'Use the local companion for subscription-backed Codex auth.'}</p>
+            </article>
+            <article className="reset-list-card">
+              <div className="reset-list-card__eyebrow">Primary Surface</div>
+              <strong>{agentPack.surface}</strong>
+              <p>
+                Manifest: {agentPack.manifestUri} / Registry: {agentPack.registryUri}
+              </p>
             </article>
           </div>
           <div className="reset-command-grid">
@@ -1117,6 +1635,15 @@ export function ResetWorkspaceShell({
               <pre className="reset-command-block">{formatCommand(agentPack.commands.printManifest)}</pre>
             </article>
           </div>
+          <div className="reset-list">
+            {agentPack.connectorHints.slice(0, 4).map((hint) => (
+              <article className="reset-list-card" key={hint.connectorId}>
+                <div className="reset-list-card__eyebrow">{hint.connectorId}</div>
+                <strong>{hint.purpose}</strong>
+                <p>{hint.preferWhen}</p>
+              </article>
+            ))}
+          </div>
         </article>
 
         <article className="reset-panel">
@@ -1137,11 +1664,11 @@ export function ResetWorkspaceShell({
             </div>
             <div className="reset-room-card">
               <span>MCP</span>
-              <strong>{initialManifest.mcp.serverName}</strong>
+              <strong>{manifest.mcp.serverName}</strong>
             </div>
             <div className="reset-room-card">
               <span>Clients</span>
-              <strong>{initialManifest.collaboration.dualClient ? 'web + desktop' : 'single'}</strong>
+              <strong>{manifest.collaboration.dualClient ? 'web + desktop' : 'single'}</strong>
             </div>
           </div>
           <div className="reset-list-card">
@@ -1182,7 +1709,7 @@ export function ResetWorkspaceShell({
                   type="button"
                   onClick={() => applyPatchArtifact(artifact.id)}
                   className="reset-button reset-button--ghost"
-                  disabled={isBusy}
+                  disabled={isBusy || !approvedWriteApproval}
                 >
                   Apply Patch
                 </button>

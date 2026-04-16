@@ -93,11 +93,34 @@ describe('present MCP stdio interop smoke', () => {
     });
 
     const patchPayload = readToolJson(patch);
+    const approvalRequest = await client.callTool({
+      name: 'approval.request',
+      arguments: {
+        workspaceSessionId: workspace.id,
+        traceId: 'trace_smoke',
+        kind: 'git_action',
+        title: 'Approve README patch',
+        detail: 'Allow the README patch to be applied.',
+        requestedBy: 'interop-smoke',
+      },
+    });
+    const approvalRequestPayload = readToolJson(approvalRequest);
+
+    await client.callTool({
+      name: 'approval.resolve',
+      arguments: {
+        approvalRequestId: approvalRequestPayload.approval.id,
+        state: 'approved',
+        resolvedBy: 'interop-smoke',
+      },
+    });
 
     await client.callTool({
       name: 'artifact.applyPatch',
       arguments: {
         artifactId: patchPayload.artifact.id,
+        approvalRequestId: approvalRequestPayload.approval.id,
+        resolvedBy: 'interop-smoke',
       },
     });
 

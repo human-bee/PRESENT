@@ -32,12 +32,17 @@ export async function POST(request: NextRequest) {
   const payload = await request.json();
   if (payload?.approvalRequestId) {
     const resolved = resolveApprovalSchema.parse(payload);
-    const approval = resolveApprovalRequest(resolved);
-    if (!approval) {
-      return NextResponse.json({ error: 'Approval request not found' }, { status: 404 });
+    try {
+      const approval = resolveApprovalRequest(resolved);
+      if (!approval) {
+        return NextResponse.json({ error: 'Approval request not found' }, { status: 404 });
+      }
+      await flushResetKernelWrites();
+      return NextResponse.json({ approval });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to resolve approval request';
+      return NextResponse.json({ error: message }, { status: 409 });
     }
-    await flushResetKernelWrites();
-    return NextResponse.json({ approval });
   }
 
   const created = createApprovalSchema.parse(payload);

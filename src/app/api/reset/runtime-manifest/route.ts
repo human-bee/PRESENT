@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildAgentInteropPack, buildRuntimeManifest, getWorkspaceSession, resolveKernelModelProfiles } from '@present/kernel';
+import {
+  buildCanvasRuntimeSurface,
+  getWorkspaceSession,
+  resolveKernelModelProfiles,
+} from '@present/kernel';
 import { buildCodexAppServerManifest } from '@present/codex-adapter';
 import { hydrateResetKernel } from '../_lib/persistence';
 
@@ -10,10 +14,12 @@ export async function GET(request: NextRequest) {
   const workspaceSessionId = request.nextUrl.searchParams.get('workspaceSessionId');
   const workspace = workspaceSessionId ? getWorkspaceSession(workspaceSessionId) : null;
   const [modelProfiles] = await Promise.all([resolveKernelModelProfiles()]);
+  const runtimeSurface = buildCanvasRuntimeSurface(workspace);
   return NextResponse.json({
-    manifest: buildRuntimeManifest(),
+    manifest: runtimeSurface.manifest,
+    registry: runtimeSurface.registry,
     codex: buildCodexAppServerManifest(),
     modelProfiles,
-    agentPack: buildAgentInteropPack(workspace),
+    agentPack: runtimeSurface.agentPack,
   });
 }
