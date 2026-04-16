@@ -134,6 +134,35 @@ const DEFAULT_RESPONSES_TOOL_PARAMETER_SCHEMA: Record<string, unknown> = {
   additionalProperties: true,
 };
 
+type RuntimeSafeParseResult = {
+  success: boolean;
+  data: unknown;
+  error?: unknown;
+};
+
+type RuntimeSafeParseSchema = {
+  safeParse: (value: unknown) => RuntimeSafeParseResult;
+};
+
+type RuntimeExecutableTool = {
+  execute: (payload: Record<string, unknown>) => Promise<unknown>;
+  parameters?: unknown;
+};
+
+const hasRuntimeSafeParse = (schema: unknown): schema is RuntimeSafeParseSchema =>
+  Boolean(
+    schema &&
+    typeof schema === 'object' &&
+    typeof (schema as { safeParse?: unknown }).safeParse === 'function',
+  );
+
+const hasRuntimeExecute = (tool: unknown): tool is RuntimeExecutableTool =>
+  Boolean(
+    tool &&
+    typeof tool === 'object' &&
+    typeof (tool as { execute?: unknown }).execute === 'function',
+  );
+
 const toResponsesToolParameters = (schema: unknown): Record<string, unknown> => {
   try {
     const jsonSchema = z.toJSONSchema(schema as z.ZodTypeAny);
@@ -3939,15 +3968,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const responsesToolCatalog = buildResponsesToolCatalog(toolContext);
 
     const executeResponsesToolCall = async (toolName: string, args: Record<string, unknown>) => {
-      const handler = (toolContext as Record<string, {
-        execute?: (payload: Record<string, unknown>) => Promise<unknown>;
-        parameters?: { safeParse?: (value: unknown) => { success: boolean; data: unknown; error?: unknown } };
-      }>)[toolName];
-      if (!handler || typeof handler.execute !== 'function') {
+      const handler = toolContext[toolName];
+      if (!hasRuntimeExecute(handler)) {
         console.warn('[VoiceAgent] responses_ws unknown tool requested', { tool: toolName });
         return { status: 'ERROR', message: `Unknown tool: ${toolName}` };
       }
-      if (!handler.parameters || typeof handler.parameters.safeParse !== 'function') {
+      if (!hasRuntimeSafeParse(handler.parameters)) {
         return {
           status: 'ERROR',
           message: `Tool ${toolName} is missing runtime validation schema`,
