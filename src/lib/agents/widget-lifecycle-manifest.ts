@@ -1,6 +1,6 @@
-export type CapabilityProfile = 'full' | 'lean_adaptive';
+import type { CapabilityProfile, WidgetTier } from './capability-contract';
 
-export type WidgetTier = 'tier1' | 'tier2';
+export type { CapabilityProfile, WidgetTier };
 export type WidgetGroup =
   | 'productivity'
   | 'research'
