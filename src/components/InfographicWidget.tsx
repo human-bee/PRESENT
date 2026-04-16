@@ -491,9 +491,11 @@ export function InfographicWidget({
   }, [isShape]);
 
   useEffect(() => {
-    const off = bus.on('transcription', (data: TranscriptEntry) => {
+    const off = bus.on('transcription', (payload: unknown) => {
+      const data =
+        payload && typeof payload === 'object' ? (payload as Partial<TranscriptEntry>) : null;
       if (typeof data?.text !== 'string') return;
-      setTranscripts((current) => [...current, data].slice(-20));
+      setTranscripts((current) => [...current, data as TranscriptEntry].slice(-20));
     });
     return off;
   }, [bus]);
