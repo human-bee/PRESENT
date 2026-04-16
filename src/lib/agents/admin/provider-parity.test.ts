@@ -16,6 +16,8 @@ describe('provider-parity', () => {
 
   it('normalizes provider/source/path values', () => {
     expect(normalizeProvider('OpenAI')).toBe('openai');
+    expect(normalizeProvider('fal')).toBe('fal');
+    expect(normalizeProvider('xai')).toBe('xai');
     expect(normalizeProvider('unknown-provider')).toBe('unknown');
     expect(normalizeProviderSource('runtime_selected')).toBe('runtime_selected');
     expect(normalizeProviderSource('bogus')).toBe('unknown');
@@ -29,6 +31,8 @@ describe('provider-parity', () => {
     expect(inferProviderFromModel('claude-3-5-sonnet')).toBe('anthropic');
     expect(inferProviderFromModel('gemini-2.5-pro')).toBe('google');
     expect(inferProviderFromModel('llama-3.3-70b')).toBe('cerebras');
+    expect(inferProviderFromModel('fal:flux-2-flash')).toBe('fal');
+    expect(inferProviderFromModel('grok-imagine-image')).toBe('xai');
     expect(inferProviderFromModel('black-forest-labs/flux-1')).toBe('together');
   });
 
@@ -72,5 +76,14 @@ describe('provider-parity', () => {
 
     process.env.AGENT_ADMIN_PROVIDER_LINK_TEMPLATE_OPENAI = 'notaurl';
     expect(buildProviderLinkUrl('openai', { traceId: 'trace-2' })).toBeNull();
+  });
+
+  it('keeps direct provider values aligned with the shared admin provider contract', async () => {
+    const { AGENT_PROVIDER_VALUES } = await import('./provider-contract');
+
+    expect(AGENT_PROVIDER_VALUES).toContain('fal');
+    expect(AGENT_PROVIDER_VALUES).toContain('xai');
+    expect(normalizeProvider('fal')).toBe('fal');
+    expect(normalizeProvider('xai')).toBe('xai');
   });
 });
