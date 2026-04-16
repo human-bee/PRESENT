@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
+import { resolveApplyModeForPath } from './apply-mode';
 import { modelControlKnobsSchema, modelControlModelsSchema, modelControlPatchSchema } from './schemas';
 import { getModelControlProfilesForResolution } from './profiles';
 import type {
   ApplyMode,
   ModelControlPatch,
+  ResolvedFieldScope,
   ResolveModelControlInput,
   ResolvedModelControl,
 } from './types';
@@ -16,24 +18,6 @@ type CacheEntry = {
 };
 
 const resolverCache = new Map<string, CacheEntry>();
-
-const APPLY_MODE_BY_PATH: Array<{ prefix: string; mode: ApplyMode }> = [
-  { prefix: 'knobs.conductor.taskLeaseTtlMs', mode: 'restart_required' },
-  { prefix: 'knobs.conductor.taskIdlePollMs', mode: 'restart_required' },
-  { prefix: 'knobs.conductor.taskIdlePollMaxMs', mode: 'restart_required' },
-  { prefix: 'knobs.conductor.taskMaxRetryAttempts', mode: 'restart_required' },
-  { prefix: 'knobs.conductor.taskRetryBaseDelayMs', mode: 'restart_required' },
-  { prefix: 'knobs.conductor.taskRetryMaxDelayMs', mode: 'restart_required' },
-  { prefix: 'knobs.conductor.taskRetryJitterRatio', mode: 'restart_required' },
-  { prefix: 'knobs.conductor.roomConcurrency', mode: 'next_session' },
-  { prefix: 'knobs.voice', mode: 'next_session' },
-  { prefix: 'models.voiceRealtime', mode: 'next_session' },
-  { prefix: 'models.voiceRealtimePrimary', mode: 'next_session' },
-  { prefix: 'models.voiceRealtimeSecondary', mode: 'next_session' },
-  { prefix: 'models.voiceRouter', mode: 'next_session' },
-  { prefix: 'models.voiceStt', mode: 'next_session' },
-  { prefix: 'knobs.voice.realtimeModelStrategy', mode: 'next_session' },
-];
 
 const deepMerge = <T extends Record<string, unknown>>(target: T, patch: Record<string, unknown>): T => {
   const output: Record<string, unknown> = { ...target };
@@ -70,13 +54,6 @@ const flattenPaths = (value: unknown, prefix = ''): string[] => {
   return paths;
 };
 
-const applyModeForPath = (path: string): ApplyMode => {
-  for (const entry of APPLY_MODE_BY_PATH) {
-    if (path.startsWith(entry.prefix)) return entry.mode;
-  }
-  return 'live';
-};
-
 const normalizePatch = (value: unknown): ModelControlPatch => {
   const parsed = modelControlPatchSchema.safeParse(value ?? {});
   if (parsed.success) return parsed.data;
@@ -100,7 +77,7 @@ const assignFieldSource = (
   map: Record<
     string,
     {
-      scope: 'env' | 'request' | 'global' | 'room' | 'user' | 'task';
+      scope: ResolvedFieldScope;
       scopeId: string;
       profileId?: string;
       version?: number;
@@ -108,7 +85,7 @@ const assignFieldSource = (
   >,
   patch: ModelControlPatch,
   source: {
-    scope: 'env' | 'request' | 'global' | 'room' | 'user' | 'task';
+    scope: ResolvedFieldScope;
     scopeId: string;
     profileId?: string;
     version?: number;
@@ -291,7 +268,7 @@ export async function resolveModelControl(
   const paths = flattenPaths(effective);
   const applyModes: Record<string, ApplyMode> = {};
   for (const path of paths) {
-    applyModes[path] = applyModeForPath(path);
+    applyModes[path] = resolveApplyModeForPath(path);
   }
   const configVersion = createHash('sha1')
     .update(

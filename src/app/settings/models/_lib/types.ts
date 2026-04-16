@@ -1,9 +1,17 @@
+import type {
+  ApplyMode,
+  KnobScope,
+  ResolvedFieldScope,
+} from '@/lib/agents/control-plane/types';
+
 export type ResolvedFieldSource = {
-  scope: 'env' | 'request' | 'global' | 'room' | 'user' | 'task';
+  scope: ResolvedFieldScope;
   scopeId: string;
   profileId?: string;
   version?: number;
 };
+
+export type AdminScopeType = KnobScope;
 
 export type ModelControlStatusResponse = {
   ok: boolean;
@@ -17,7 +25,7 @@ export type ModelControlStatusResponse = {
     configVersion: string;
     resolvedAt: string;
     effective: Record<string, unknown>;
-    applyModes: Record<string, string>;
+    applyModes: Record<string, ApplyMode>;
     fieldSources?: Record<string, ResolvedFieldSource>;
     sources: Array<Record<string, unknown>>;
   };

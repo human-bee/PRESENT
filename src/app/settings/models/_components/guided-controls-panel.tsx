@@ -1,13 +1,19 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import type { ApplyMode } from '@/lib/agents/control-plane/types';
 import {
   filterGuidedSections,
   formatFieldSource,
   inputIdForPath,
   resolveApplyModeForPath,
 } from '../_lib/guided-config';
-import type { GuidedField, GuidedSection, ModelControlStatusResponse } from '../_lib/types';
+import type {
+  AdminScopeType,
+  GuidedField,
+  GuidedSection,
+  ModelControlStatusResponse,
+} from '../_lib/types';
 
 type Props = {
   sections: GuidedSection[];
@@ -19,12 +25,12 @@ type Props = {
   onSaveGuidedUser: () => void;
   onSaveGuidedAdmin?: () => void;
   adminProfileForm?: {
-    scopeType: 'global' | 'room' | 'user' | 'task';
+    scopeType: AdminScopeType;
     scopeId: string;
     taskPrefix: string;
     priority: string;
     enabled: boolean;
-    onScopeTypeChange: (value: 'global' | 'room' | 'user' | 'task') => void;
+    onScopeTypeChange: (value: AdminScopeType) => void;
     onScopeIdChange: (value: string) => void;
     onTaskPrefixChange: (value: string) => void;
     onPriorityChange: (value: string) => void;
@@ -32,7 +38,7 @@ type Props = {
   };
 };
 
-const modeClasses: Record<'live' | 'next_session' | 'restart_required', string> = {
+const modeClasses: Record<ApplyMode, string> = {
   live: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   next_session: 'bg-amber-50 text-amber-700 border-amber-200',
   restart_required: 'bg-rose-50 text-rose-700 border-rose-200',
@@ -285,7 +291,7 @@ export function GuidedControlsPanel({
             <select
               value={adminProfileForm.scopeType}
               onChange={(event) =>
-                adminProfileForm.onScopeTypeChange(event.target.value as 'global' | 'room' | 'user' | 'task')
+                adminProfileForm.onScopeTypeChange(event.target.value as AdminScopeType)
               }
               className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
               disabled={busy}

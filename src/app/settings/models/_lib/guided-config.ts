@@ -1,3 +1,5 @@
+import { resolveApplyModeForPath as resolveCanonicalApplyModeForPath } from '@/lib/agents/control-plane/apply-mode';
+import { isApplyMode, type ApplyMode } from '@/lib/agents/control-plane/types';
 import type { GuidedField, GuidedSection, ResolvedFieldSource } from './types';
 
 const MODEL_SUGGESTIONS = {
@@ -347,26 +349,6 @@ export const GUIDED_SECTIONS: GuidedSection[] = [
   },
 ];
 
-const RESTART_REQUIRED_PREFIXES = [
-  'knobs.conductor.taskLeaseTtlMs',
-  'knobs.conductor.taskIdlePollMs',
-  'knobs.conductor.taskIdlePollMaxMs',
-  'knobs.conductor.taskMaxRetryAttempts',
-  'knobs.conductor.taskRetryBaseDelayMs',
-  'knobs.conductor.taskRetryMaxDelayMs',
-  'knobs.conductor.taskRetryJitterRatio',
-];
-
-const NEXT_SESSION_PREFIXES = [
-  'knobs.conductor.roomConcurrency',
-  'models.voiceRealtime',
-  'models.voiceRealtimePrimary',
-  'models.voiceRealtimeSecondary',
-  'models.voiceRouter',
-  'models.voiceStt',
-  'knobs.voice.realtimeModelStrategy',
-];
-
 export const ALL_GUIDED_FIELDS = GUIDED_SECTIONS.flatMap((section) => section.fields);
 
 export const inputIdForPath = (path: string): string => `guided-${path.replace(/[^a-zA-Z0-9]/g, '-')}`;
@@ -495,19 +477,13 @@ export const buildPatchFromGuided = (values: Record<string, string>): Record<str
 
 export const resolveApplyModeForPath = (
   path: string,
-  applyModes: Record<string, string> | null | undefined,
-): 'live' | 'next_session' | 'restart_required' => {
+  applyModes: Record<string, ApplyMode> | null | undefined,
+): ApplyMode => {
   const explicit = applyModes?.[path];
-  if (explicit === 'live' || explicit === 'next_session' || explicit === 'restart_required') {
+  if (isApplyMode(explicit)) {
     return explicit;
   }
-  if (RESTART_REQUIRED_PREFIXES.some((prefix) => path.startsWith(prefix))) {
-    return 'restart_required';
-  }
-  if (NEXT_SESSION_PREFIXES.some((prefix) => path.startsWith(prefix))) {
-    return 'next_session';
-  }
-  return 'live';
+  return resolveCanonicalApplyModeForPath(path);
 };
 
 export const formatFieldSource = (
