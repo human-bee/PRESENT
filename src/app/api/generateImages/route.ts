@@ -80,7 +80,7 @@ const normalizeImageMimeType = (value: unknown): string =>
   typeof value === 'string' && value.startsWith('image/') ? value : DEFAULT_IMAGE_MIME_TYPE;
 
 const readFirstArrayRecord = (value: unknown): Record<string, unknown> | null =>
-  Array.isArray(value) ? asRecord(value[0]) : null;
+  Array.isArray(value) ? readRecord(value[0]) : null;
 
 const providerEnvKey = (provider: 'google' | 'openai' | 'xai' | 'fal'): string | undefined => {
   switch (provider) {
