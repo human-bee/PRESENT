@@ -1,3 +1,4 @@
+import { normalizeFairyContextProfile } from '@/lib/fairy-context/profiles';
 import type { ContextDocument } from '@/lib/stores/context-store';
 import type { MeetingSummaryState } from './meeting-summary-schema';
 
@@ -15,7 +16,7 @@ export const normalizeMeetingSummaryState = (input: Partial<MeetingSummaryState>
   memoryNamespace: input.memoryNamespace,
   autoSend: input.autoSend,
   lastUpdated: input.lastUpdated,
-  contextProfile: input.contextProfile,
+  contextProfile: normalizeFairyContextProfile(input.contextProfile),
 });
 
 export const resolveMeetingSummaryDocument = (

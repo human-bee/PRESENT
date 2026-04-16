@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { Copy, Send } from 'lucide-react';
 import { Button } from '@/components/ui/shared/button';
 import { cn } from '@/lib/utils';
+import { normalizeFairyContextProfile } from '@/lib/fairy-context/profiles';
 import { useComponentRegistration } from '@/lib/component-registry';
 import { useContextDocuments } from '@/lib/stores/context-store';
 import { createMarkdownComponents } from '@/components/ui/shared/markdown-components';
@@ -69,7 +70,12 @@ export function MeetingSummaryWidget(props: MeetingSummaryWidgetProps) {
       if (typeof patch.memoryCollection === 'string') next.memoryCollection = patch.memoryCollection;
       if (typeof patch.memoryIndex === 'string') next.memoryIndex = patch.memoryIndex;
       if (typeof patch.memoryNamespace === 'string') next.memoryNamespace = patch.memoryNamespace;
-      if (typeof patch.contextProfile === 'string') next.contextProfile = patch.contextProfile;
+      if (typeof patch.contextProfile === 'string') {
+        const normalizedContextProfile = normalizeFairyContextProfile(patch.contextProfile);
+        if (normalizedContextProfile) {
+          next.contextProfile = normalizedContextProfile;
+        }
+      }
       if (typeof patch.lastUpdated === 'number') next.lastUpdated = patch.lastUpdated;
       if (typeof patch.autoSend === 'boolean') next.autoSend = patch.autoSend;
       return next;

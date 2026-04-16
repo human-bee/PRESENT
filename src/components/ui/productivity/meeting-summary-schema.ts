@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  normalizeFairyContextProfile,
+  type FairyContextProfile,
+} from '@/lib/fairy-context/profiles';
 
 export const actionItemSchema = z.object({
   task: z.string().describe('Action item description'),
@@ -20,7 +24,18 @@ export const meetingSummaryWidgetSchema = z.object({
   memoryNamespace: z.string().optional().describe('Vector memory namespace'),
   autoSend: z.boolean().optional().default(false),
   lastUpdated: z.number().optional(),
-  contextProfile: z.string().optional(),
+  contextProfile: z
+    .string()
+    .transform((value, ctx): FairyContextProfile => {
+      const normalized = normalizeFairyContextProfile(value);
+      if (normalized) return normalized;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid fairy context profile',
+      });
+      return z.NEVER;
+    })
+    .optional(),
   className: z.string().optional(),
 });
 
@@ -46,5 +61,5 @@ export type MeetingSummaryState = {
   memoryNamespace?: string;
   autoSend?: boolean;
   lastUpdated?: number;
-  contextProfile?: string;
+  contextProfile?: FairyContextProfile;
 };
