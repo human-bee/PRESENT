@@ -1,6 +1,5 @@
 import {
   getCerebrasClient,
-  getModelForSteward,
   isFastStewardReady,
 } from '../fast-steward-config';
 import {
@@ -21,7 +20,6 @@ import {
   recordToolIoEvent,
 } from '@/lib/agents/shared/replay-telemetry';
 
-const getCrowdPulseFastModel = () => getModelForSteward('CROWD_PULSE_STEWARD_FAST_MODEL');
 let crowdPulseReplaySequence = 0;
 const nextCrowdPulseReplaySequence = () => {
   crowdPulseReplaySequence += 1;
@@ -112,7 +110,7 @@ export async function runCrowdPulseStewardFast(params: {
     stewardEnvVar: 'CROWD_PULSE_STEWARD_FAST_MODEL',
     room,
     task: 'crowd_pulse.fast',
-  }).catch(() => ({ model: getCrowdPulseFastModel() }));
+  });
   const requestId =
     typeof params.requestId === 'string' && params.requestId.trim().length > 0
       ? params.requestId.trim()

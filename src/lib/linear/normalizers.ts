@@ -176,6 +176,7 @@ export function normalizeIssues(
       id: i.id as string,
       identifier: i.identifier as string,
       title: i.title as string,
+      description: typeof i.description === 'string' ? i.description : undefined,
       status: statusName,
       statusId: statusId,
       updatedAt: i.updatedAt as string,
@@ -186,7 +187,6 @@ export function normalizeIssues(
     };
   });
 }
-
 
 
 
