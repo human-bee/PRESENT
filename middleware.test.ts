@@ -19,10 +19,27 @@ const edgeFetch = require('next/dist/compiled/@edge-runtime/primitives/fetch');
 const { middleware } = require('./middleware');
 
 describe('legacy archive middleware', () => {
+  it('redirects legacy canvas root query links onto /canvas', () => {
+    const response = middleware({
+      url: 'https://present.best/?id=0204807e-788f-455c-af3d-12b233c21dc4',
+      nextUrl: {
+        pathname: '/',
+        searchParams: new URLSearchParams('id=0204807e-788f-455c-af3d-12b233c21dc4'),
+      },
+    });
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe(
+      'https://present.best/canvas?id=0204807e-788f-455c-af3d-12b233c21dc4',
+    );
+  });
+
   it('marks legacy paths with archive headers', () => {
     const response = middleware({
+      url: 'https://present.best/canvas',
       nextUrl: {
         pathname: '/canvas',
+        searchParams: new URLSearchParams(),
       },
     });
 
@@ -33,8 +50,10 @@ describe('legacy archive middleware', () => {
 
   it('leaves reset paths unmarked', () => {
     const response = middleware({
+      url: 'https://present.best/api/reset/workspaces',
       nextUrl: {
         pathname: '/api/reset/workspaces',
+        searchParams: new URLSearchParams(),
       },
     });
 

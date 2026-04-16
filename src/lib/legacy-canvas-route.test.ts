@@ -1,4 +1,5 @@
 import {
+  canonicalizeLegacyCanvasPathAndQuery,
   buildLegacyCanvasInviteLink,
   canonicalizeLegacyCanvasHref,
 } from './legacy-canvas-route';
@@ -25,6 +26,21 @@ describe('legacy canvas route helpers', () => {
       canonicalizeLegacyCanvasHref(
         'https://present.best/canvas?room=canvas-demo-room&id=a642d151-05cc-484f-b62f-c9a52a81a345',
       ),
+    ).toBeNull();
+  });
+
+  it('canonicalizes root path plus legacy query params onto /canvas', () => {
+    expect(
+      canonicalizeLegacyCanvasPathAndQuery(
+        '/',
+        new URLSearchParams('id=a642d151-05cc-484f-b62f-c9a52a81a345'),
+      ),
+    ).toBe('/canvas?id=a642d151-05cc-484f-b62f-c9a52a81a345');
+  });
+
+  it('does not rewrite root requests without legacy canvas params', () => {
+    expect(
+      canonicalizeLegacyCanvasPathAndQuery('/', new URLSearchParams('workspace=abc123')),
     ).toBeNull();
   });
 });
