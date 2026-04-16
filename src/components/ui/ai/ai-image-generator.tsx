@@ -390,7 +390,9 @@ export function AIImageGenerator({
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<ImageAspectRatio>(aspectRatio);
   const [selectedResolution, setSelectedResolution] = useState<ImageResolutionPreset>(resolution);
   const [selectedQuality, setSelectedQuality] = useState<ImageQualityPreset>(quality);
-  const [selectedImageCount, setSelectedImageCount] = useState<ImageCountOption>(imageCount);
+  const [selectedImageCount, setSelectedImageCount] = useState<ImageCountOption>(
+    clampImageCount(model, imageCount),
+  );
   const [groundingEnabled, setGroundingEnabled] = useState(useGrounding);
   const [seedMode, setSeedMode] = useState(iterativeMode);
   const [autoRegenerateEnabled, setAutoRegenerateEnabled] = useState(autoRegenerate);
