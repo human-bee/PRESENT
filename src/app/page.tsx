@@ -1,4 +1,5 @@
 import { ResetWorkspaceShell } from '@present/ui';
+import { redirect } from 'next/navigation';
 import {
   buildAgentInteropPack,
   buildRuntimeManifest,
@@ -15,16 +16,38 @@ import {
   openWorkspaceSession,
   resolveKernelModelProfiles,
 } from '@present/kernel';
+import { canonicalizeLegacyCanvasPathAndQuery } from '@/lib/legacy-canvas-route';
 
 export const dynamic = 'force-dynamic';
+
+function toUrlSearchParams(params: Record<string, string | string[] | undefined>): URLSearchParams {
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === 'string') {
+      searchParams.append(key, value);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        searchParams.append(key, entry);
+      }
+    }
+  }
+  return searchParams;
+}
 
 export default async function Home({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await ensureResetKernelHydrated();
   const params = await searchParams;
+  const canonicalLegacyCanvasPath = canonicalizeLegacyCanvasPathAndQuery('/', toUrlSearchParams(params));
+  if (canonicalLegacyCanvasPath) {
+    redirect(canonicalLegacyCanvasPath);
+  }
+
+  await ensureResetKernelHydrated();
   const requestedWorkspaceSessionId =
     typeof params.workspace === 'string' && params.workspace.trim() ? params.workspace.trim() : null;
   const existingWorkspaces = listWorkspaceSessions();

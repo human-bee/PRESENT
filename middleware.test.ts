@@ -16,11 +16,11 @@ const edgeFetch = require('next/dist/compiled/@edge-runtime/primitives/fetch');
   Headers?: typeof edgeFetch.Headers;
 }).Headers = edgeFetch.Headers;
 
-const { middleware } = require('./middleware');
+const { proxy } = require('./proxy');
 
-describe('legacy archive middleware', () => {
+describe('legacy archive proxy', () => {
   it('redirects legacy canvas root query links onto /canvas', () => {
-    const response = middleware({
+    const response = proxy({
       url: 'https://present.best/?id=0204807e-788f-455c-af3d-12b233c21dc4',
       nextUrl: {
         pathname: '/',
@@ -35,7 +35,7 @@ describe('legacy archive middleware', () => {
   });
 
   it('marks legacy paths with archive headers', () => {
-    const response = middleware({
+    const response = proxy({
       url: 'https://present.best/canvas',
       nextUrl: {
         pathname: '/canvas',
@@ -49,7 +49,7 @@ describe('legacy archive middleware', () => {
   });
 
   it('leaves reset paths unmarked', () => {
-    const response = middleware({
+    const response = proxy({
       url: 'https://present.best/api/reset/workspaces',
       nextUrl: {
         pathname: '/api/reset/workspaces',

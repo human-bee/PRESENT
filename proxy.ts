@@ -14,9 +14,10 @@ const LEGACY_PATH_PREFIXES = [
   '/api/steward',
 ];
 
-const isLegacyPath = (pathname: string) => LEGACY_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+const isLegacyPath = (pathname: string) =>
+  LEGACY_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const canonicalLegacyCanvasPath = canonicalizeLegacyCanvasPathAndQuery(
     request.nextUrl.pathname,
     request.nextUrl.searchParams,
