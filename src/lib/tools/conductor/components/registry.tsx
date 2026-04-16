@@ -69,8 +69,7 @@ import { InfographicWidget, infographicWidgetSchema } from '@/components/Infogra
 // Context feeder widget for document/text context injection
 import { ContextFeeder, contextFeederSchema } from '@/components/ui/documents/context-feeder';
 import { getWidgetLifecycleMetadata } from '@/lib/agents/widget-lifecycle-manifest';
-
-import { componentToolboxSchema } from '@/lib/custom';
+import { componentToolboxSchema } from '@/lib/custom-schemas';
 import type { CapabilityGroup, LifecycleOp, WidgetTier } from '@/lib/agents/capabilities';
 
 const extendedSchema = <T extends z.ZodObject<any>>(schema: T) => {

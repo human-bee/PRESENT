@@ -1,4 +1,4 @@
-import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
+import { getCerebrasClient, isFastStewardReady } from '../fast-steward-config';
 import { getTranscriptWindow, getContextDocuments, formatContextDocuments } from '@/lib/agents/shared/supabase-context';
 import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
 import { resolveFastStewardModel } from '@/lib/agents/control-plane/fast-model';
@@ -7,7 +7,6 @@ import {
   recordToolIoEvent,
 } from '@/lib/agents/shared/replay-telemetry';
 
-const getSummaryFastModel = () => getModelForSteward('SUMMARY_STEWARD_FAST_MODEL');
 let summaryReplaySequence = 0;
 const nextSummaryReplaySequence = () => {
   summaryReplaySequence += 1;
@@ -87,7 +86,7 @@ export async function runSummaryStewardFast(params: {
     stewardEnvVar: 'SUMMARY_STEWARD_FAST_MODEL',
     room,
     task: 'summary.fast',
-  }).catch(() => ({ model: getSummaryFastModel() }));
+  });
   const requestId =
     typeof params.requestId === 'string' && params.requestId.trim().length > 0
       ? params.requestId.trim()
