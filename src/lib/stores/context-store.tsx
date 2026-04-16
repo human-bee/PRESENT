@@ -1,6 +1,10 @@
 'use client';
 
 import {
+    parseContextDocuments,
+    type ContextDocument,
+} from '@/lib/context-documents';
+import {
     createContext,
     useContext,
     useReducer,
@@ -10,18 +14,7 @@ import {
     type ReactNode,
 } from 'react';
 
-// =============================================================================
-// Types
-// =============================================================================
-
-export interface ContextDocument {
-    id: string;
-    title: string;
-    content: string;
-    type: 'markdown' | 'text';
-    timestamp: number;
-    source: 'file' | 'paste' | 'mcp';
-}
+export type { ContextDocument } from '@/lib/context-documents';
 
 interface ContextState {
     documents: ContextDocument[];
@@ -172,9 +165,10 @@ export function ContextProvider({ children, sessionId }: ContextProviderProps) {
                 const res = await fetch(`/api/session/context?sessionId=${sessionId}`);
                 if (res.ok) {
                     const data = await res.json();
-                    if (Array.isArray(data.contextDocuments) && data.contextDocuments.length > 0) {
-                        dispatch({ type: 'SET_ALL', payload: data.contextDocuments });
-                        lastSyncedRef.current = JSON.stringify(data.contextDocuments);
+                    if (Array.isArray(data.contextDocuments)) {
+                        const documents = parseContextDocuments(data.contextDocuments);
+                        dispatch({ type: 'SET_ALL', payload: documents });
+                        lastSyncedRef.current = JSON.stringify(documents);
                     }
                 }
             } catch {
@@ -186,8 +180,9 @@ export function ContextProvider({ children, sessionId }: ContextProviderProps) {
     // Listen for ContextFeeder DOM events
     useEffect(() => {
         const handleDocumentAdded = (e: CustomEvent) => {
-            if (e.detail) {
-                dispatch({ type: 'ADD_DOCUMENT', payload: e.detail });
+            const [document] = parseContextDocuments(e.detail ? [e.detail] : []);
+            if (document) {
+                dispatch({ type: 'ADD_DOCUMENT', payload: document });
             }
         };
 
@@ -202,8 +197,9 @@ export function ContextProvider({ children, sessionId }: ContextProviderProps) {
         };
 
         const handleDocumentsUpdated = (e: CustomEvent) => {
-            if (e.detail?.documents && Array.isArray(e.detail.documents)) {
-                dispatch({ type: 'SET_ALL', payload: e.detail.documents });
+            const documents = parseContextDocuments(e.detail?.documents);
+            if (documents.length > 0 || Array.isArray(e.detail?.documents)) {
+                dispatch({ type: 'SET_ALL', payload: documents });
             }
         };
 
