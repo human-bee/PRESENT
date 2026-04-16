@@ -7,6 +7,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
+import { buildAuthPageHref, sanitizeInternalRedirectPath } from '@/lib/auth/redirects';
 
 function SignInForm() {
   const router = useRouter();
@@ -16,6 +17,7 @@ function SignInForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const next = sanitizeInternalRedirectPath(searchParams.get('next'));
 
   // Handle OAuth errors from URL params
   useEffect(() => {
@@ -32,7 +34,7 @@ function SignInForm() {
 
     try {
       await signInWithEmail(email, password);
-      router.push('/');
+      router.push(next);
     } catch (error: any) {
       setError(error.message || 'Invalid email or password');
     } finally {
@@ -43,7 +45,7 @@ function SignInForm() {
   const handleGoogleSignIn = async () => {
     setError('');
     try {
-      await signInWithGoogle();
+      await signInWithGoogle(next);
       // The redirect will be handled by the OAuth flow
     } catch (error: any) {
       setError(error.message || 'Failed to sign in with Google');
@@ -137,7 +139,10 @@ function SignInForm() {
 
         <p className="mt-4 text-center text-sm text-secondary">
           Don&apos;t have an account?{' '}
-          <Link href="/auth/signup" className="font-medium hover:text-[var(--present-accent)]">
+          <Link
+            href={buildAuthPageHref('signup', next)}
+            className="font-medium hover:text-[var(--present-accent)]"
+          >
             Sign up
           </Link>
         </p>

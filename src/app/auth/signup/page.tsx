@@ -3,19 +3,22 @@
 // Force dynamic rendering to prevent build errors
 export const dynamic = 'force-dynamic';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
+import { buildAuthPageHref, sanitizeInternalRedirectPath } from '@/lib/auth/redirects';
 
-export default function SignUp() {
+function SignUpForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signInWithGoogle, signUpWithEmail } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const next = sanitizeInternalRedirectPath(searchParams.get('next'));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,8 +26,8 @@ export default function SignUp() {
     setError('');
 
     try {
-      await signUpWithEmail(email, password, name);
-      router.push('/');
+      await signUpWithEmail(email, password, name, next);
+      router.push(next);
     } catch (error: any) {
       setError(error.message || 'Something went wrong');
     } finally {
@@ -34,7 +37,7 @@ export default function SignUp() {
 
   const handleGoogleSignIn = async () => {
     try {
-      await signInWithGoogle();
+      await signInWithGoogle(next);
     } catch (error: any) {
       setError(error.message || 'Failed to sign in with Google');
     }
@@ -139,11 +142,38 @@ export default function SignUp() {
 
         <p className="mt-4 text-center text-sm text-secondary">
           Already have an account?{' '}
-          <Link href="/auth/signin" className="font-medium hover:text-[var(--present-accent)]">
+          <Link
+            href={buildAuthPageHref('signin', next)}
+            className="font-medium hover:text-[var(--present-accent)]"
+          >
             Sign in
           </Link>
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SignUp() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-surface p-6">
+          <div className="bg-surface-elevated border border-default p-8 rounded-2xl shadow-lg w-full max-w-md">
+            <div className="animate-pulse">
+              <div className="h-8 bg-surface-secondary rounded mb-6"></div>
+              <div className="space-y-4">
+                <div className="h-10 bg-surface-secondary rounded"></div>
+                <div className="h-10 bg-surface-secondary rounded"></div>
+                <div className="h-10 bg-surface-secondary rounded"></div>
+                <div className="h-10 bg-surface-secondary rounded"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <SignUpForm />
+    </Suspense>
   );
 }

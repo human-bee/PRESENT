@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { buildAuthPageHref, sanitizeInternalRedirectPath } from '@/lib/auth/redirects';
 import { supabase } from '@/lib/supabase';
 
 function AuthFinishContent() {
@@ -14,7 +15,7 @@ function AuthFinishContent() {
 
     const finish = async () => {
       try {
-        const next = searchParams.get('next') || '/';
+        const next = sanitizeInternalRedirectPath(searchParams.get('next'));
 
         // 1) Try Authorization Code flow (?code=)
         const code = searchParams.get('code');
@@ -75,7 +76,7 @@ function AuthFinishContent() {
             <div className="text-sm text-secondary mb-4">{error}</div>
             <button
               className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
-              onClick={() => router.replace('/auth/signin')}
+              onClick={() => router.replace(buildAuthPageHref('signin', searchParams.get('next')))}
             >
               Return to Sign In
             </button>

@@ -42,6 +42,7 @@ import {
   getCanvasIdFromCurrentUrl,
 } from '@/lib/realtime/sync-contract';
 import { canonicalizeLegacyCanvasHref } from '@/lib/legacy-canvas-route';
+import { buildAuthPageHref, getCurrentPathWithSearchAndHash } from '@/lib/auth/redirects';
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -496,7 +497,7 @@ export function CanvasPageClient() {
   useEffect(() => {
     if (loading) return;
     if (!user && !bypassAuth && !demoMode) {
-      router.push('/auth/signin');
+      router.push(buildAuthPageHref('signin', getCurrentPathWithSearchAndHash()));
     }
   }, [user, loading, router, bypassAuth, demoMode]);
 

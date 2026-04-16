@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
+import { buildAuthPageHref, getCurrentPathWithSearchAndHash } from '@/lib/auth/redirects';
 import { getBooleanFlag } from '@/lib/feature-flags';
 
 type ProviderId = 'openai' | 'anthropic' | 'google' | 'together' | 'cerebras' | 'fal' | 'xai';
@@ -135,7 +136,7 @@ export default function ModelKeysPage() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) router.push('/auth/signin');
+    if (!user) router.push(buildAuthPageHref('signin', getCurrentPathWithSearchAndHash()));
   }, [loading, user, router]);
 
   const refresh = useCallback(async () => {

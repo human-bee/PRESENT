@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { DEFAULT_POST_AUTH_PATH, sanitizeInternalRedirectPath } from '@/lib/auth/redirects';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -24,13 +25,13 @@ export function useAuth() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
-    const next = '/';
+  const signInWithGoogle = async (next: string = DEFAULT_POST_AUTH_PATH) => {
+    const safeNext = sanitizeInternalRedirectPath(next);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         // Send users to a client-side finisher that supports both code and hash token returns
-        redirectTo: `${window.location.origin}/auth/finish?next=${encodeURIComponent(next)}`,
+        redirectTo: `${window.location.origin}/auth/finish?next=${encodeURIComponent(safeNext)}`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
@@ -48,8 +49,13 @@ export function useAuth() {
     if (error) throw error;
   };
 
-  const signUpWithEmail = async (email: string, password: string, fullName?: string) => {
-    const next = '/';
+  const signUpWithEmail = async (
+    email: string,
+    password: string,
+    fullName?: string,
+    next: string = DEFAULT_POST_AUTH_PATH,
+  ) => {
+    const safeNext = sanitizeInternalRedirectPath(next);
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -57,7 +63,7 @@ export function useAuth() {
         data: {
           full_name: fullName,
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`,
       },
     });
     if (error) throw error;

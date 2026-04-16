@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
+import { buildAuthPageHref, getCurrentPathWithSearchAndHash } from '@/lib/auth/redirects';
 import { AdvancedJsonPanel } from './_components/advanced-json-panel';
 import { AdminKeyringPanel } from './_components/admin-keyring-panel';
 import { GuidedControlsPanel } from './_components/guided-controls-panel';
@@ -64,7 +65,7 @@ export default function ModelControlsPage() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) router.push('/auth/signin');
+    if (!user) router.push(buildAuthPageHref('signin', getCurrentPathWithSearchAndHash()));
   }, [loading, user, router]);
 
   const refresh = useCallback(async () => {
