@@ -1,4 +1,6 @@
 const getWorkspaceSessionMock = jest.fn();
+const listWorkspaceSessionsMock = jest.fn();
+const openWorkspaceSessionMock = jest.fn();
 const createCodexBrokerSessionMock = jest.fn();
 const persistConnectedRemoteWorkspaceMock = jest.fn();
 const resolveRemoteWorkingDirectoryMock = jest.fn();
@@ -8,6 +10,8 @@ const hydrateResetKernelMock = jest.fn();
 
 jest.mock('@present/kernel', () => ({
   getWorkspaceSession: (...args: unknown[]) => getWorkspaceSessionMock(...args),
+  listWorkspaceSessions: (...args: unknown[]) => listWorkspaceSessionsMock(...args),
+  openWorkspaceSession: (...args: unknown[]) => openWorkspaceSessionMock(...args),
 }));
 
 jest.mock('@present/codex-broker/client', () => ({
@@ -81,6 +85,8 @@ describe('POST /api/reset/codex/sessions', () => {
   beforeEach(() => {
     installFetchPrimitives();
     getWorkspaceSessionMock.mockReset();
+    listWorkspaceSessionsMock.mockReset();
+    openWorkspaceSessionMock.mockReset();
     createCodexBrokerSessionMock.mockReset();
     persistConnectedRemoteWorkspaceMock.mockReset();
     resolveRemoteWorkingDirectoryMock.mockReset();
@@ -147,5 +153,100 @@ describe('POST /api/reset/codex/sessions', () => {
     expect(flushResetKernelWritesMock).toHaveBeenCalled();
     expect(payload.executorSessionId).toBe('exec_123');
     expect(payload.remoteWorkingDirectory).toBe('/srv/codex/repos/PRESENT');
+    expect(payload.workspaceSessionId).toBe('ws_123');
+  });
+
+  it('falls back to the default reset workspace when no workspace id is supplied', async () => {
+    listWorkspaceSessionsMock.mockReturnValue([
+      {
+        id: 'ws_root',
+        workspacePath: '/Users/bsteinher/PRESENT',
+        metadata: { shell: 'root' },
+      },
+    ]);
+    resolveRemoteWorkingDirectoryMock.mockReturnValue('/srv/codex/repos/PRESENT');
+    createCodexBrokerSessionMock.mockResolvedValue({
+      session: {
+        sessionId: 'cxs_999',
+        workspaceSessionId: 'ws_root',
+        remoteWorkingDirectory: '/srv/codex/repos/PRESENT',
+        proxyBaseUrl: 'http://127.0.0.1:4101/sessions/cxs_999/proxy/token',
+        frameUrl: 'http://127.0.0.1:4101/sessions/cxs_999/proxy/token/',
+        status: 'ready',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastHeartbeatAt: new Date().toISOString(),
+      },
+    });
+    upsertRemoteExecutorMock.mockReturnValue({ id: 'exec_root' });
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      new Request('http://localhost/api/reset/codex/sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+          remoteWorkspacePath: '/srv/codex/repos/PRESENT',
+          reconnect: true,
+        }),
+      }) as never,
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(getWorkspaceSessionMock).not.toHaveBeenCalled();
+    expect(listWorkspaceSessionsMock).toHaveBeenCalled();
+    expect(openWorkspaceSessionMock).not.toHaveBeenCalled();
+    expect(createCodexBrokerSessionMock).toHaveBeenCalledWith({
+      workspaceSessionId: 'ws_root',
+      remoteWorkingDirectory: '/srv/codex/repos/PRESENT',
+      reconnect: true,
+    });
+    expect(payload.workspaceSessionId).toBe('ws_root');
+  });
+
+  it('opens the default reset workspace when none exists yet', async () => {
+    listWorkspaceSessionsMock.mockReturnValue([]);
+    openWorkspaceSessionMock.mockReturnValue({
+      id: 'ws_new',
+      workspacePath: '/Users/bsteinher/PRESENT',
+      metadata: { shell: 'root' },
+    });
+    resolveRemoteWorkingDirectoryMock.mockReturnValue('/srv/codex/repos/PRESENT');
+    createCodexBrokerSessionMock.mockResolvedValue({
+      session: {
+        sessionId: 'cxs_new',
+        workspaceSessionId: 'ws_new',
+        remoteWorkingDirectory: '/srv/codex/repos/PRESENT',
+        proxyBaseUrl: 'http://127.0.0.1:4101/sessions/cxs_new/proxy/token',
+        frameUrl: 'http://127.0.0.1:4101/sessions/cxs_new/proxy/token/',
+        status: 'ready',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastHeartbeatAt: new Date().toISOString(),
+      },
+    });
+    upsertRemoteExecutorMock.mockReturnValue({ id: 'exec_new' });
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      new Request('http://localhost/api/reset/codex/sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+          reconnect: true,
+        }),
+      }) as never,
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(openWorkspaceSessionMock).toHaveBeenCalledWith({
+      workspacePath: process.cwd(),
+      branch: 'codex/reset',
+      title: 'PRESENT Reset Workspace',
+      metadata: {
+        shell: 'root',
+      },
+    });
+    expect(payload.workspaceSessionId).toBe('ws_new');
   });
 });
