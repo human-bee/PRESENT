@@ -30,6 +30,9 @@ type CanvasCodexRemoteWidgetProps = CodexRemoteWidgetProps & {
 };
 
 const LOCAL_STORAGE_KEY = 'present.codexRemoteWidget.lastConfig';
+const stopPointerPropagation: React.PointerEventHandler<HTMLElement> = (event) => {
+  event.stopPropagation();
+};
 
 function createFallbackId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -180,6 +183,19 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     setIsEditing(true);
   }, [draftSubtitle, draftTitle, messageId, props]);
 
+  const openResetShell = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.location.assign('/');
+  }, []);
+
+  const openFrameUrl = useCallback(() => {
+    if (typeof window === 'undefined' || !state.frameUrl) return;
+    const opened = window.open(state.frameUrl, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      window.location.assign(state.frameUrl);
+    }
+  }, [state.frameUrl]);
+
   return (
     <div className={cn('flex h-full w-full flex-col gap-3 rounded-[24px] border border-[var(--color-divider)] bg-[var(--color-panel)] p-3', state.className)}>
       {state.frameUrl && !isEditing ? (
@@ -189,12 +205,17 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
           frameUrl={state.frameUrl}
           toolbar={
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
+              <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={() => setIsEditing(true)}>
                 Edit
               </Button>
-              <a href={state.frameUrl} target="_blank" rel="noreferrer" className="text-xs text-[var(--present-accent)] underline underline-offset-2">
+              <button
+                type="button"
+                onPointerDown={stopPointerPropagation}
+                onClick={openFrameUrl}
+                className="text-xs text-[var(--present-accent)] underline underline-offset-2"
+              >
                 Pop Out
-              </a>
+              </button>
             </div>
           }
         />
@@ -239,17 +260,22 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
             </div>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={() => void persistDraft()}>
+            <Button size="sm" onPointerDown={stopPointerPropagation} onClick={() => void persistDraft()}>
               {state.frameUrl ? 'Update Widget' : 'Load Remote Codex'}
             </Button>
             {state.frameUrl ? (
-              <Button size="sm" variant="outline" onClick={() => void clearDraft()}>
+              <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={() => void clearDraft()}>
                 Clear URL
               </Button>
             ) : null}
-            <a href="/" target="_blank" rel="noreferrer" className="text-xs text-[var(--present-accent)] underline underline-offset-2">
+            <button
+              type="button"
+              onPointerDown={stopPointerPropagation}
+              onClick={openResetShell}
+              className="text-xs text-[var(--present-accent)] underline underline-offset-2"
+            >
               Open Reset Shell
-            </a>
+            </button>
           </div>
           {!state.frameUrl ? (
             <div className="text-xs text-secondary">No remote Codex frame URL configured.</div>
