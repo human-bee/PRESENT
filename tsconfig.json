@@ -55,6 +55,12 @@
       "@present/codex-broker/*": [
         "./services/codex-broker/src/*"
       ],
+      "@present/widget-codex": [
+        "./services/widget-codex/src/index.ts"
+      ],
+      "@present/widget-codex/*": [
+        "./services/widget-codex/src/*"
+      ],
       "@present/ui": [
         "./packages/ui/src/index.ts"
       ],

@@ -6,7 +6,7 @@ import { flushResetKernelWrites, hydrateResetKernel } from '../_lib/persistence'
 export const runtime = 'nodejs';
 
 const openWorkspaceSchema = z.object({
-  workspacePath: z.string().min(1),
+  workspacePath: z.string().min(1).optional(),
   branch: z.string().optional(),
   title: z.string().optional(),
   ownerUserId: z.string().optional(),
@@ -20,7 +20,10 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   await hydrateResetKernel();
   const payload = openWorkspaceSchema.parse(await request.json());
-  const workspace = openWorkspaceSession(payload);
+  const workspace = openWorkspaceSession({
+    ...payload,
+    workspacePath: payload.workspacePath ?? process.cwd(),
+  });
   await flushResetKernelWrites();
   return NextResponse.json({ workspace }, { status: 201 });
 }

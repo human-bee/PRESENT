@@ -25,6 +25,7 @@ const registerSchema = z.object({
       ]),
     )
     .optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function POST(request: NextRequest) {

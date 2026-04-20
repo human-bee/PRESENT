@@ -7,10 +7,34 @@ import {
 } from './session-store';
 import { createCodexBrokerSshTunnel, type CodexBrokerSshTunnelConfig } from './ssh-tunnel';
 
+export const codexBrokerSshTunnelConfigSchema = z.object({
+  host: z.string().min(1),
+  port: z.number().int().positive(),
+  username: z.string().min(1),
+  remoteHost: z.string().min(1),
+  remotePort: z.number().int().positive(),
+  remoteProtocol: z.enum(['http', 'https']),
+  hostKeySha256: z.string().min(1).nullable().optional(),
+  privateKeyPath: z.string().min(1).nullable().optional(),
+  privateKey: z.string().min(1).nullable().optional(),
+  passphrase: z.string().min(1).nullable().optional(),
+  agentSocketPath: z.string().min(1).nullable().optional(),
+});
+
+export const codexBrokerTransportSchema = z
+  .object({
+    directTargetUrl: z.string().url().optional(),
+    ssh: codexBrokerSshTunnelConfigSchema.optional(),
+  })
+  .refine((value) => Boolean(value.directTargetUrl || value.ssh), {
+    message: 'Broker transport requires directTargetUrl or ssh configuration.',
+  });
+
 export const createCodexBrokerSessionInputSchema = z.object({
   workspaceSessionId: z.string().min(1),
   remoteWorkingDirectory: z.string().min(1),
   reconnect: z.boolean().optional(),
+  transport: codexBrokerTransportSchema.optional(),
 });
 
 export type CreateCodexBrokerSessionInput = z.infer<typeof createCodexBrokerSessionInputSchema>;
@@ -95,7 +119,16 @@ export class CodexBrokerService {
     return lock;
   }
 
-  private async createTargetBaseUrl() {
+  private async createTargetBaseUrl(transport?: z.infer<typeof codexBrokerTransportSchema>) {
+    if (transport?.directTargetUrl) {
+      return {
+        targetBaseUrl: normalizeTargetBaseUrl(transport.directTargetUrl),
+        close: async () => {},
+      };
+    }
+    if (transport?.ssh) {
+      return createCodexBrokerSshTunnel(transport.ssh);
+    }
     if (this.directTargetUrl) {
       return {
         targetBaseUrl: this.directTargetUrl,
@@ -147,7 +180,7 @@ export class CodexBrokerService {
       }
 
       const now = new Date().toISOString();
-      const target = await this.createTargetBaseUrl();
+      const target = await this.createTargetBaseUrl(input.transport);
       const record: CodexBrokerSessionRecord = {
         sessionId: this.createSessionId(),
         workspaceSessionId: input.workspaceSessionId,
