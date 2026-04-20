@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const codexRemoteWidgetSchema = z.object({
   title: z.string().default('Remote Codex'),
   subtitle: z.string().optional(),
-  frameUrl: z.string().min(1),
+  frameUrl: z.string().optional(),
   className: z.string().optional(),
   contextKey: z.string().optional(),
 });
