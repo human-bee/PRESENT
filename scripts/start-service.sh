@@ -17,6 +17,10 @@ case "$SERVICE_TYPE" in
     echo "Starting Realtime Agent..."
     exec npm run agent:realtime
     ;;
+  codex-broker|broker)
+    echo "Starting Codex Broker..."
+    exec npm run codex:broker
+    ;;
   web|present|app)
     echo "Starting Web App..."
     if [ ! -d ".next" ]; then
@@ -27,7 +31,7 @@ case "$SERVICE_TYPE" in
     ;;
   *)
     echo "Error: unsupported SERVICE_TYPE value: ${SERVICE_TYPE:-<unset>}" >&2
-    echo "Expected one of: sync, agent, conductor, realtime, web, present, app" >&2
+    echo "Expected one of: sync, agent, conductor, realtime, codex-broker, broker, web, present, app" >&2
     exit 1
     ;;
 esac

@@ -45,11 +45,31 @@ const resolveExecutor = (workspaceSessionId: string, executorSessionId?: string)
 };
 
 const resolveApiKey = (executor: ExecutorSession) => {
-  if (executor.authMode === 'chatgpt') return undefined;
+  if (executor.authMode === 'chatgpt' || executor.metadata.remoteManagedAuth === true) return undefined;
   const explicit = executor.metadata.apiKey;
   if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
   const envName = typeof executor.metadata.apiKeyEnv === 'string' ? executor.metadata.apiKeyEnv : 'CODEX_API_KEY';
   return process.env[envName] ?? process.env.CODEX_API_KEY ?? process.env.OPENAI_API_KEY;
+};
+
+const resolveWorkingDirectory = (workspace: ReturnType<typeof getWorkspaceSession>, executor: ExecutorSession) => {
+  if (!workspace) {
+    throw new Error('Workspace session not found');
+  }
+  const executorOverride =
+    typeof executor.metadata.remoteWorkingDirectory === 'string' && executor.metadata.remoteWorkingDirectory.trim()
+      ? executor.metadata.remoteWorkingDirectory.trim()
+      : null;
+  if (executorOverride) return executorOverride;
+  const workspaceRemote = workspace.metadata['codexRemote'];
+  const remoteWorkspacePath =
+    workspaceRemote && typeof workspaceRemote === 'object'
+      ? (workspaceRemote as Record<string, unknown>).remoteWorkspacePath
+      : null;
+  if (typeof remoteWorkspacePath === 'string' && remoteWorkspacePath.trim()) {
+    return remoteWorkspacePath.trim();
+  }
+  return workspace.workspacePath;
 };
 
 const resolveModel = async (modelOverride?: string) => {
@@ -260,7 +280,7 @@ const executeCodexTurn = async (input: {
     const threadOptions = {
       model,
       sandboxMode: input.sandboxMode ?? 'workspace-write',
-      workingDirectory: workspace.workspacePath,
+      workingDirectory: resolveWorkingDirectory(workspace, input.executor),
       approvalPolicy: input.approvalPolicy ?? 'on-request',
       networkAccessEnabled: input.networkAccessEnabled ?? true,
     };

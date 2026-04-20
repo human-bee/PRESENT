@@ -33,6 +33,9 @@ import { crowdPulseWidgetSchema } from '@/components/ui/productivity/crowd-pulse
 import DiceWidget, { diceWidgetSchema } from '@/components/ui/productivity/dice-widget';
 import CardWidget, { cardWidgetSchema } from '@/components/ui/productivity/card-widget';
 import McpAppWidget, { mcpAppWidgetSchema } from '@/components/ui/mcp/mcp-app-widget';
+import CodexRemoteWidget, {
+  codexRemoteWidgetSchema,
+} from '@/components/ui/codex/codex-remote-widget';
 import {
   LivekitParticipantTile,
   livekitParticipantTileSchema,
@@ -261,6 +264,17 @@ const baseComponents: RegistryComponentEntry[] = [
       'Render an MCP App (ui:// resource) in a sandboxed iframe and optionally call the backing MCP tool.',
     component: McpAppWidget,
     propsSchema: extendedSchema(mcpAppWidgetSchema),
+    tier: 'tier1',
+    group: 'mcp',
+    lifecycleOps: TIER1_LIFECYCLE_OPS,
+    critical: true,
+  },
+  {
+    name: 'CodexRemoteWidget',
+    description:
+      'Render a live remote Codex iframe surface on the canvas using a brokered frame URL.',
+    component: CodexRemoteWidget,
+    propsSchema: extendedSchema(codexRemoteWidgetSchema),
     tier: 'tier1',
     group: 'mcp',
     lifecycleOps: TIER1_LIFECYCLE_OPS,

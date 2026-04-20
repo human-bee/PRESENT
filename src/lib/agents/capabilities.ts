@@ -67,6 +67,7 @@ const TIER1_WIDGET_NAMES = new Set<string>([
   'MemoryRecallWidget',
   'InfographicWidget',
   'McpAppWidget',
+  'CodexRemoteWidget',
 ]);
 
 const DEFAULT_LIFECYCLE_OPS: LifecycleOp[] = [
@@ -87,7 +88,9 @@ const mapManifestGroupToCapabilityGroup = (
   if (group === 'productivity') return 'widget-lifecycle';
   if (group === 'research' || group === 'documents') return 'research';
   if (group === 'integration') {
-    return componentName.toLowerCase().includes('mcp') ? 'mcp' : 'livekit';
+    return componentName.toLowerCase().includes('mcp') || componentName.toLowerCase().includes('codex')
+      ? 'mcp'
+      : 'livekit';
   }
   return 'utility';
 };
@@ -200,6 +203,11 @@ const ALL_COMPONENT_CAPABILITIES: ComponentCapability[] = [
     name: 'McpAppWidget',
     description: 'MCP App iframe host',
     examples: ['open MCP app', 'show MCP widget'],
+  },
+  {
+    name: 'CodexRemoteWidget',
+    description: 'Brokered remote Codex iframe host',
+    examples: ['open remote codex', 'show codex iframe', 'embed remote codex'],
   },
   {
     name: 'LinearKanbanBoard',

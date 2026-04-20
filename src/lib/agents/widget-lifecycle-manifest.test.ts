@@ -15,6 +15,7 @@ const REQUIRED_TIER1_WIDGETS = [
   'MemoryRecallWidget',
   'InfographicWidget',
   'McpAppWidget',
+  'CodexRemoteWidget',
   'LivekitRoomConnector',
   'LivekitParticipantTile',
   'LivekitScreenShareTile',
@@ -42,6 +43,6 @@ describe('widget lifecycle manifest', () => {
     expect(WIDGET_LIFECYCLE_MANIFEST.CrowdPulseWidget?.group).toBe('productivity');
     expect(WIDGET_LIFECYCLE_MANIFEST.ResearchPanel?.group).toBe('research');
     expect(WIDGET_LIFECYCLE_MANIFEST.McpAppWidget?.group).toBe('integration');
+    expect(WIDGET_LIFECYCLE_MANIFEST.CodexRemoteWidget?.group).toBe('integration');
   });
 });
-

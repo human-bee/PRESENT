@@ -73,6 +73,7 @@ export const WIDGET_LIFECYCLE_MANIFEST: Record<string, WidgetLifecycleMetadata> 
 
     // Integration (Tier 1)
     McpAppWidget: { tier: 'tier1', group: 'integration', critical: true },
+    CodexRemoteWidget: { tier: 'tier1', group: 'integration', critical: true },
     LivekitRoomConnector: { tier: 'tier1', group: 'integration', critical: true },
     LivekitParticipantTile: { tier: 'tier1', group: 'integration', critical: true },
     LivekitScreenShareTile: { tier: 'tier1', group: 'integration', critical: true },

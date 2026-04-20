@@ -765,6 +765,7 @@ export function AIImageGenerator({
 
     if (latestPromptSignatureRef.current === signature) return;
     latestPromptSignatureRef.current = signature;
+    const normalizedImageCount = clampImageCount(model, imageCount);
     void generateImage({
       prompt,
       style,
@@ -772,7 +773,7 @@ export function AIImageGenerator({
       aspectRatio,
       resolution,
       quality,
-      imageCount,
+      imageCount: normalizedImageCount,
       useGrounding,
       iterativeMode,
     });
