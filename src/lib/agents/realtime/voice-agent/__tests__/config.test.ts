@@ -1,4 +1,4 @@
-import { DEFAULT_VOICE_REALTIME_MODEL, resolveVoiceRealtimeConfig } from '../config';
+import { resolveVoiceRealtimeConfig } from '../config';
 
 const envOf = (patch: Record<string, string | undefined>): NodeJS.ProcessEnv =>
   ({
@@ -9,7 +9,7 @@ describe('voice-agent realtime config', () => {
   it('defaults the voice conversation model to explicit gpt-realtime-1.5', () => {
     const config = resolveVoiceRealtimeConfig(envOf({}));
 
-    expect(config.resolvedRealtimeModel).toBe(DEFAULT_VOICE_REALTIME_MODEL);
+    expect(config.resolvedRealtimeModel).toBe('gpt-realtime-1.5');
   });
 
   it('prefers explicit voice realtime overrides and ignores legacy REALTIME_MODEL', () => {
@@ -18,7 +18,7 @@ describe('voice-agent realtime config', () => {
         REALTIME_MODEL: 'gpt-realtime',
       }),
     );
-    expect(fromLegacyOnly.resolvedRealtimeModel).toBe(DEFAULT_VOICE_REALTIME_MODEL);
+    expect(fromLegacyOnly.resolvedRealtimeModel).toBe('gpt-realtime-1.5');
 
     const fromVoiceEnv = resolveVoiceRealtimeConfig(
       envOf({
@@ -64,10 +64,10 @@ describe('voice-agent realtime config', () => {
     );
 
     expect(config.inputAudioTranscription).toEqual({
-      model: 'gpt-4o-mini-transcribe',
+      model: 'gpt-4o-mini-transcription',
       language: 'en',
     });
-    expect(config.resolvedSttModel).toBe('gpt-4o-mini-transcribe');
+    expect(config.resolvedSttModel).toBe('gpt-4o-mini-transcription');
   });
 
   it('parses server_vad tuning and disables create_response by default when mode is explicit', () => {
@@ -121,7 +121,7 @@ describe('voice-agent realtime config', () => {
     });
   });
 
-  it('disables room noise cancellation by default for local livekit endpoints', () => {
+  it('enables room noise cancellation by default for local livekit endpoints', () => {
     const config = resolveVoiceRealtimeConfig(
       envOf({
         LIVEKIT_URL: 'ws://127.0.0.1:7880',
@@ -130,7 +130,10 @@ describe('voice-agent realtime config', () => {
       }),
     );
 
-    expect(config.roomNoiseCancellation).toBeUndefined();
+    expect(config.roomNoiseCancellation).toEqual({
+      moduleId: 'bvc',
+      options: {},
+    });
   });
 
   it('clamps participant and dedupe limits to safe ranges', () => {

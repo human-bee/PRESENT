@@ -1,4 +1,4 @@
-import { DEFAULT_VOICE_REALTIME_MODEL, resolveVoiceRealtimeConfig } from '../config';
+import { resolveVoiceRealtimeConfig } from '../config';
 import { createVoiceRuntimeModelIdentity } from '../runtime-model';
 
 const envOf = (patch: Record<string, string | undefined>): NodeJS.ProcessEnv =>
@@ -35,7 +35,7 @@ describe('voice runtime model identity', () => {
 
     const identity = createVoiceRuntimeModelIdentity(config);
 
-    expect(config.resolvedRealtimeModel).toBe(DEFAULT_VOICE_REALTIME_MODEL);
+    expect(config.resolvedRealtimeModel).toBe('gpt-realtime-1.5');
     expect(identity.model).toBe(config.resolvedRealtimeModel);
   });
 });
