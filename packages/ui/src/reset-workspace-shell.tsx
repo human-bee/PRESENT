@@ -25,6 +25,7 @@ import type {
   WorkspaceSession,
 } from '@present/contracts';
 import { ArtifactPreviewFrame } from './artifact-preview-frame';
+import { CodexRemoteWidget, type CodexRemoteSessionState } from './codex-remote-widget';
 import { ResetCollaborationSurface } from './reset-collaboration-surface';
 import type { ResetMonacoEditorProps } from './reset-monaco-editor';
 
@@ -92,10 +93,70 @@ async function requestJson<T>(url: string, init?: RequestInit) {
   const response = await fetch(url, init);
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    const error = new Error(text || `Request failed: ${response.status}`) as Error & {
+      responseText?: string;
+      status?: number;
+    };
+    error.responseText = text;
+    error.status = response.status;
+    throw error;
   }
   return (await response.json()) as T;
 }
+
+const isNotFoundRequestError = (error: unknown) =>
+  error instanceof Error && (error as Error & { status?: number }).status === 404;
+
+type CodexRemoteMetadata = {
+  sessionId: string | null;
+  remoteWorkspacePath: string;
+  frameUrl: string | null;
+  proxyBaseUrl: string | null;
+  status: string;
+  lastHeartbeatAt: string | null;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object';
+
+const readCodexRemoteMetadata = (workspace: WorkspaceSession): CodexRemoteMetadata | null => {
+  const raw = workspace.metadata['codexRemote'];
+  if (!isRecord(raw)) return null;
+  return {
+    sessionId: typeof raw.sessionId === 'string' && raw.sessionId.trim() ? raw.sessionId.trim() : null,
+    remoteWorkspacePath:
+      typeof raw.remoteWorkspacePath === 'string' && raw.remoteWorkspacePath.trim()
+        ? raw.remoteWorkspacePath.trim()
+        : workspace.workspacePath,
+    frameUrl: typeof raw.frameUrl === 'string' && raw.frameUrl.trim() ? raw.frameUrl.trim() : null,
+    proxyBaseUrl: typeof raw.proxyBaseUrl === 'string' && raw.proxyBaseUrl.trim() ? raw.proxyBaseUrl.trim() : null,
+    status: typeof raw.status === 'string' && raw.status.trim() ? raw.status.trim() : 'disconnected',
+    lastHeartbeatAt:
+      typeof raw.lastHeartbeatAt === 'string' && raw.lastHeartbeatAt.trim() ? raw.lastHeartbeatAt.trim() : null,
+  };
+};
+
+const deriveRemoteSessionState = (
+  workspace: WorkspaceSession,
+  executors: ExecutorSession[],
+): CodexRemoteSessionState | null => {
+  const metadata = readCodexRemoteMetadata(workspace);
+  if (!metadata?.sessionId || !metadata.frameUrl || !metadata.proxyBaseUrl) return null;
+  const executor =
+    executors.find((candidate) => candidate.metadata['remoteSessionId'] === metadata.sessionId) ??
+    executors.find((candidate) => candidate.identity === `remote-codex:${workspace.id}`) ??
+    null;
+  return {
+    sessionId: metadata.sessionId,
+    status: metadata.status,
+    frameUrl: metadata.frameUrl,
+    proxyBaseUrl: metadata.proxyBaseUrl,
+    executorSessionId: executor?.id ?? null,
+    remoteWorkingDirectory:
+      (typeof executor?.metadata['remoteWorkingDirectory'] === 'string' && executor.metadata['remoteWorkingDirectory']) ||
+      metadata.remoteWorkspacePath,
+    lastHeartbeatAt: metadata.lastHeartbeatAt,
+  };
+};
 
 type ResetWorkspaceShellProps = {
   initialManifest: RuntimeManifest;
@@ -140,6 +201,35 @@ type RuntimeManifestResponse = {
   agentPack: AgentInteropPack;
 };
 
+type CodexRemoteSessionResponse = CodexRemoteSessionState;
+
+export async function syncCodexRemoteSession(input: {
+  sessionId: string;
+  workspaceSessionId: string;
+  activeQuery?: string;
+  requestSession: (sessionId: string) => Promise<CodexRemoteSessionResponse>;
+  applySession: (session: CodexRemoteSessionResponse) => void;
+  selectExecutor: (executorSessionId: string) => void;
+  clearSession: () => void;
+  refreshWorkspaceState: (workspaceSessionId: string, activeQuery?: string) => Promise<void>;
+}) {
+  try {
+    const session = await input.requestSession(input.sessionId);
+    input.applySession(session);
+    if (session.executorSessionId) {
+      input.selectExecutor(session.executorSessionId);
+    }
+    return { status: 'ready' as const };
+  } catch (error) {
+    if (!isNotFoundRequestError(error)) {
+      return { status: 'error' as const };
+    }
+    input.clearSession();
+    await input.refreshWorkspaceState(input.workspaceSessionId, input.activeQuery);
+    return { status: 'missing' as const };
+  }
+}
+
 export function ResetWorkspaceShell({
   initialManifest,
   initialAgentPack,
@@ -169,8 +259,20 @@ export function ResetWorkspaceShell({
   const [workspacePathInput, setWorkspacePathInput] = useState(initialWorkspace.workspacePath);
   const [taskPrompt, setTaskPrompt] = useState('Stage the Codex-native kernel, wire it to MCP, and surface the result in the workspace.');
   const [taskSummary, setTaskSummary] = useState('Codex workspace turn');
+  const [selectedExecutorSessionId, setSelectedExecutorSessionId] = useState(
+    initialWorkspace.activeExecutorSessionId ?? initialExecutors[0]?.id ?? '',
+  );
   const [widgetTitle, setWidgetTitle] = useState('Reset Brief');
   const [widgetHtml, setWidgetHtml] = useState(defaultWidgetHtml('Reset Brief'));
+  const [remoteSession, setRemoteSession] = useState<CodexRemoteSessionResponse | null>(
+    () => deriveRemoteSessionState(initialWorkspace, initialExecutors),
+  );
+  const [remoteWorkspacePath, setRemoteWorkspacePath] = useState(
+    () =>
+      deriveRemoteSessionState(initialWorkspace, initialExecutors)?.remoteWorkingDirectory ??
+      readCodexRemoteMetadata(initialWorkspace)?.remoteWorkspacePath ??
+      initialWorkspace.workspacePath,
+  );
   const [traceQuery, setTraceQuery] = useState('');
   const [directoryPath, setDirectoryPath] = useState('');
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileEntry[]>([]);
@@ -219,6 +321,61 @@ export function ResetWorkspaceShell({
   );
   const formatCommand = (command: AgentInteropPack['commands'][keyof AgentInteropPack['commands']]) =>
     [command.command, ...command.args].join(' ');
+
+  useEffect(() => {
+    const nextSelectedExecutorId = workspace.activeExecutorSessionId ?? executors[0]?.id ?? '';
+    setSelectedExecutorSessionId((current) => (current === nextSelectedExecutorId ? current : nextSelectedExecutorId));
+  }, [executors, workspace.activeExecutorSessionId]);
+
+  useEffect(() => {
+    const nextRemoteSession = deriveRemoteSessionState(workspace, executors);
+    setRemoteSession((current) => {
+      if (
+        current?.sessionId === nextRemoteSession?.sessionId &&
+        current?.frameUrl === nextRemoteSession?.frameUrl &&
+        current?.lastHeartbeatAt === nextRemoteSession?.lastHeartbeatAt &&
+        current?.status === nextRemoteSession?.status
+      ) {
+        return current;
+      }
+      return nextRemoteSession;
+    });
+  }, [executors, workspace]);
+
+  useEffect(() => {
+    const metadata = readCodexRemoteMetadata(workspace);
+    setRemoteWorkspacePath(metadata?.remoteWorkspacePath ?? workspace.workspacePath);
+  }, [workspace.id]);
+
+  useEffect(() => {
+    if (remoteSession?.remoteWorkingDirectory) {
+      setRemoteWorkspacePath(remoteSession.remoteWorkingDirectory);
+    }
+  }, [remoteSession?.remoteWorkingDirectory]);
+
+  useEffect(() => {
+    if (!remoteSession?.sessionId) return;
+    const interval = window.setInterval(() => {
+      void syncCodexRemoteSession({
+        sessionId: remoteSession.sessionId,
+        workspaceSessionId: workspace.id,
+        activeQuery: deferredTraceQuery,
+        requestSession: (sessionId) =>
+          requestJson<CodexRemoteSessionResponse>(`/api/reset/codex/sessions/${encodeURIComponent(sessionId)}`),
+        applySession: (session) => {
+          setRemoteSession(session);
+        },
+        selectExecutor: (executorSessionId) => {
+          setSelectedExecutorSessionId(executorSessionId);
+        },
+        clearSession: () => {
+          setRemoteSession(null);
+        },
+        refreshWorkspaceState,
+      });
+    }, 15_000);
+    return () => window.clearInterval(interval);
+  }, [deferredTraceQuery, remoteSession?.sessionId, workspace.id]);
 
   const refreshWorkspaceState = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
     const snapshot = await requestJson<WorkspaceSnapshotResponse>(
@@ -538,7 +695,42 @@ export function ResetWorkspaceShell({
             (left, right) => right.updatedAt.localeCompare(left.updatedAt),
           ),
         );
+        setSelectedExecutorSessionId(result.executorSession.id);
       });
+      await refreshWorkspaceState(workspace.id, deferredTraceQuery);
+    });
+  };
+
+  const connectRemoteCodex = async () => {
+    await runAction(async () => {
+      const session = await requestJson<CodexRemoteSessionResponse>(`/api/reset/codex/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceSessionId: workspace.id,
+          remoteWorkspacePath,
+          reconnect: true,
+        }),
+      });
+      setRemoteSession(session);
+      if (session.executorSessionId) {
+        setSelectedExecutorSessionId(session.executorSessionId);
+      }
+      await refreshWorkspaceState(workspace.id, deferredTraceQuery);
+    });
+  };
+
+  const reconnectRemoteCodex = async () => {
+    await connectRemoteCodex();
+  };
+
+  const disconnectRemoteCodex = async () => {
+    if (!remoteSession?.sessionId) return;
+    await runAction(async () => {
+      await requestJson(`/api/reset/codex/sessions/${encodeURIComponent(remoteSession.sessionId)}`, {
+        method: 'DELETE',
+      });
+      setRemoteSession(null);
       await refreshWorkspaceState(workspace.id, deferredTraceQuery);
     });
   };
@@ -552,7 +744,7 @@ export function ResetWorkspaceShell({
           workspaceSessionId: workspace.id,
           summary: taskSummary,
           prompt: taskPrompt,
-          executorSessionId: executors[0]?.id,
+          executorSessionId: selectedExecutorSessionId || undefined,
         }),
       });
       setActiveTaskId(result.taskRun.id);
@@ -769,6 +961,18 @@ export function ResetWorkspaceShell({
 
         <article className="reset-panel">
           <label className="reset-field-label">Codex Task</label>
+          <select
+            className="reset-input"
+            value={selectedExecutorSessionId}
+            onChange={(event) => setSelectedExecutorSessionId(event.target.value)}
+          >
+            <option value="">Select executor</option>
+            {executors.map((executor) => (
+              <option key={executor.id} value={executor.id}>
+                {executor.identity} / {executor.kind} / {executor.state}
+              </option>
+            ))}
+          </select>
           <input
             className="reset-input"
             value={taskSummary}
@@ -919,6 +1123,15 @@ export function ResetWorkspaceShell({
               }}
             />
           </div>
+          <CodexRemoteWidget
+            session={remoteSession}
+            remoteWorkspacePath={remoteWorkspacePath}
+            onRemoteWorkspacePathChange={setRemoteWorkspacePath}
+            onConnect={() => void connectRemoteCodex()}
+            onReconnect={() => void reconnectRemoteCodex()}
+            onDisconnect={() => void disconnectRemoteCodex()}
+            isBusy={isBusy}
+          />
           <div className="reset-widget-form">
             <input
               className="reset-input"

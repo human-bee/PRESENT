@@ -15,9 +15,35 @@ test.describe('reset workspace shell', () => {
     await expect(page.locator('body')).toContainText('Server-owned TLDraw collaboration');
   });
 
-  test('renders the archive notice on the legacy canvas route', async ({ page }) => {
+  test('loads the live canvas route instead of the archived notice', async ({ page }) => {
     await page.goto('/canvas');
-    await expect(page.getByText(/the standalone canvas is archived/i)).toBeVisible();
-    await expect(page.getByRole('link', { name: /open reset workspace/i })).toBeVisible();
+    await expect(page.locator('body')).toContainText(/loading canvas/i);
+    await expect(page.locator('body')).toContainText(/connecting to collaboration room/i);
+  });
+
+  test('connects remote codex through the broker and renders the proxied iframe', async ({ page }) => {
+    await page.goto('/');
+
+    const workspacePath = page.getByPlaceholder('/srv/codex/repos/PRESENT');
+    await workspacePath.fill('/srv/codex/repos/PRESENT');
+    await page.getByRole('button', { name: /connect remote codex/i }).click();
+
+    await expect(page.locator('body')).toContainText('Remote Codex');
+    await expect(page.locator('body')).toContainText('/srv/codex/repos/PRESENT');
+    await expect(page.locator('body')).toContainText('ready');
+    await expect(page.locator('select')).toContainText('remote-codex:');
+
+    const remoteFrame = page.locator('iframe[title="Remote Codex"]');
+    await expect(remoteFrame).toHaveAttribute('src', /127\.0\.0\.1:4101\/sessions\/.+\/proxy\/$/);
+    await expect(page.getByRole('link', { name: 'Pop Out' })).toHaveAttribute(
+      'href',
+      /127\.0\.0\.1:4101\/sessions\/.+\/proxy\/$/,
+    );
+
+    await page.reload();
+    await expect(page.locator('iframe[title="Remote Codex"]')).toHaveAttribute(
+      'src',
+      /127\.0\.0\.1:4101\/sessions\/.+\/proxy\/$/,
+    );
   });
 });

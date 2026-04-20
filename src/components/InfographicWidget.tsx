@@ -66,42 +66,42 @@ const infographicStyles = [
   {
     value: 'debate-board',
     label: 'Debate Board',
-    accent: 'from-amber-200 via-orange-100 to-stone-50',
+    accent: 'linear-gradient(135deg, rgba(255, 230, 168, 0.96), rgba(255, 205, 148, 0.94), rgba(248, 244, 236, 0.92))',
     prompt:
       'Editorial debate board, clear AFF versus NEG zoning, stat callouts, verdict framing, polished presentation slide clarity.',
   },
   {
     value: 'news-desk',
     label: 'News Desk',
-    accent: 'from-slate-200 via-zinc-100 to-white',
+    accent: 'linear-gradient(135deg, rgba(214, 220, 226, 0.96), rgba(240, 241, 243, 0.94), rgba(255, 255, 255, 0.92))',
     prompt:
       'Front-page newspaper energy, bold headline hierarchy, pull quotes, structured columns, serious editorial authority.',
   },
   {
     value: 'manifesto',
     label: 'Manifesto',
-    accent: 'from-rose-200 via-orange-100 to-amber-50',
+    accent: 'linear-gradient(135deg, rgba(255, 213, 220, 0.96), rgba(255, 224, 188, 0.94), rgba(255, 244, 214, 0.92))',
     prompt:
       'Poster manifesto composition, decisive typography, graphic sections, high contrast, persuasive visual rhetoric.',
   },
   {
     value: 'blueprint',
     label: 'Blueprint',
-    accent: 'from-sky-200 via-cyan-100 to-white',
+    accent: 'linear-gradient(135deg, rgba(189, 232, 255, 0.96), rgba(210, 246, 255, 0.94), rgba(255, 255, 255, 0.92))',
     prompt:
       'Analytical blueprint aesthetic, diagrammatic callouts, precise labeling, cool information design, lucid structure.',
   },
   {
     value: 'storybook',
     label: 'Storybook',
-    accent: 'from-emerald-200 via-lime-100 to-teal-50',
+    accent: 'linear-gradient(135deg, rgba(191, 240, 214, 0.96), rgba(226, 245, 183, 0.94), rgba(222, 248, 241, 0.92))',
     prompt:
       'Storybook explainer illustration, warm narrative framing, accessible sectioning, elegant infographic storytelling.',
   },
   {
     value: 'gallery',
     label: 'Gallery',
-    accent: 'from-violet-200 via-fuchsia-100 to-rose-50',
+    accent: 'linear-gradient(135deg, rgba(226, 214, 255, 0.96), rgba(252, 220, 246, 0.94), rgba(255, 227, 235, 0.92))',
     prompt:
       'Museum-wall infographic poster, refined composition, expressive negative space, premium art-book finish.',
   },
@@ -1132,7 +1132,7 @@ export function InfographicWidget({
                         className={cn(
                           'inline-flex items-center justify-between rounded-2xl border px-3 py-2 text-xs transition',
                           seedMode
-                            ? 'border-amber-200/60 bg-amber-100 text-amber-950'
+                            ? 'border-white/20 bg-white text-black'
                             : 'border-white/12 bg-black/20 text-white/74 hover:bg-black/30',
                         )}
                       >
@@ -1147,7 +1147,7 @@ export function InfographicWidget({
                         className={cn(
                           'inline-flex items-center justify-between rounded-2xl border px-3 py-2 text-xs transition',
                           groundingEnabled
-                            ? 'border-sky-200/60 bg-sky-100 text-sky-950'
+                            ? 'border-white/20 bg-white text-black'
                             : 'border-white/12 bg-black/20 text-white/74 hover:bg-black/30',
                         )}
                       >
@@ -1161,7 +1161,7 @@ export function InfographicWidget({
                       className={cn(
                         'inline-flex items-center justify-between rounded-2xl border px-3 py-2 text-xs transition',
                         memoryAutoSendEnabled
-                          ? 'border-emerald-200/60 bg-emerald-100 text-emerald-950'
+                          ? 'border-white/20 bg-white text-black'
                           : 'border-white/12 bg-black/20 text-white/74 hover:bg-black/30',
                       )}
                     >
@@ -1233,7 +1233,7 @@ export function InfographicWidget({
                 className={cn(
                   'rounded-[24px] border px-3 py-3 text-left transition',
                   active
-                    ? 'border-amber-200/60 bg-white text-stone-950 shadow-[0_12px_30px_rgba(0,0,0,0.12)]'
+                    ? 'border-white/20 bg-white text-black shadow-[0_12px_30px_rgba(0,0,0,0.12)]'
                     : 'border-white/12 bg-white/[0.08] text-white/78 hover:bg-white/[0.12]',
                 )}
               >
@@ -1244,7 +1244,7 @@ export function InfographicWidget({
                   </span>
                 </div>
                 <p className="mt-2 text-sm font-semibold">{option.label}</p>
-                <p className={cn('mt-1 text-xs', active ? 'text-stone-700' : 'text-white/60')}>
+                <p className={cn('mt-1 text-xs', active ? 'text-black/70' : 'text-white/60')}>
                   {option.blurb}
                 </p>
               </button>
@@ -1260,10 +1260,11 @@ export function InfographicWidget({
                 key={option.value}
                 type="button"
                 onClick={() => setSelectedStyle(option.value)}
+                style={active ? { backgroundImage: option.accent } : undefined}
                 className={cn(
                   'rounded-full border px-3 py-2 text-xs transition',
                   active
-                    ? `border-white/20 bg-gradient-to-r ${option.accent} text-stone-950`
+                    ? 'border-white/20 bg-white text-black'
                     : 'border-white/12 bg-white/[0.08] text-white/72 hover:bg-white/[0.14]',
                 )}
               >
@@ -1286,7 +1287,7 @@ export function InfographicWidget({
             {selectedAspectRatio} · {selectedResolution.toUpperCase()}
           </span>
           {groundingEnabled ? (
-            <span className="rounded-full border border-sky-200/30 bg-sky-100/15 px-3 py-2 text-sky-50">
+            <span className="rounded-full border border-white/20 bg-white/12 px-3 py-2 text-white">
               Grounding on
             </span>
           ) : null}
@@ -1296,7 +1297,7 @@ export function InfographicWidget({
             </span>
           ) : null}
           {error ? (
-            <span className="rounded-full border border-rose-200/30 bg-rose-100/15 px-3 py-2 text-rose-100">
+            <span className="rounded-full border border-white/20 bg-white/12 px-3 py-2 text-white">
               {error}
             </span>
           ) : null}
@@ -1311,8 +1312,8 @@ export function InfographicWidget({
           {isGenerating ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
               <div className="relative">
-                <div className="absolute inset-0 rounded-full bg-amber-200/30 blur-md animate-pulse" />
-                <Loader2 className="relative h-10 w-10 animate-spin text-amber-100" />
+                <div className="absolute inset-0 rounded-full bg-white/20 blur-md animate-pulse" />
+                <Loader2 className="relative h-10 w-10 animate-spin text-white" />
               </div>
               <div>
                 <p className="text-sm font-semibold text-white">Building the poster</p>
@@ -1389,7 +1390,7 @@ export function InfographicWidget({
           <Button
             onClick={() => void generateInfographic()}
             disabled={isGenerating}
-            className="w-full justify-center bg-white text-stone-950 hover:bg-white/92"
+            className="w-full justify-center bg-white text-black hover:bg-white/92"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
             {activeImage ? 'Regenerate' : 'Generate'}
@@ -1426,7 +1427,7 @@ export function InfographicWidget({
       <div className="fixed bottom-4 right-4 z-50">
         <Button
           onClick={() => setIsOpen(true)}
-          className="flex items-center gap-2 rounded-full border border-black/10 bg-white px-6 py-3 text-stone-950 shadow-[0_18px_40px_rgba(0,0,0,0.18)] hover:bg-stone-50"
+          className="flex items-center gap-2 rounded-full border border-black/10 bg-white px-6 py-3 text-black shadow-[0_18px_40px_rgba(0,0,0,0.18)] hover:bg-white/92"
         >
           <ImageIcon className="h-4 w-4" />
           Infographic

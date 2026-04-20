@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { ResetWorkspaceShell } from './reset-workspace-shell';
+import type { ComponentProps } from 'react';
+import { ResetWorkspaceShell, syncCodexRemoteSession } from './reset-workspace-shell';
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -20,6 +21,101 @@ class MockEventSource {
   addEventListener() {}
   onerror: ((this: EventSource, ev: Event) => unknown) | null = null;
 }
+
+type ResetWorkspaceShellProps = ComponentProps<typeof ResetWorkspaceShell>;
+
+const buildManifest = (): ResetWorkspaceShellProps['initialManifest'] => ({
+  generatedAt: new Date().toISOString(),
+  codex: {
+    appServerBaseUrl: 'http://127.0.0.1:4096',
+    authModes: ['chatgpt', 'api_key', 'shared_key', 'byok'],
+    recommendedModels: ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark'],
+  },
+  mcp: {
+    serverName: 'present-mcp',
+    transport: 'stdio',
+    command: ['npm', 'run', 'present:mcp'],
+  },
+  collaboration: {
+    livekitEnabled: true,
+    canvasEnabled: true,
+    widgetsEnabled: true,
+    dualClient: true,
+  },
+});
+
+const buildAgentPack = (): ResetWorkspaceShellProps['initialAgentPack'] => ({
+  generatedAt: new Date().toISOString(),
+  workspaceSessionId: 'ws_123',
+  workspacePath: '/tmp/present-reset',
+  mcpServer: {
+    name: 'present-mcp',
+    transport: 'stdio',
+    command: 'npm',
+    args: ['run', 'present:mcp'],
+    cwd: process.cwd(),
+    env: {
+      PRESENT_RESET_WORKSPACE_SESSION_ID: 'ws_123',
+    },
+  },
+  commands: {
+    openWorkspace: {
+      command: 'npm',
+      args: ['run', 'fairy:cli', '--', 'reset', 'open', '--workspacePath', '/tmp/present-reset'],
+      cwd: process.cwd(),
+    },
+    inspectWorkspace: {
+      command: 'npm',
+      args: ['run', 'fairy:cli', '--', 'reset', 'status', '--workspaceSessionId', 'ws_123'],
+      cwd: process.cwd(),
+    },
+    startTurn: {
+      command: 'npm',
+      args: ['run', 'fairy:cli', '--', 'reset', 'turn', '--workspaceSessionId', 'ws_123', '--prompt', '<prompt>'],
+      cwd: process.cwd(),
+    },
+    printManifest: {
+      command: 'npm',
+      args: ['run', 'fairy:cli', '--', 'reset', 'manifest', '--workspaceSessionId', 'ws_123'],
+      cwd: process.cwd(),
+    },
+  },
+  recommendedClients: ['OpenClaw', 'Codex desktop'],
+  notes: ['ChatGPT auth remains local-companion only.'],
+});
+
+const buildWorkspace = (
+  overrides: Partial<ResetWorkspaceShellProps['initialWorkspace']> = {},
+): ResetWorkspaceShellProps['initialWorkspace'] => ({
+  id: 'ws_123',
+  workspacePath: '/tmp/present-reset',
+  branch: 'codex/reset',
+  title: 'Reset Workspace',
+  state: 'active',
+  ownerUserId: null,
+  activeExecutorSessionId: null,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  metadata: {},
+  ...overrides,
+});
+
+const buildShellProps = (
+  overrides: Partial<ResetWorkspaceShellProps> = {},
+): ResetWorkspaceShellProps => ({
+  initialManifest: buildManifest(),
+  initialAgentPack: buildAgentPack(),
+  initialWorkspace: buildWorkspace(),
+  initialWorkspaces: [buildWorkspace()],
+  initialExecutors: [],
+  initialTasks: [],
+  initialArtifacts: [],
+  initialApprovals: [],
+  initialPresence: [],
+  initialModelProfiles: [],
+  initialTraceEvents: [],
+  ...overrides,
+});
 
 describe('ResetWorkspaceShell', () => {
   beforeEach(() => {
@@ -142,102 +238,12 @@ describe('ResetWorkspaceShell', () => {
     });
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('renders the reset workspace shell headline and turn controls', async () => {
-    render(
-      <ResetWorkspaceShell
-        initialManifest={{
-          generatedAt: new Date().toISOString(),
-          codex: {
-            appServerBaseUrl: 'http://127.0.0.1:4096',
-            authModes: ['chatgpt', 'api_key', 'shared_key', 'byok'],
-            recommendedModels: ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark'],
-          },
-          mcp: {
-            serverName: 'present-mcp',
-            transport: 'stdio',
-            command: ['npm', 'run', 'present:mcp'],
-          },
-          collaboration: {
-            livekitEnabled: true,
-            canvasEnabled: true,
-            widgetsEnabled: true,
-            dualClient: true,
-          },
-        }}
-        initialAgentPack={{
-          generatedAt: new Date().toISOString(),
-          workspaceSessionId: 'ws_123',
-          workspacePath: '/tmp/present-reset',
-          mcpServer: {
-            name: 'present-mcp',
-            transport: 'stdio',
-            command: 'npm',
-            args: ['run', 'present:mcp'],
-            cwd: process.cwd(),
-            env: {
-              PRESENT_RESET_WORKSPACE_SESSION_ID: 'ws_123',
-            },
-          },
-          commands: {
-            openWorkspace: {
-              command: 'npm',
-              args: ['run', 'fairy:cli', '--', 'reset', 'open', '--workspacePath', '/tmp/present-reset'],
-              cwd: process.cwd(),
-            },
-            inspectWorkspace: {
-              command: 'npm',
-              args: ['run', 'fairy:cli', '--', 'reset', 'status', '--workspaceSessionId', 'ws_123'],
-              cwd: process.cwd(),
-            },
-            startTurn: {
-              command: 'npm',
-              args: ['run', 'fairy:cli', '--', 'reset', 'turn', '--workspaceSessionId', 'ws_123', '--prompt', '<prompt>'],
-              cwd: process.cwd(),
-            },
-            printManifest: {
-              command: 'npm',
-              args: ['run', 'fairy:cli', '--', 'reset', 'manifest', '--workspaceSessionId', 'ws_123'],
-              cwd: process.cwd(),
-            },
-          },
-          recommendedClients: ['OpenClaw', 'Codex desktop'],
-          notes: ['ChatGPT auth remains local-companion only.'],
-        }}
-        initialWorkspace={{
-          id: 'ws_123',
-          workspacePath: '/tmp/present-reset',
-          branch: 'codex/reset',
-          title: 'Reset Workspace',
-          state: 'active',
-          ownerUserId: null,
-          activeExecutorSessionId: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          metadata: {},
-        }}
-        initialWorkspaces={[
-          {
-            id: 'ws_123',
-            workspacePath: '/tmp/present-reset',
-            branch: 'codex/reset',
-            title: 'Reset Workspace',
-            state: 'active',
-            ownerUserId: null,
-            activeExecutorSessionId: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            metadata: {},
-          },
-        ]}
-        initialExecutors={[]}
-        initialTasks={[]}
-        initialArtifacts={[]}
-        initialApprovals={[]}
-        initialPresence={[]}
-        initialModelProfiles={[]}
-        initialTraceEvents={[]}
-      />,
-    );
+    render(<ResetWorkspaceShell {...buildShellProps()} />);
 
     expect(await screen.findByText(/Editorial mission control/i)).toBeTruthy();
     expect(await screen.findByRole('button', { name: /Start Codex Turn/i })).toBeTruthy();
@@ -247,5 +253,33 @@ describe('ResetWorkspaceShell', () => {
     expect(await screen.findByText(/OpenClaw \+ MCP Pack/i)).toBeTruthy();
     expect(await screen.findByText(/Server-Owned Preview/i)).toBeTruthy();
     expect((await screen.findAllByText('package.json')).length).toBeGreaterThan(0);
+  });
+
+  it('clears stale remote session state when polling hits a 404', async () => {
+    const requestSession = jest.fn().mockRejectedValue(
+      Object.assign(new Error(JSON.stringify({ error: 'Codex remote session not found.' })), { status: 404 }),
+    );
+    const applySession = jest.fn();
+    const selectExecutor = jest.fn();
+    const clearSession = jest.fn();
+    const refreshWorkspaceState = jest.fn().mockResolvedValue(undefined);
+
+    const result = await syncCodexRemoteSession({
+      sessionId: 'cxs_123',
+      workspaceSessionId: 'ws_123',
+      activeQuery: 'remote codex',
+      requestSession,
+      applySession,
+      selectExecutor,
+      clearSession,
+      refreshWorkspaceState,
+    });
+
+    expect(result).toEqual({ status: 'missing' });
+    expect(requestSession).toHaveBeenCalledWith('cxs_123');
+    expect(clearSession).toHaveBeenCalledTimes(1);
+    expect(refreshWorkspaceState).toHaveBeenCalledWith('ws_123', 'remote codex');
+    expect(applySession).not.toHaveBeenCalled();
+    expect(selectExecutor).not.toHaveBeenCalled();
   });
 });

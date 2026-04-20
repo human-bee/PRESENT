@@ -1,9 +1,9 @@
 import { resolveApplyModeForPath } from './guided-config';
 
 describe('resolveApplyModeForPath', () => {
-  it('treats voice knob updates as next_session by default', () => {
-    expect(resolveApplyModeForPath('knobs.voice.replyTimeoutMs', undefined)).toBe('next_session');
-    expect(resolveApplyModeForPath('knobs.voice.turnDetection', null)).toBe('next_session');
+  it('treats voice runtime knobs as live by default', () => {
+    expect(resolveApplyModeForPath('knobs.voice.replyTimeoutMs', undefined)).toBe('live');
+    expect(resolveApplyModeForPath('knobs.voice.turnDetection', null)).toBe('live');
   });
 
   it('honors explicit apply mode metadata when present', () => {

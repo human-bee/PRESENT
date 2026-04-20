@@ -4,7 +4,10 @@
     "noEmit": true,
     "incremental": false
   },
-  "include": [],
+  "include": [
+    "src/app/api/reset/**/*.ts",
+    "src/app/api/reset/**/*.tsx"
+  ],
   "exclude": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
@@ -15,6 +18,7 @@
     "packages/contracts/src/index.ts",
     "services/kernel/src/index.ts",
     "services/codex-adapter/src/index.ts",
+    "services/codex-broker/src/index.ts",
     "packages/ui/src/index.ts",
     "src/app/page.tsx",
     "src/app/api/reset/runtime-manifest/route.ts",
@@ -30,13 +34,9 @@
     "src/app/api/reset/executors/leases/route.ts",
     "src/app/api/reset/presence/route.ts",
     "src/app/api/reset/turns/route.ts",
-    "src/app/api/reset/tasks/route.ts",
-    "src/app/api/reset/tasks/[taskId]/route.ts",
-    "src/app/api/reset/tasks/[taskId]/events/route.ts",
-    "src/app/api/reset/artifacts/route.ts",
-    "src/app/api/reset/artifacts/[artifactId]/route.ts",
-    "src/app/api/reset/artifacts/[artifactId]/apply/route.ts",
     "src/app/api/reset/approvals/route.ts",
-    "src/app/api/reset/traces/route.ts"
+    "src/app/api/reset/traces/route.ts",
+    "src/app/api/reset/codex/sessions/route.ts",
+    "src/app/api/reset/codex/sessions/[sessionId]/route.ts"
   ]
 }

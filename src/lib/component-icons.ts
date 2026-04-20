@@ -107,6 +107,11 @@ export const componentIcons: Record<string, ComponentIconMapping> = {
     category: 'Productivity',
     description: 'MCP Apps iframe host',
   },
+  CodexRemoteWidget: {
+    icon: AppWindow,
+    category: 'Productivity',
+    description: 'Remote Codex iframe host',
+  },
   ResearchPanel: {
     icon: Search,
     category: 'Productivity',

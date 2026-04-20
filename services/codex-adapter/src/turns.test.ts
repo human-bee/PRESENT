@@ -9,10 +9,18 @@ import {
 } from '@present/kernel';
 import { startCodexTurn } from './turns';
 
+const mockThreadOptions: Array<Record<string, unknown>> = [];
+const mockCodexConfigs: Array<Record<string, unknown>> = [];
+
 jest.mock('./sdk', () => ({
   loadCodexSdk: async () => ({
     Codex: class MockCodex {
-      startThread() {
+      constructor(config: Record<string, unknown>) {
+        mockCodexConfigs.push(config);
+      }
+
+      startThread(options: Record<string, unknown>) {
+        mockThreadOptions.push(options);
         return {
           id: 'thread_mock_1',
           async runStreamed() {
@@ -72,8 +80,8 @@ jest.mock('./sdk', () => ({
         };
       }
 
-      resumeThread() {
-        return this.startThread();
+      resumeThread(_threadId: string, options: Record<string, unknown>) {
+        return this.startThread(options);
       }
     },
   }),
@@ -87,6 +95,8 @@ describe('Codex turns', () => {
       `present-reset-state-turns-${Date.now()}-${Math.random()}.json`,
     );
     resetKernelStateForTests();
+    mockThreadOptions.length = 0;
+    mockCodexConfigs.length = 0;
   });
 
   afterEach(() => {
@@ -126,5 +136,108 @@ describe('Codex turns', () => {
     expect(artifacts.some((artifact) => artifact.kind === 'command_output')).toBe(true);
     expect(traceEvents.some((event) => event.type === 'command.output')).toBe(true);
     expect(traceEvents.some((event) => event.type === 'turn.completed')).toBe(true);
+  });
+
+  it('uses the remote working directory override and skips local api key injection for remote-managed executors', async () => {
+    const workspace = openWorkspaceSession({
+      workspacePath: process.cwd(),
+      title: 'Remote Codex Turn Test',
+      branch: 'codex/reset',
+      metadata: {
+        codexRemote: {
+          remoteWorkspacePath: '/srv/codex/repos/PRESENT',
+        },
+      },
+    });
+    const executor = registerExecutorSession({
+      workspaceSessionId: workspace.id,
+      identity: 'remote-codex:test',
+      kind: 'hosted_executor',
+      authMode: 'shared_key',
+      codexBaseUrl: 'http://127.0.0.1:4101/sessions/cxs_test/proxy',
+      metadata: {
+        remoteManagedAuth: true,
+        remoteWorkingDirectory: '/srv/codex/repos/PRESENT',
+      },
+    });
+
+    await startCodexTurn({
+      workspaceSessionId: workspace.id,
+      executorSessionId: executor.id,
+      summary: 'Remote codex turn',
+      prompt: 'List the repo root.',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockCodexConfigs.at(-1)?.['baseUrl']).toBe('http://127.0.0.1:4101/sessions/cxs_test/proxy');
+    expect(mockCodexConfigs.at(-1)?.['apiKey']).toBeUndefined();
+    expect(mockThreadOptions.at(-1)?.['workingDirectory']).toBe('/srv/codex/repos/PRESENT');
+  });
+
+  it('falls back to workspace remote metadata only for the remote codex executor', async () => {
+    const workspace = openWorkspaceSession({
+      workspacePath: process.cwd(),
+      title: 'Remote workspace metadata fallback',
+      branch: 'codex/reset',
+      metadata: {
+        codexRemote: {
+          remoteWorkspacePath: '/srv/codex/repos/PRESENT',
+        },
+      },
+    });
+    const remoteExecutor = registerExecutorSession({
+      workspaceSessionId: workspace.id,
+      identity: 'remote-codex:test',
+      kind: 'hosted_executor',
+      authMode: 'shared_key',
+      codexBaseUrl: 'http://127.0.0.1:4101/sessions/cxs_test/proxy',
+      metadata: {
+        remoteManagedAuth: true,
+        remoteSessionId: 'cxs_test',
+      },
+    });
+
+    await startCodexTurn({
+      workspaceSessionId: workspace.id,
+      executorSessionId: remoteExecutor.id,
+      summary: 'Remote codex turn without executor override',
+      prompt: 'List the repo root.',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockThreadOptions.at(-1)?.['workingDirectory']).toBe('/srv/codex/repos/PRESENT');
+  });
+
+  it('keeps local executors on the local workspace path when remote workspace metadata exists', async () => {
+    const workspace = openWorkspaceSession({
+      workspacePath: process.cwd(),
+      title: 'Local executor path isolation',
+      branch: 'codex/reset',
+      metadata: {
+        codexRemote: {
+          remoteWorkspacePath: '/srv/codex/repos/PRESENT',
+        },
+      },
+    });
+    const localExecutor = registerExecutorSession({
+      workspaceSessionId: workspace.id,
+      identity: 'local-companion',
+      kind: 'local_companion',
+      authMode: 'chatgpt',
+      capabilities: ['code_edit', 'code_review'],
+    });
+
+    await startCodexTurn({
+      workspaceSessionId: workspace.id,
+      executorSessionId: localExecutor.id,
+      summary: 'Local companion turn after remote connect',
+      prompt: 'Print the current directory.',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockThreadOptions.at(-1)?.['workingDirectory']).toBe(process.cwd());
   });
 });

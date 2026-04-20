@@ -20,7 +20,7 @@
     "init": "npx custom init",
     "icons:ios": "node scripts/generate-ios-icons.js",
     "test": "jest",
-    "test:reset": "jest --runInBand --runTestsByPath packages/contracts/src/index.test.ts services/kernel/src/index.test.ts services/kernel/src/persistence.test.ts services/kernel/src/workspace-files.test.ts services/kernel/src/collaboration-docs.test.ts services/present-mcp/src/toolkit.test.ts services/present-mcp/src/interop-smoke.test.ts services/codex-adapter/src/turns.test.ts src/app/api/reset/runtime-manifest/route.test.ts 'src/app/api/reset/workspaces/[workspaceSessionId]/state/route.test.ts' 'src/app/api/reset/workspaces/[workspaceSessionId]/files/route.test.ts' 'src/app/api/reset/workspaces/[workspaceSessionId]/file/route.test.ts' 'src/app/api/reset/workspaces/[workspaceSessionId]/collaboration/route.test.ts' src/app/api/reset/presence/route.test.ts src/app/api/reset/turns/route.test.ts packages/ui/src/reset-workspace-shell.test.tsx",
+    "test:reset": "jest --runInBand --runTestsByPath packages/contracts/src/index.test.ts services/kernel/src/index.test.ts services/kernel/src/persistence.test.ts services/kernel/src/workspace-files.test.ts services/kernel/src/collaboration-docs.test.ts services/present-mcp/src/toolkit.test.ts services/present-mcp/src/interop-smoke.test.ts services/codex-adapter/src/turns.test.ts services/codex-broker/src/server.test.ts src/app/api/reset/runtime-manifest/route.test.ts 'src/app/api/reset/workspaces/[workspaceSessionId]/state/route.test.ts' 'src/app/api/reset/workspaces/[workspaceSessionId]/files/route.test.ts' 'src/app/api/reset/workspaces/[workspaceSessionId]/file/route.test.ts' 'src/app/api/reset/workspaces/[workspaceSessionId]/collaboration/route.test.ts' src/app/api/reset/presence/route.test.ts src/app/api/reset/turns/route.test.ts src/app/api/reset/codex/sessions/route.test.ts 'src/app/api/reset/codex/sessions/[sessionId]/route.test.ts' packages/ui/src/reset-workspace-shell.test.tsx src/components/ui/codex/codex-remote-widget.test.tsx src/lib/agents/widget-lifecycle-manifest.test.ts src/lib/agents/capabilities.test.ts",
     "test:reset:e2e": "playwright test --config playwright.reset.config.ts",
     "test:watch": "jest --watch",
     "dev:reset": "npm run dev",
@@ -47,6 +47,7 @@
     "journey:report": "npx tsx scripts/journey/generate-report.ts",
     "fairy:cli": "npx tsx src/cli/fairy/index.ts",
     "present:mcp": "npx tsx services/present-mcp/src/server.ts",
+    "codex:broker": "npx tsx services/codex-broker/src/run.ts",
     "codex:manifest": "npx tsx services/codex-adapter/src/print-manifest.ts",
     "bench:canvas": "npx tsx scripts/canvas-benchmark.ts",
     "bench:canvas:enrich": "npx tsx scripts/canvas-benchmark-enrich.ts",
@@ -123,7 +124,8 @@
     "y-protocols": "^1.0.7",
     "yjs": "^13.6.29",
     "zod": "^4.3.6",
-    "zod-to-json-schema": "^3.24.6"
+    "zod-to-json-schema": "^3.24.6",
+    "ssh2": "^1.17.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.3",
@@ -142,6 +144,7 @@
     "@types/node": "^24.10.0",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
+    "@types/ssh2": "^1.15.5",
     "autoprefixer": "^10.4.21",
     "babel-plugin-transform-remove-console": "^6.9.4",
     "depcheck": "^1.4.7",

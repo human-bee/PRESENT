@@ -172,6 +172,14 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     resizeMode: 'free',
     sizingPolicy: 'fit_until_user_resize',
   },
+  CodexRemoteWidget: {
+    naturalWidth: 720,
+    naturalHeight: 640,
+    minWidth: 420,
+    minHeight: 420,
+    resizeMode: 'free',
+    sizingPolicy: 'fit_until_user_resize',
+  },
   ResearchPanel: {
     naturalWidth: 600,
     naturalHeight: 700,

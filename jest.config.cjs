@@ -27,6 +27,8 @@ module.exports = {
     '^@present/kernel/(.*)$': '<rootDir>/services/kernel/src/$1',
     '^@present/codex-adapter$': '<rootDir>/services/codex-adapter/src/index.ts',
     '^@present/codex-adapter/(.*)$': '<rootDir>/services/codex-adapter/src/$1',
+    '^@present/codex-broker$': '<rootDir>/services/codex-broker/src/index.ts',
+    '^@present/codex-broker/(.*)$': '<rootDir>/services/codex-broker/src/$1',
     '^@present/ui$': '<rootDir>/packages/ui/src/index.ts',
     '^@present/ui/(.*)$': '<rootDir>/packages/ui/src/$1',
     '^@/(.*)$': '<rootDir>/src/$1',

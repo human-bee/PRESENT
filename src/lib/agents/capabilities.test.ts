@@ -64,6 +64,14 @@ describe('capabilities', () => {
     expect(crowdPulse?.lifecycleOps).toEqual(expect.arrayContaining(['create', 'resolve', 'update', 'recover']));
   });
 
+  it('advertises the remote codex canvas widget as a tier-1 integration component', () => {
+    const full = buildCapabilitiesForProfile('full');
+    const codexRemote = full.components?.find((component) => component.name === 'CodexRemoteWidget');
+    expect(codexRemote?.tier).toBe('tier1');
+    expect(codexRemote?.group).toBe('mcp');
+    expect(codexRemote?.lifecycleOps).toEqual(expect.arrayContaining(['create', 'resolve', 'update', 'recover']));
+  });
+
   it('includes do_nothing in lean toolset', () => {
     const lean = buildCapabilitiesForProfile('lean_adaptive');
     expect(lean.tools.some((tool) => tool.name === 'do_nothing')).toBe(true);
