@@ -174,4 +174,70 @@ describe('Codex turns', () => {
     expect(mockCodexConfigs.at(-1)?.['apiKey']).toBeUndefined();
     expect(mockThreadOptions.at(-1)?.['workingDirectory']).toBe('/srv/codex/repos/PRESENT');
   });
+
+  it('falls back to workspace remote metadata only for the remote codex executor', async () => {
+    const workspace = openWorkspaceSession({
+      workspacePath: process.cwd(),
+      title: 'Remote workspace metadata fallback',
+      branch: 'codex/reset',
+      metadata: {
+        codexRemote: {
+          remoteWorkspacePath: '/srv/codex/repos/PRESENT',
+        },
+      },
+    });
+    const remoteExecutor = registerExecutorSession({
+      workspaceSessionId: workspace.id,
+      identity: 'remote-codex:test',
+      kind: 'hosted_executor',
+      authMode: 'shared_key',
+      codexBaseUrl: 'http://127.0.0.1:4101/sessions/cxs_test/proxy',
+      metadata: {
+        remoteManagedAuth: true,
+        remoteSessionId: 'cxs_test',
+      },
+    });
+
+    await startCodexTurn({
+      workspaceSessionId: workspace.id,
+      executorSessionId: remoteExecutor.id,
+      summary: 'Remote codex turn without executor override',
+      prompt: 'List the repo root.',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockThreadOptions.at(-1)?.['workingDirectory']).toBe('/srv/codex/repos/PRESENT');
+  });
+
+  it('keeps local executors on the local workspace path when remote workspace metadata exists', async () => {
+    const workspace = openWorkspaceSession({
+      workspacePath: process.cwd(),
+      title: 'Local executor path isolation',
+      branch: 'codex/reset',
+      metadata: {
+        codexRemote: {
+          remoteWorkspacePath: '/srv/codex/repos/PRESENT',
+        },
+      },
+    });
+    const localExecutor = registerExecutorSession({
+      workspaceSessionId: workspace.id,
+      identity: 'local-companion',
+      kind: 'local_companion',
+      authMode: 'chatgpt',
+      capabilities: ['code_edit', 'code_review'],
+    });
+
+    await startCodexTurn({
+      workspaceSessionId: workspace.id,
+      executorSessionId: localExecutor.id,
+      summary: 'Local companion turn after remote connect',
+      prompt: 'Print the current directory.',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockThreadOptions.at(-1)?.['workingDirectory']).toBe(process.cwd());
+  });
 });

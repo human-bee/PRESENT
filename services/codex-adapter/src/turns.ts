@@ -52,6 +52,12 @@ const resolveApiKey = (executor: ExecutorSession) => {
   return process.env[envName] ?? process.env.CODEX_API_KEY ?? process.env.OPENAI_API_KEY;
 };
 
+const isRemoteCodexExecutor = (executor: ExecutorSession) =>
+  executor.kind === 'hosted_executor' &&
+  (executor.metadata.remoteManagedAuth === true ||
+    (typeof executor.metadata.remoteSessionId === 'string' && executor.metadata.remoteSessionId.trim()) ||
+    (typeof executor.metadata.proxyBaseUrl === 'string' && executor.metadata.proxyBaseUrl.trim()));
+
 const resolveWorkingDirectory = (workspace: ReturnType<typeof getWorkspaceSession>, executor: ExecutorSession) => {
   if (!workspace) {
     throw new Error('Workspace session not found');
@@ -61,6 +67,9 @@ const resolveWorkingDirectory = (workspace: ReturnType<typeof getWorkspaceSessio
       ? executor.metadata.remoteWorkingDirectory.trim()
       : null;
   if (executorOverride) return executorOverride;
+  if (!isRemoteCodexExecutor(executor)) {
+    return workspace.workspacePath;
+  }
   const workspaceRemote = workspace.metadata['codexRemote'];
   const remoteWorkspacePath =
     workspaceRemote && typeof workspaceRemote === 'object'

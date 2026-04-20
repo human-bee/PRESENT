@@ -24,11 +24,11 @@ export type CodexBrokerServiceConfig = {
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '');
 
-const buildPublicUrls = (sessionId: string, publicBaseUrl: string) => {
+const buildPublicUrls = (sessionId: string, publicBaseUrl: string, proxyAccessToken: string) => {
   const base = normalizeBaseUrl(publicBaseUrl);
   return {
-    proxyBaseUrl: `${base}/sessions/${encodeURIComponent(sessionId)}/proxy`,
-    frameUrl: `${base}/sessions/${encodeURIComponent(sessionId)}/proxy/`,
+    proxyBaseUrl: `${base}/sessions/${encodeURIComponent(sessionId)}/proxy/${encodeURIComponent(proxyAccessToken)}`,
+    frameUrl: `${base}/sessions/${encodeURIComponent(sessionId)}/proxy/${encodeURIComponent(proxyAccessToken)}/`,
   };
 };
 
@@ -45,6 +45,8 @@ const normalizeTargetBaseUrl = (value: string) => {
 
 export class CodexBrokerService {
   private readonly sessions = new CodexBrokerSessionStore();
+
+  private readonly sessionCreateLocks = new Map<string, Promise<CodexBrokerSessionSnapshot>>();
 
   private readonly idleTtlMs: number;
 
@@ -71,6 +73,28 @@ export class CodexBrokerService {
     return `cxs_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
   }
 
+  private createProxyAccessToken() {
+    return crypto.randomBytes(24).toString('base64url');
+  }
+
+  private async withWorkspaceCreateLock(
+    workspaceSessionId: string,
+    factory: () => Promise<CodexBrokerSessionSnapshot>,
+  ): Promise<CodexBrokerSessionSnapshot> {
+    const existingLock = this.sessionCreateLocks.get(workspaceSessionId);
+    if (existingLock) {
+      return existingLock;
+    }
+
+    const lock = factory().finally(() => {
+      if (this.sessionCreateLocks.get(workspaceSessionId) === lock) {
+        this.sessionCreateLocks.delete(workspaceSessionId);
+      }
+    });
+    this.sessionCreateLocks.set(workspaceSessionId, lock);
+    return lock;
+  }
+
   private async createTargetBaseUrl() {
     if (this.directTargetUrl) {
       return {
@@ -91,7 +115,7 @@ export class CodexBrokerService {
     if (!baseUrl) {
       throw new Error('Codex broker publicBaseUrl is required to build browser-accessible proxy URLs.');
     }
-    const { proxyBaseUrl, frameUrl } = buildPublicUrls(record.sessionId, baseUrl);
+    const { proxyBaseUrl, frameUrl } = buildPublicUrls(record.sessionId, baseUrl, record.proxyAccessToken);
     return {
       sessionId: record.sessionId,
       workspaceSessionId: record.workspaceSessionId,
@@ -109,33 +133,36 @@ export class CodexBrokerService {
     input: CreateCodexBrokerSessionInput,
     options: { publicBaseUrl?: string | null } = {},
   ): Promise<CodexBrokerSessionSnapshot> {
-    const reconnect = input.reconnect ?? true;
-    const existing = reconnect ? this.sessions.findByWorkspaceSessionId(input.workspaceSessionId) : null;
+    return this.withWorkspaceCreateLock(input.workspaceSessionId, async () => {
+      const reconnect = input.reconnect ?? true;
+      const existing = reconnect ? this.sessions.findByWorkspaceSessionId(input.workspaceSessionId) : null;
 
-    if (existing && existing.remoteWorkingDirectory === input.remoteWorkingDirectory && existing.status === 'ready') {
-      const touched = this.sessions.touch(existing.sessionId) ?? existing;
-      return this.toSnapshot(touched, options.publicBaseUrl);
-    }
+      if (existing && existing.remoteWorkingDirectory === input.remoteWorkingDirectory && existing.status === 'ready') {
+        const touched = this.sessions.touch(existing.sessionId) ?? existing;
+        return this.toSnapshot(touched, options.publicBaseUrl);
+      }
 
-    if (existing) {
-      await this.deleteSession(existing.sessionId);
-    }
+      if (existing) {
+        await this.deleteSession(existing.sessionId);
+      }
 
-    const now = new Date().toISOString();
-    const target = await this.createTargetBaseUrl();
-    const record: CodexBrokerSessionRecord = {
-      sessionId: this.createSessionId(),
-      workspaceSessionId: input.workspaceSessionId,
-      remoteWorkingDirectory: input.remoteWorkingDirectory,
-      targetBaseUrl: target.targetBaseUrl,
-      status: 'ready',
-      createdAt: now,
-      updatedAt: now,
-      lastHeartbeatAt: now,
-      close: target.close,
-    };
-    this.sessions.set(record);
-    return this.toSnapshot(record, options.publicBaseUrl);
+      const now = new Date().toISOString();
+      const target = await this.createTargetBaseUrl();
+      const record: CodexBrokerSessionRecord = {
+        sessionId: this.createSessionId(),
+        workspaceSessionId: input.workspaceSessionId,
+        remoteWorkingDirectory: input.remoteWorkingDirectory,
+        targetBaseUrl: target.targetBaseUrl,
+        proxyAccessToken: this.createProxyAccessToken(),
+        status: 'ready',
+        createdAt: now,
+        updatedAt: now,
+        lastHeartbeatAt: now,
+        close: target.close,
+      };
+      this.sessions.set(record);
+      return this.toSnapshot(record, options.publicBaseUrl);
+    });
   }
 
   getSession(sessionId: string, options: { publicBaseUrl?: string | null } = {}) {

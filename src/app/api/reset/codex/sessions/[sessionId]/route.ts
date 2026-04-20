@@ -3,18 +3,45 @@ import { deleteCodexBrokerSession, getCodexBrokerSession } from '@present/codex-
 import { flushResetKernelWrites, hydrateResetKernel } from '../../../_lib/persistence';
 import {
   findRemoteExecutorBySessionId,
+  findRemoteWorkspaceSessionId,
   persistDisconnectedRemoteWorkspace,
 } from '../../_lib/remote-session';
 
 export const runtime = 'nodejs';
 
+const BROKER_NOT_FOUND_ERROR = 'Codex broker session not found.';
+
+const readErrorMessage = (error: unknown) => {
+  if (!(error instanceof Error)) return null;
+  try {
+    const parsed = JSON.parse(error.message) as { error?: unknown };
+    if (typeof parsed.error === 'string' && parsed.error.trim()) {
+      return parsed.error.trim();
+    }
+  } catch {
+    // Fall back to the original message when the client already passed through a plain string.
+  }
+  return error.message.trim() || null;
+};
+
+const isBrokerNotFoundError = (error: unknown) => readErrorMessage(error) === BROKER_NOT_FOUND_ERROR;
+
+const reconcileDisconnectedRemoteWorkspace = async (sessionId: string) => {
+  const workspaceSessionId = findRemoteWorkspaceSessionId(sessionId);
+  if (!workspaceSessionId) return false;
+  const nextWorkspace = persistDisconnectedRemoteWorkspace(workspaceSessionId, sessionId);
+  if (!nextWorkspace) return false;
+  await flushResetKernelWrites();
+  return true;
+};
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
+  await hydrateResetKernel();
+  const { sessionId } = await params;
   try {
-    await hydrateResetKernel();
-    const { sessionId } = await params;
     const { session } = await getCodexBrokerSession(sessionId);
     const executorSession = findRemoteExecutorBySessionId(sessionId);
     return NextResponse.json({
@@ -27,9 +54,13 @@ export async function GET(
       lastHeartbeatAt: session.lastHeartbeatAt,
     });
   } catch (error) {
+    if (isBrokerNotFoundError(error)) {
+      await reconcileDisconnectedRemoteWorkspace(sessionId);
+      return NextResponse.json({ error: 'Codex remote session not found.' }, { status: 404 });
+    }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Codex remote session not found.' },
-      { status: 404 },
+      { error: readErrorMessage(error) ?? 'Failed to load Codex remote session.' },
+      { status: 502 },
     );
   }
 }
@@ -40,14 +71,28 @@ export async function DELETE(
 ) {
   await hydrateResetKernel();
   const { sessionId } = await params;
-  const executorSession = findRemoteExecutorBySessionId(sessionId);
-  const deleted = await deleteCodexBrokerSession(sessionId).then((result) => result.deleted).catch(() => false);
-  if (executorSession) {
-    persistDisconnectedRemoteWorkspace(executorSession.workspaceSessionId, sessionId);
-    await flushResetKernelWrites();
+  let brokerSessionMissing = false;
+
+  try {
+    await deleteCodexBrokerSession(sessionId);
+  } catch (error) {
+    if (isBrokerNotFoundError(error)) {
+      brokerSessionMissing = true;
+    } else {
+      return NextResponse.json(
+        { error: readErrorMessage(error) ?? 'Failed to delete Codex remote session.' },
+        { status: 502 },
+      );
+    }
   }
-  if (!deleted && !executorSession) {
+
+  const reconciled = await reconcileDisconnectedRemoteWorkspace(sessionId);
+  if (brokerSessionMissing && !reconciled) {
     return NextResponse.json({ error: 'Codex remote session not found.' }, { status: 404 });
   }
-  return NextResponse.json({ deleted: true });
+
+  return NextResponse.json({
+    deleted: true,
+    brokerSessionMissing,
+  });
 }

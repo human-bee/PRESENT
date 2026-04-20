@@ -4,7 +4,10 @@
     "noEmit": true,
     "incremental": false
   },
-  "include": [],
+  "include": [
+    "src/app/api/reset/**/*.ts",
+    "src/app/api/reset/**/*.tsx"
+  ],
   "exclude": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",

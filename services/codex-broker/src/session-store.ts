@@ -17,6 +17,7 @@ export type CodexBrokerSessionRecord = {
   workspaceSessionId: string;
   remoteWorkingDirectory: string;
   targetBaseUrl: string;
+  proxyAccessToken: string;
   status: CodexBrokerSessionStatus;
   createdAt: string;
   updatedAt: string;

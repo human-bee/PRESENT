@@ -93,10 +93,19 @@ async function requestJson<T>(url: string, init?: RequestInit) {
   const response = await fetch(url, init);
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    const error = new Error(text || `Request failed: ${response.status}`) as Error & {
+      responseText?: string;
+      status?: number;
+    };
+    error.responseText = text;
+    error.status = response.status;
+    throw error;
   }
   return (await response.json()) as T;
 }
+
+const isNotFoundRequestError = (error: unknown) =>
+  error instanceof Error && (error as Error & { status?: number }).status === 404;
 
 type CodexRemoteMetadata = {
   sessionId: string | null;
@@ -193,6 +202,33 @@ type RuntimeManifestResponse = {
 };
 
 type CodexRemoteSessionResponse = CodexRemoteSessionState;
+
+export async function syncCodexRemoteSession(input: {
+  sessionId: string;
+  workspaceSessionId: string;
+  activeQuery?: string;
+  requestSession: (sessionId: string) => Promise<CodexRemoteSessionResponse>;
+  applySession: (session: CodexRemoteSessionResponse) => void;
+  selectExecutor: (executorSessionId: string) => void;
+  clearSession: () => void;
+  refreshWorkspaceState: (workspaceSessionId: string, activeQuery?: string) => Promise<void>;
+}) {
+  try {
+    const session = await input.requestSession(input.sessionId);
+    input.applySession(session);
+    if (session.executorSessionId) {
+      input.selectExecutor(session.executorSessionId);
+    }
+    return { status: 'ready' as const };
+  } catch (error) {
+    if (!isNotFoundRequestError(error)) {
+      return { status: 'error' as const };
+    }
+    input.clearSession();
+    await input.refreshWorkspaceState(input.workspaceSessionId, input.activeQuery);
+    return { status: 'missing' as const };
+  }
+}
 
 export function ResetWorkspaceShell({
   initialManifest,
@@ -320,19 +356,26 @@ export function ResetWorkspaceShell({
   useEffect(() => {
     if (!remoteSession?.sessionId) return;
     const interval = window.setInterval(() => {
-      void requestJson<CodexRemoteSessionResponse>(`/api/reset/codex/sessions/${encodeURIComponent(remoteSession.sessionId)}`)
-        .then((session) => {
+      void syncCodexRemoteSession({
+        sessionId: remoteSession.sessionId,
+        workspaceSessionId: workspace.id,
+        activeQuery: deferredTraceQuery,
+        requestSession: (sessionId) =>
+          requestJson<CodexRemoteSessionResponse>(`/api/reset/codex/sessions/${encodeURIComponent(sessionId)}`),
+        applySession: (session) => {
           setRemoteSession(session);
-          if (session.executorSessionId) {
-            setSelectedExecutorSessionId(session.executorSessionId);
-          }
-        })
-        .catch(() => {
-          // Remote sessions can expire independently of the shell; leave recovery to explicit reconnect.
-        });
+        },
+        selectExecutor: (executorSessionId) => {
+          setSelectedExecutorSessionId(executorSessionId);
+        },
+        clearSession: () => {
+          setRemoteSession(null);
+        },
+        refreshWorkspaceState,
+      });
     }, 15_000);
     return () => window.clearInterval(interval);
-  }, [remoteSession?.sessionId]);
+  }, [deferredTraceQuery, remoteSession?.sessionId, workspace.id]);
 
   const refreshWorkspaceState = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
     const snapshot = await requestJson<WorkspaceSnapshotResponse>(

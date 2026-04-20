@@ -1,6 +1,7 @@
 import {
   getWorkspaceSession,
   listExecutorSessions,
+  listWorkspaceSessions,
   registerExecutorSession,
   setExecutorSessionState,
   updateWorkspaceSession,
@@ -72,6 +73,15 @@ export const resolveRemoteWorkingDirectory = (
 
 export const findRemoteExecutorBySessionId = (sessionId: string) =>
   listExecutorSessions().find((executor) => executor.metadata['remoteSessionId'] === sessionId) ?? null;
+
+export const findRemoteWorkspaceSessionId = (sessionId: string) => {
+  const remoteExecutor = findRemoteExecutorBySessionId(sessionId);
+  if (remoteExecutor) return remoteExecutor.workspaceSessionId;
+  return (
+    listWorkspaceSessions().find((workspace) => readCodexRemoteWorkspaceMetadata(workspace)?.sessionId === sessionId)?.id ??
+    null
+  );
+};
 
 export const findRemoteExecutorForWorkspace = (workspaceSessionId: string, sessionId?: string | null) => {
   const executors = listExecutorSessions(workspaceSessionId);
