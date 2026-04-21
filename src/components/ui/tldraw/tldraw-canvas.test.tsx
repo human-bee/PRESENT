@@ -106,6 +106,30 @@ function setMeasuredSize(element: Element, width: number, height: number) {
   }
 }
 
+function emitMeasuredResize(width: number, height: number) {
+  if (!mockResizeObserverCallback) return;
+  if (observedElement) {
+    setMeasuredSize(observedElement, width, height);
+  }
+  mockResizeObserverCallback(
+    [
+      {
+        contentRect: {
+          width,
+          height,
+          x: 0,
+          y: 0,
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+        },
+      },
+    ] as ResizeObserverEntry[],
+    {} as ResizeObserver,
+  );
+}
+
 // Mock editor
 // mockUpdateShapes/mocked editor defined above for useEditor stub
 
@@ -216,6 +240,47 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
     expect(mockUpdateShapes).toHaveBeenCalledTimes(1);
     expect(mockUpdateShapes).toHaveBeenCalledWith([
       { id: defaultTestShape.id, type: 'custom', props: { w: 300, h: 250 } },
+    ]);
+  });
+
+  it('continues fitting growing Remote Codex widget content', () => {
+    const codexShape = {
+      ...defaultTestShape,
+      props: { ...defaultTestShape.props, name: 'CodexRemoteWidget' },
+    };
+    const { rerender } = render(<TestShapeRenderer shape={codexShape} />);
+    expect(mockResizeObserverCallback).not.toBeNull();
+
+    act(() => {
+      emitMeasuredResize(720, 640);
+    });
+    act(() => {
+      jest.advanceTimersByTime(150);
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(mockUpdateShapes).toHaveBeenCalledTimes(1);
+    expect(mockUpdateShapes).toHaveBeenLastCalledWith([
+      { id: defaultTestShape.id, type: 'custom', props: { w: 720, h: 640 } },
+    ]);
+
+    rerender(
+      <TestShapeRenderer
+        shape={{ ...codexShape, props: { ...codexShape.props, w: 720, h: 640 } }}
+      />,
+    );
+
+    act(() => {
+      emitMeasuredResize(720, 860);
+    });
+    act(() => {
+      jest.advanceTimersByTime(150);
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(mockUpdateShapes).toHaveBeenCalledTimes(2);
+    expect(mockUpdateShapes).toHaveBeenLastCalledWith([
+      { id: defaultTestShape.id, type: 'custom', props: { w: 720, h: 860 } },
     ]);
   });
 

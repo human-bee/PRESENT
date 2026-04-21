@@ -178,7 +178,7 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     minWidth: 420,
     minHeight: 420,
     resizeMode: 'free',
-    sizingPolicy: 'fit_until_user_resize',
+    sizingPolicy: 'always_fit', // Setup, workspace lists, and chat output expand in-place
   },
   ResearchPanel: {
     naturalWidth: 600,
