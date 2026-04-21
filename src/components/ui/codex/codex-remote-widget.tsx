@@ -294,6 +294,62 @@ function serializeWorkspacesInput(lines: string) {
     });
 }
 
+function normalizeWorkspaces(value: unknown): WidgetCodexServer['workspaces'] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!isRecord(entry)) return null;
+      const path = typeof entry.path === 'string' ? entry.path : '';
+      const label =
+        typeof entry.label === 'string' && entry.label.trim().length > 0
+          ? entry.label
+          : path.split('/').filter(Boolean).at(-1) || path || 'Workspace';
+      const id =
+        typeof entry.id === 'string' && entry.id.trim().length > 0
+          ? entry.id
+          : `workspace-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      return { id, label, path };
+    })
+    .filter((entry): entry is WidgetCodexServer['workspaces'][number] => Boolean(entry));
+}
+
+function normalizeServers(value: unknown): WidgetCodexServer[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!isRecord(entry)) return null;
+      const id = typeof entry.id === 'string' ? entry.id : '';
+      if (!id) return null;
+      return {
+        id,
+        label:
+          typeof entry.label === 'string' && entry.label.trim().length > 0
+            ? entry.label
+            : 'Remote Codex',
+        description: typeof entry.description === 'string' ? entry.description : null,
+        authStrategy:
+          entry.authStrategy === 'external_url' || entry.authStrategy === 'iframe'
+            ? entry.authStrategy
+            : 'none',
+        authState:
+          entry.authState === 'login_required' ||
+          entry.authState === 'pending' ||
+          entry.authState === 'authenticated' ||
+          entry.authState === 'expired'
+            ? entry.authState
+            : 'unknown',
+        authUrl: typeof entry.authUrl === 'string' ? entry.authUrl : null,
+        transportKind: entry.transportKind === 'direct' ? 'direct' : 'ssh',
+        workspaces: normalizeWorkspaces(entry.workspaces),
+        createdAt:
+          typeof entry.createdAt === 'string' ? entry.createdAt : new Date(0).toISOString(),
+        updatedAt:
+          typeof entry.updatedAt === 'string' ? entry.updatedAt : new Date(0).toISOString(),
+      } satisfies WidgetCodexServer;
+    })
+    .filter((entry): entry is WidgetCodexServer => Boolean(entry));
+}
+
 function parsePort(value: string, fallback: number) {
   const raw = value.trim();
   const parsed = Number(raw || String(fallback));
@@ -570,15 +626,18 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
 
   const applySnapshot = useCallback(
     async (snapshot: WidgetCodexSnapshot) => {
-      setServers(snapshot.servers);
+      const normalizedServers = normalizeServers(snapshot.servers);
+      setServers(normalizedServers);
       setRealtimeUrl(snapshot.realtimeUrl);
       const nextServerId =
-        snapshot.widgetSession?.serverId ?? state.serverId ?? snapshot.servers[0]?.id ?? '';
+        snapshot.widgetSession?.serverId ?? state.serverId ?? normalizedServers[0]?.id ?? '';
       if (mountedRef.current) {
         setSelectedServerId(nextServerId);
       }
       const server =
-        snapshot.servers.find((entry) => entry.id === nextServerId) ?? snapshot.servers[0] ?? null;
+        normalizedServers.find((entry) => entry.id === nextServerId) ??
+        normalizedServers[0] ??
+        null;
       setWorkspaces(server?.workspaces ?? []);
       if (mountedRef.current) {
         setSelectedWorkspaceId(
@@ -633,14 +692,15 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     const payload = await requestJson<{ realtimeUrl: string | null; servers: WidgetCodexServer[] }>(
       '/api/widget-codex/servers',
     );
-    setServers(payload.servers);
+    const normalizedServers = normalizeServers(payload.servers);
+    setServers(normalizedServers);
     setRealtimeUrl(payload.realtimeUrl);
-    const nextServerId = state.serverId ?? payload.servers[0]?.id ?? '';
+    const nextServerId = state.serverId ?? normalizedServers[0]?.id ?? '';
     if (mountedRef.current) {
       setSelectedServerId(nextServerId);
     }
     const server =
-      payload.servers.find((entry) => entry.id === nextServerId) ?? payload.servers[0] ?? null;
+      normalizedServers.find((entry) => entry.id === nextServerId) ?? normalizedServers[0] ?? null;
     setWorkspaces(server?.workspaces ?? []);
     if (mountedRef.current) {
       setSelectedWorkspaceId(state.remoteWorkspaceId ?? server?.workspaces[0]?.id ?? '');
@@ -888,6 +948,7 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
 
   const editServer = useCallback(() => {
     if (!selectedServer) return;
+    const selectedWorkspaces = normalizeWorkspaces(selectedServer.workspaces);
     setServerForm({
       id: selectedServer.id,
       label: selectedServer.label,
@@ -905,7 +966,7 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
       sshRemoteProtocol: 'http',
       authStrategy: selectedServer.authStrategy,
       authUrl: selectedServer.authUrl ?? '',
-      workspacesText: workspacesToInput(selectedServer.workspaces),
+      workspacesText: workspacesToInput(selectedWorkspaces),
     });
     setServerFormErrors({});
     setShowServerForm(true);
@@ -1267,9 +1328,10 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
 
   useEffect(() => {
     if (!selectedServer) return;
-    setWorkspaces(selectedServer.workspaces);
-    if (!selectedWorkspaceId && selectedServer.workspaces[0]?.id) {
-      setSelectedWorkspaceId(selectedServer.workspaces[0].id);
+    const nextWorkspaces = normalizeWorkspaces(selectedServer.workspaces);
+    setWorkspaces(nextWorkspaces);
+    if (!selectedWorkspaceId && nextWorkspaces[0]?.id) {
+      setSelectedWorkspaceId(nextWorkspaces[0].id);
     }
   }, [selectedServer, selectedWorkspaceId]);
 
