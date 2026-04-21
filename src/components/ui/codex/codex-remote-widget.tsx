@@ -39,6 +39,7 @@ type WidgetCodexServer = {
   authStrategy: 'none' | 'external_url' | 'iframe';
   authState: 'unknown' | 'login_required' | 'pending' | 'authenticated' | 'expired';
   authUrl: string | null;
+  transportKind: 'direct' | 'ssh';
   workspaces: Array<{
     id: string;
     label: string;
@@ -296,7 +297,17 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     id: '',
     label: '',
     description: '',
+    transportKind: 'ssh' as 'direct' | 'ssh',
     directTargetUrl: '',
+    sshHost: '',
+    sshPort: '22',
+    sshUsername: '',
+    sshPrivateKey: '',
+    sshPassphrase: '',
+    sshHostKeySha256: '',
+    sshRemoteHost: '127.0.0.1',
+    sshRemotePort: '4500',
+    sshRemoteProtocol: 'http' as 'http' | 'https',
     authStrategy: 'none' as 'none' | 'external_url' | 'iframe',
     authUrl: '',
     workspacesText: '',
@@ -587,11 +598,26 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
 
   const saveServer = useCallback(async () => {
     const workspacesPayload = serializeWorkspacesInput(serverForm.workspacesText);
+    const sshPayload =
+      serverForm.transportKind === 'ssh'
+        ? {
+            host: serverForm.sshHost.trim(),
+            port: Number(serverForm.sshPort || '22'),
+            username: serverForm.sshUsername.trim(),
+            remoteHost: serverForm.sshRemoteHost.trim() || '127.0.0.1',
+            remotePort: Number(serverForm.sshRemotePort || '4500'),
+            remoteProtocol: serverForm.sshRemoteProtocol,
+            hostKeySha256: serverForm.sshHostKeySha256.trim(),
+            privateKey: serverForm.sshPrivateKey.trim() || null,
+            passphrase: serverForm.sshPassphrase.trim() || null,
+          }
+        : null;
     const baseBody = {
       label: serverForm.label.trim(),
       description: serverForm.description.trim() || null,
       authStrategy: serverForm.authStrategy,
       authUrl: serverForm.authUrl.trim() || null,
+      transportKind: serverForm.transportKind,
       workspaces: workspacesPayload,
     };
     setIsBusy(true);
@@ -599,8 +625,11 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
       if (serverForm.id) {
         const body = {
           ...baseBody,
-          ...(serverForm.directTargetUrl.trim()
+          ...(serverForm.transportKind === 'direct' && serverForm.directTargetUrl.trim()
             ? { directTargetUrl: serverForm.directTargetUrl.trim() }
+            : {}),
+          ...(serverForm.transportKind === 'ssh' && sshPayload?.host && sshPayload.username && sshPayload.privateKey
+            ? { ssh: sshPayload }
             : {}),
         };
         await requestJson(`/api/widget-codex/servers/${encodeURIComponent(serverForm.id)}`, {
@@ -611,7 +640,9 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
       } else {
         const body = {
           ...baseBody,
-          directTargetUrl: serverForm.directTargetUrl.trim(),
+          ...(serverForm.transportKind === 'direct'
+            ? { directTargetUrl: serverForm.directTargetUrl.trim() }
+            : { ssh: sshPayload }),
         };
         await requestJson('/api/widget-codex/servers', {
           method: 'POST',
@@ -624,7 +655,17 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
         id: '',
         label: '',
         description: '',
+        transportKind: 'ssh',
         directTargetUrl: '',
+        sshHost: '',
+        sshPort: '22',
+        sshUsername: '',
+        sshPrivateKey: '',
+        sshPassphrase: '',
+        sshHostKeySha256: '',
+        sshRemoteHost: '127.0.0.1',
+        sshRemotePort: '4500',
+        sshRemoteProtocol: 'http',
         authStrategy: 'none',
         authUrl: '',
         workspacesText: '',
@@ -648,7 +689,17 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
       id: selectedServer.id,
       label: selectedServer.label,
       description: selectedServer.description ?? '',
+      transportKind: selectedServer.transportKind,
       directTargetUrl: '',
+      sshHost: '',
+      sshPort: '22',
+      sshUsername: '',
+      sshPrivateKey: '',
+      sshPassphrase: '',
+      sshHostKeySha256: '',
+      sshRemoteHost: '127.0.0.1',
+      sshRemotePort: '4500',
+      sshRemoteProtocol: 'http',
       authStrategy: selectedServer.authStrategy,
       authUrl: selectedServer.authUrl ?? '',
       workspacesText: workspacesToInput(selectedServer.workspaces),
@@ -1282,15 +1333,115 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                 />
               </label>
               <label className="flex flex-col gap-1">
-                <span className="text-xs text-secondary">Direct Target URL</span>
-                <input
-                  value={serverForm.directTargetUrl}
+                <span className="text-xs text-secondary">Connection Type</span>
+                <select
+                  value={serverForm.transportKind}
                   onPointerDown={stopPointerPropagation}
-                  onChange={(event) => setServerForm((previous) => ({ ...previous, directTargetUrl: event.target.value }))}
+                  onChange={(event) =>
+                    setServerForm((previous) => ({
+                      ...previous,
+                      transportKind: event.target.value as 'direct' | 'ssh',
+                    }))
+                  }
                   className="w-full rounded-lg border border-default bg-[var(--color-panel)] px-3 py-2 text-sm text-primary outline-none"
-                  placeholder="https://remote-codex.example/"
-                />
+                >
+                  <option value="ssh">SSH tunnel to remote Codex</option>
+                  <option value="direct">Direct Codex app URL</option>
+                </select>
               </label>
+              {serverForm.transportKind === 'direct' ? (
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs text-secondary">Direct Target URL</span>
+                  <input
+                    value={serverForm.directTargetUrl}
+                    onPointerDown={stopPointerPropagation}
+                    onChange={(event) => setServerForm((previous) => ({ ...previous, directTargetUrl: event.target.value }))}
+                    className="w-full rounded-lg border border-default bg-[var(--color-panel)] px-3 py-2 text-sm text-primary outline-none"
+                    placeholder="https://remote-codex.example/"
+                  />
+                </label>
+              ) : (
+                <div className="grid gap-3 rounded-lg border border-default bg-[var(--color-panel)] p-3">
+                  <div className="text-xs text-secondary">
+                    SSH credentials are sent to the widget service only. They are not stored in TLDraw shape state or returned by list APIs.
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-secondary">SSH Host</span>
+                      <input
+                        value={serverForm.sshHost}
+                        onPointerDown={stopPointerPropagation}
+                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshHost: event.target.value }))}
+                        className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
+                        placeholder="codex-box.tailnet.ts.net"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-secondary">SSH Port</span>
+                      <input
+                        value={serverForm.sshPort}
+                        onPointerDown={stopPointerPropagation}
+                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshPort: event.target.value }))}
+                        className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
+                        placeholder="22"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-secondary">SSH Username</span>
+                      <input
+                        value={serverForm.sshUsername}
+                        onPointerDown={stopPointerPropagation}
+                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshUsername: event.target.value }))}
+                        className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
+                        placeholder="ubuntu"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-secondary">Remote Codex Port</span>
+                      <input
+                        value={serverForm.sshRemotePort}
+                        onPointerDown={stopPointerPropagation}
+                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshRemotePort: event.target.value }))}
+                        className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
+                        placeholder="4500"
+                      />
+                    </label>
+                  </div>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-secondary">SSH Private Key</span>
+                    <textarea
+                      value={serverForm.sshPrivateKey}
+                      onPointerDown={stopPointerPropagation}
+                      onChange={(event) => setServerForm((previous) => ({ ...previous, sshPrivateKey: event.target.value }))}
+                      className="min-h-24 w-full rounded-lg border border-default bg-surface px-3 py-2 font-mono text-xs text-primary outline-none"
+                      placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                    />
+                  </label>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-secondary">Key Passphrase</span>
+                      <input
+                        value={serverForm.sshPassphrase}
+                        type="password"
+                        onPointerDown={stopPointerPropagation}
+                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshPassphrase: event.target.value }))}
+                        className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
+                        placeholder="optional"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-secondary">Host Key SHA256</span>
+                      <input
+                        value={serverForm.sshHostKeySha256}
+                        onPointerDown={stopPointerPropagation}
+                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshHostKeySha256: event.target.value }))}
+                        className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
+                        placeholder="required, e.g. SHA256:..."
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-secondary">Auth Strategy</span>
                 <select
@@ -1342,13 +1493,23 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                   onClick={() => {
                     setShowServerForm(false);
                     setServerForm({
-                      id: '',
-                      label: '',
-                      description: '',
-                      directTargetUrl: '',
-                      authStrategy: 'none',
-                      authUrl: '',
-                      workspacesText: '',
+                    id: '',
+                    label: '',
+                    description: '',
+                    transportKind: 'ssh',
+                    directTargetUrl: '',
+                    sshHost: '',
+                    sshPort: '22',
+                    sshUsername: '',
+                    sshPrivateKey: '',
+                    sshPassphrase: '',
+                    sshHostKeySha256: '',
+                    sshRemoteHost: '127.0.0.1',
+                    sshRemotePort: '4500',
+                    sshRemoteProtocol: 'http',
+                    authStrategy: 'none',
+                    authUrl: '',
+                    workspacesText: '',
                     });
                   }}
                 >

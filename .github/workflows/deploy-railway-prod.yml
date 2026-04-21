@@ -347,8 +347,7 @@ jobs:
             exit 1
           fi
           if [ -z "${CODEX_BROKER_DIRECT_TARGET_URL:-}" ] && { [ -z "${CODEX_BROKER_SSH_HOST:-}" ] || [ -z "${CODEX_BROKER_SSH_USERNAME:-}" ]; }; then
-            echo "::error::Set CODEX_BROKER_DIRECT_TARGET_URL or CODEX_BROKER_SSH_HOST plus CODEX_BROKER_SSH_USERNAME."
-            exit 1
+            echo "No global broker target configured; broker will require per-session widget/server transport."
           fi
           tmp_dir="$(mktemp -d)"
           cd "$tmp_dir"
@@ -452,10 +451,6 @@ jobs:
             echo "::error::Missing WIDGET_CODEX_PUBLIC_WS_URL repository variable."
             exit 1
           fi
-          if [ -z "${WIDGET_CODEX_DEFAULT_SERVERS:-}" ]; then
-            echo "::error::Missing WIDGET_CODEX_DEFAULT_SERVERS secret or repository variable."
-            exit 1
-          fi
           tmp_dir="$(mktemp -d)"
           cd "$tmp_dir"
           run_with_railway_auth() {
@@ -496,6 +491,12 @@ jobs:
             --set "WIDGET_CODEX_PUBLIC_WS_URL=$WIDGET_CODEX_PUBLIC_WS_URL" \
             --set "WIDGET_CODEX_ALLOWED_ORIGIN=$WIDGET_CODEX_ALLOWED_ORIGIN" \
             --set "WIDGET_CODEX_STATE_FILE=$WIDGET_CODEX_STATE_FILE" \
-            --set "WIDGET_CODEX_DEFAULT_SERVERS=$WIDGET_CODEX_DEFAULT_SERVERS" \
             --skip-deploys
+          if [ -n "${WIDGET_CODEX_DEFAULT_SERVERS:-}" ]; then
+            run_with_railway_auth variables railway variables \
+              --service "$RAILWAY_WIDGET_CODEX_SERVICE" \
+              --environment "$RAILWAY_ENVIRONMENT" \
+              --set "WIDGET_CODEX_DEFAULT_SERVERS=$WIDGET_CODEX_DEFAULT_SERVERS" \
+              --skip-deploys
+          fi
           run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_WIDGET_CODEX_SERVICE" --yes

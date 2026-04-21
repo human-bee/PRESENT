@@ -51,7 +51,20 @@ export async function createWidgetCodexServer(input: {
   description?: string | null;
   authStrategy?: 'none' | 'external_url' | 'iframe';
   authUrl?: string | null;
-  directTargetUrl: string;
+  transportKind?: 'direct' | 'ssh';
+  directTargetUrl?: string | null;
+  ssh?: {
+    host: string;
+    port?: number;
+    username: string;
+    remoteHost?: string;
+    remotePort?: number;
+    remoteProtocol?: 'http' | 'https';
+    hostKeySha256?: string | null;
+    privateKey?: string | null;
+    privateKeyPath?: string | null;
+    passphrase?: string | null;
+  } | null;
   workspaces?: WidgetCodexWorkspace[];
 }) {
   return widgetCodexRequest<{ server: WidgetCodexPublicServer }>('/servers', {
@@ -67,7 +80,20 @@ export async function updateWidgetCodexServer(
     description: string | null;
     authStrategy: 'none' | 'external_url' | 'iframe';
     authUrl: string | null;
-    directTargetUrl: string;
+    transportKind: 'direct' | 'ssh';
+    directTargetUrl: string | null;
+    ssh: {
+      host: string;
+      port?: number;
+      username: string;
+      remoteHost?: string;
+      remotePort?: number;
+      remoteProtocol?: 'http' | 'https';
+      hostKeySha256?: string | null;
+      privateKey?: string | null;
+      privateKeyPath?: string | null;
+      passphrase?: string | null;
+    } | null;
     workspaces: WidgetCodexWorkspace[];
   }>,
 ) {

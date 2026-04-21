@@ -21,6 +21,7 @@ const buildServersPayload = () => ({
       authStrategy: 'none',
       authState: 'authenticated',
       authUrl: null,
+      transportKind: 'direct',
       workspaces: [
         {
           id: 'present',
@@ -340,5 +341,88 @@ describe('CodexRemoteWidget', () => {
 
     expect(await screen.findByText('Auth: Login Expired')).toBeTruthy();
     expect(screen.getByText('Open Login')).toBeTruthy();
+  });
+
+  it('creates an SSH-backed saved server from inside the widget', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    (global.fetch as jest.Mock).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url === '/api/widget-codex/servers' && init?.method === 'POST') {
+        return {
+          ok: true,
+          json: async () => ({
+            server: {
+              ...buildServersPayload().servers[0],
+              id: 'wcsrv_ssh',
+              label: 'Tailnet Codex',
+              transportKind: 'ssh',
+            },
+          }),
+        } as Response;
+      }
+      if (url === '/api/widget-codex/servers') {
+        return {
+          ok: true,
+          json: async () => ({
+            realtimeUrl: null,
+            servers: [],
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({}),
+      } as Response;
+    });
+
+    render(<CodexRemoteWidget title="Remote Codex" />);
+
+    await screen.findByText('Add Server');
+    fireEvent.click(screen.getByText('Add Server'));
+    fireEvent.change(screen.getByLabelText('Server Label'), { target: { value: 'Tailnet Codex' } });
+    fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'codex-box.tailnet.example' } });
+    fireEvent.change(screen.getByLabelText('SSH Username'), { target: { value: 'ubuntu' } });
+    fireEvent.change(screen.getByLabelText('SSH Private Key'), {
+      target: {
+        value: '-----BEGIN OPENSSH PRIVATE KEY-----\ntest\n-----END OPENSSH PRIVATE KEY-----',
+      },
+    });
+    fireEvent.change(screen.getByLabelText('Host Key SHA256'), { target: { value: 'SHA256:test' } });
+    fireEvent.change(screen.getByLabelText('Workspaces'), {
+      target: {
+        value: 'PRESENT|/srv/codex/repos/PRESENT',
+      },
+    });
+    fireEvent.click(screen.getByText('Create Server'));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/widget-codex/servers',
+        expect.objectContaining({
+          method: 'POST',
+        }),
+      );
+    });
+    const createRequest = requests.find((request) => request.url === '/api/widget-codex/servers' && request.init?.method === 'POST');
+    expect(createRequest).toBeTruthy();
+    expect(JSON.parse(String(createRequest?.init?.body))).toMatchObject({
+      label: 'Tailnet Codex',
+      transportKind: 'ssh',
+      ssh: {
+        host: 'codex-box.tailnet.example',
+        username: 'ubuntu',
+        remotePort: 4500,
+        hostKeySha256: 'SHA256:test',
+        privateKey: expect.stringContaining('OPENSSH PRIVATE KEY'),
+      },
+      workspaces: [
+        {
+          id: 'workspace-present',
+          label: 'PRESENT',
+          path: '/srv/codex/repos/PRESENT',
+        },
+      ],
+    });
   });
 });
