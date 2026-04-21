@@ -1076,12 +1076,12 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   return (
     <div
       className={cn(
-        'flex h-full w-full flex-col gap-3 rounded-[24px] border border-[var(--color-divider)] bg-[var(--color-panel)] p-3',
+        'flex min-h-full w-full flex-col gap-3 rounded-[24px] border border-[var(--color-divider)] bg-[var(--color-panel)] p-3',
         className,
       )}
     >
       {state.frameUrl ? (
-        <div className="flex h-full flex-col gap-3 rounded-[20px] border border-default bg-surface p-3">
+        <div className="flex min-h-full flex-col gap-3 rounded-[20px] border border-default bg-surface p-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-primary">{state.title || 'Remote Codex'}</p>
@@ -1203,7 +1203,7 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
           </div>
         </div>
       ) : (
-        <div className="flex h-full flex-col gap-3 rounded-[20px] border border-dashed border-[var(--color-divider)] bg-[var(--color-muted)]/30 p-4">
+        <div className="flex min-h-full flex-col gap-3 rounded-[20px] border border-dashed border-[var(--color-divider)] bg-[var(--color-muted)]/30 p-4">
           <div>
             <p className="text-sm font-semibold text-primary">Remote Codex</p>
             <p className="mt-1 text-xs text-secondary">
