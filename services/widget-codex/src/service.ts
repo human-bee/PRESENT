@@ -19,6 +19,7 @@ import {
   widgetCodexCreateConnectionInputSchema,
   widgetCodexServerInputSchema,
   widgetCodexServerPatchSchema,
+  widgetCodexTransportKindSchema,
   widgetCodexWorkspaceSchema,
 } from './contracts';
 
@@ -29,6 +30,7 @@ const widgetCodexServerInternalSchema = z.object({
   authStrategy: widgetCodexAuthStrategySchema,
   authState: widgetCodexAuthStateSchema,
   authUrl: z.string().url().nullable(),
+  transportKind: widgetCodexTransportKindSchema.default('direct'),
   transport: codexBrokerTransportSchema,
   workspaces: z.array(widgetCodexWorkspaceSchema).default([]),
   createdAt: z.string().min(1),
@@ -157,6 +159,72 @@ const toPublicConnection = (connection: WidgetCodexConnectionRecord | null) =>
 const toPublicWidgetSession = (widgetSession: WidgetCodexWidgetSession | null) =>
   widgetSession ? publicWidgetSessionSchema.parse(widgetSession) : null;
 
+function transportKindForTransport(transport: z.infer<typeof codexBrokerTransportSchema>) {
+  return transport.ssh ? 'ssh' : 'direct';
+}
+
+function buildCreateTransport(payload: z.infer<typeof widgetCodexServerInputSchema>) {
+  if (payload.transportKind === 'ssh') {
+    if (!payload.ssh) {
+      throw new Error('SSH settings are required for SSH transport.');
+    }
+    return {
+      transportKind: 'ssh' as const,
+      transport: {
+        ssh: payload.ssh,
+      },
+    };
+  }
+  if (!payload.directTargetUrl) {
+    throw new Error('Direct target URL is required for direct transport.');
+  }
+  return {
+    transportKind: 'direct' as const,
+    transport: {
+      directTargetUrl: payload.directTargetUrl,
+    },
+  };
+}
+
+function buildPatchTransport(
+  current: WidgetCodexServerInternal,
+  patch: z.infer<typeof widgetCodexServerPatchSchema>,
+) {
+  const nextKind = patch.transportKind ?? current.transportKind ?? transportKindForTransport(current.transport);
+  if (nextKind === 'ssh') {
+    if (patch.ssh) {
+      return {
+        transportKind: 'ssh' as const,
+        transport: {
+          ssh: patch.ssh,
+        },
+      };
+    }
+    if (current.transport.ssh) {
+      return {
+        transportKind: 'ssh' as const,
+        transport: current.transport,
+      };
+    }
+    throw new Error('SSH settings are required when switching to SSH transport.');
+  }
+  if (patch.directTargetUrl) {
+    return {
+      transportKind: 'direct' as const,
+      transport: {
+        directTargetUrl: patch.directTargetUrl,
+      },
+    };
+  }
+  if (current.transport.directTargetUrl && (patch.transportKind === undefined || patch.transportKind === 'direct')) {
+    return {
+      transportKind: 'direct' as const,
+      transport: current.transport,
+    };
+  }
+  throw new Error('Direct target URL is required when switching to direct transport.');
+}
+
 function normalizeDefaultServer(input: z.infer<typeof widgetCodexDefaultServerSchema>): WidgetCodexServerInternal {
   const timestamp = nowIso();
   return widgetCodexServerInternalSchema.parse({
@@ -168,6 +236,7 @@ function normalizeDefaultServer(input: z.infer<typeof widgetCodexDefaultServerSc
       input.authState ??
       (input.authStrategy === 'none' ? 'authenticated' : input.authUrl ? 'login_required' : 'unknown'),
     authUrl: input.authUrl ?? null,
+    transportKind: input.transportKind ?? transportKindForTransport(input.transport),
     transport: input.transport,
     workspaces: input.workspaces ?? [],
     createdAt: input.createdAt ?? timestamp,
@@ -384,6 +453,7 @@ export class WidgetCodexService {
   async createServer(input: z.infer<typeof widgetCodexServerInputSchema>) {
     await this.hydrate();
     const payload = widgetCodexServerInputSchema.parse(input);
+    const transport = buildCreateTransport(payload);
     const server = widgetCodexServerInternalSchema.parse({
       id: createId('wcsrv'),
       label: payload.label.trim(),
@@ -391,9 +461,8 @@ export class WidgetCodexService {
       authStrategy: payload.authStrategy,
       authState: payload.authStrategy === 'none' ? 'authenticated' : payload.authUrl ? 'login_required' : 'unknown',
       authUrl: payload.authUrl?.trim() || null,
-      transport: {
-        directTargetUrl: payload.directTargetUrl,
-      },
+      transportKind: transport.transportKind,
+      transport: transport.transport,
       workspaces: payload.workspaces,
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -412,6 +481,7 @@ export class WidgetCodexService {
     const current = this.resolveServer(serverId);
     if (!current) return null;
     const patch = widgetCodexServerPatchSchema.parse(input);
+    const transport = buildPatchTransport(current, patch);
     const next = widgetCodexServerInternalSchema.parse({
       ...current,
       label: patch.label?.trim() || current.label,
@@ -427,12 +497,8 @@ export class WidgetCodexService {
                 : 'unknown')
             : current.authState,
       authUrl: patch.authUrl === undefined ? current.authUrl : patch.authUrl?.trim() || null,
-      transport:
-        patch.directTargetUrl === undefined
-          ? current.transport
-          : {
-              directTargetUrl: patch.directTargetUrl,
-            },
+      transportKind: transport.transportKind,
+      transport: transport.transport,
       workspaces: patch.workspaces ?? current.workspaces,
       updatedAt: nowIso(),
     });

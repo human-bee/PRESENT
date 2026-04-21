@@ -218,6 +218,97 @@ describe('Widget Codex server', () => {
     }
   });
 
+  it('creates SSH-backed servers without exposing SSH credentials in public payloads', async () => {
+    const broker = {
+      createSession: jest.fn().mockResolvedValue({
+        session: {
+          sessionId: 'cxs_ssh',
+          workspaceSessionId: 'wcws_ssh',
+          remoteWorkingDirectory: '/srv/codex/repos/PRESENT',
+          proxyBaseUrl: 'http://127.0.0.1:4101/sessions/cxs_ssh/proxy/token',
+          frameUrl: 'http://127.0.0.1:4101/sessions/cxs_ssh/proxy/token/',
+          status: 'ready',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastHeartbeatAt: new Date().toISOString(),
+        },
+      }),
+      getSession: jest.fn(),
+      deleteSession: jest.fn().mockResolvedValue({ deleted: true }),
+    };
+    const service = new WidgetCodexService({
+      stateFilePath,
+      broker,
+    });
+    const app = await buildWidgetCodexServer({ service });
+
+    try {
+      const createServerResponse = await app.inject({
+        method: 'POST',
+        url: '/servers',
+        payload: {
+          label: 'Tailnet Codex',
+          transportKind: 'ssh',
+          authStrategy: 'none',
+          ssh: {
+            host: 'codex-box.tailnet.example',
+            port: 22,
+            username: 'ubuntu',
+            remoteHost: '127.0.0.1',
+            remotePort: 4500,
+            remoteProtocol: 'http',
+            hostKeySha256: 'SHA256:test',
+            privateKey: '-----BEGIN OPENSSH PRIVATE KEY-----\ntest\n-----END OPENSSH PRIVATE KEY-----',
+          },
+          workspaces: [
+            {
+              id: 'present',
+              label: 'PRESENT',
+              path: '/srv/codex/repos/PRESENT',
+            },
+          ],
+        },
+      });
+      expect(createServerResponse.statusCode).toBe(201);
+      expect(JSON.stringify(createServerResponse.json())).not.toContain('OPENSSH PRIVATE KEY');
+
+      const serverId = createServerResponse.json().server.id as string;
+      const serversResponse = await app.inject({ method: 'GET', url: '/servers' });
+      expect(serversResponse.statusCode).toBe(200);
+      expect(JSON.stringify(serversResponse.json())).not.toContain('codex-box.tailnet.example');
+      expect(JSON.stringify(serversResponse.json())).not.toContain('OPENSSH PRIVATE KEY');
+      expect(serversResponse.json().servers[0]).toMatchObject({
+        id: serverId,
+        transportKind: 'ssh',
+      });
+
+      const createConnectionResponse = await app.inject({
+        method: 'POST',
+        url: '/connections',
+        payload: {
+          widgetSessionId: 'wcws_ssh',
+          serverId,
+          remoteWorkspaceId: 'present',
+        },
+      });
+      expect(createConnectionResponse.statusCode).toBe(201);
+      expect(broker.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transport: expect.objectContaining({
+            ssh: expect.objectContaining({
+              host: 'codex-box.tailnet.example',
+              username: 'ubuntu',
+              privateKey: expect.stringContaining('OPENSSH PRIVATE KEY'),
+            }),
+          }),
+        }),
+      );
+      expect(JSON.stringify(createConnectionResponse.json())).not.toContain('OPENSSH PRIVATE KEY');
+    } finally {
+      await app.close();
+    }
+  });
+
   it('fails fast when the state file path points at a directory', async () => {
     const directoryPath = path.join(os.tmpdir(), `present-widget-codex-dir-${Date.now()}`);
     await fs.mkdir(directoryPath, { recursive: true });
