@@ -256,4 +256,89 @@ describe('CodexRemoteWidget', () => {
     });
     expect(await screen.findByTitle('Widget Codex Login')).toBeTruthy();
   });
+
+  it('verifies auth completion with the selected workspace instead of closing the helper blindly', async () => {
+    (global.fetch as jest.Mock).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/widget-codex/servers') {
+        return {
+          ok: true,
+          json: async () => ({
+            realtimeUrl: null,
+            servers: [
+              {
+                ...buildServersPayload().servers[0],
+                authStrategy: 'iframe',
+                authState: 'pending',
+                authUrl: 'https://remote-codex.example/login',
+              },
+            ],
+          }),
+        } as Response;
+      }
+      if (url === '/api/widget-codex/servers/wcsrv_1/auth/complete') {
+        return {
+          ok: true,
+          json: async () => ({
+            server: {
+              ...buildServersPayload().servers[0],
+              authStrategy: 'iframe',
+              authState: 'authenticated',
+              authUrl: 'https://remote-codex.example/login',
+            },
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => buildServersPayload(),
+      } as Response;
+    });
+
+    render(<CodexRemoteWidget title="Remote Codex" />);
+
+    await screen.findByRole('option', { name: 'Remote Prod' });
+    fireEvent.click(screen.getByText('Close Login Helper'));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/widget-codex/servers/wcsrv_1/auth/complete',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"remoteWorkspaceId":"present"'),
+        }),
+      );
+    });
+  });
+
+  it('surfaces expired auth as a re-authentication state', async () => {
+    (global.fetch as jest.Mock).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/widget-codex/servers') {
+        return {
+          ok: true,
+          json: async () => ({
+            realtimeUrl: null,
+            servers: [
+              {
+                ...buildServersPayload().servers[0],
+                authStrategy: 'external_url',
+                authState: 'expired',
+                authUrl: 'https://remote-codex.example/login',
+              },
+            ],
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({}),
+      } as Response;
+    });
+
+    render(<CodexRemoteWidget title="Remote Codex" />);
+
+    expect(await screen.findByText('Auth: Login Expired')).toBeTruthy();
+    expect(screen.getByText('Open Login')).toBeTruthy();
+  });
 });

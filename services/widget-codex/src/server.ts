@@ -5,6 +5,7 @@ import websocketPlugin from '@fastify/websocket';
 import type WebSocket from 'ws';
 import {
   createWidgetCodexServiceFromEnv,
+  widgetCodexCompleteAuthInputSchema,
   widgetCodexCreateConnectionInputSchema,
   widgetCodexServerInputSchema,
   widgetCodexServerPatchSchema,
@@ -53,7 +54,10 @@ export async function buildWidgetCodexServer(options: { service?: WidgetCodexSer
   });
   await app.register(websocketPlugin);
 
-  app.get('/health', async () => ({ ok: true }));
+  app.get('/health', async () => ({
+    ok: true,
+    runtime: service.getRuntimeStatus(),
+  }));
 
   app.get('/servers', async () => ({
     realtimeUrl: process.env.WIDGET_CODEX_PUBLIC_WS_URL ?? null,
@@ -114,13 +118,17 @@ export async function buildWidgetCodexServer(options: { service?: WidgetCodexSer
   });
 
   app.post('/servers/:serverId/auth/complete', async (request, reply) => {
-    const serverId = String((request.params as { serverId?: string } | undefined)?.serverId ?? '');
-    const server = await service.completeAuth(serverId);
-    if (!server) {
-      reply.code(404).send({ error: 'Widget Codex server not found.' });
-      return;
+    try {
+      const serverId = String((request.params as { serverId?: string } | undefined)?.serverId ?? '');
+      const server = await service.completeAuth(serverId, widgetCodexCompleteAuthInputSchema.parse(request.body ?? {}));
+      if (!server) {
+        reply.code(404).send({ error: 'Widget Codex server not found.' });
+        return;
+      }
+      reply.send({ server });
+    } catch (error) {
+      reply.code(400).send({ error: error instanceof Error ? error.message : 'Failed to complete Widget Codex auth.' });
     }
-    reply.send({ server });
   });
 
   app.post('/connections', async (request, reply) => {
@@ -213,8 +221,11 @@ export async function buildWidgetCodexServer(options: { service?: WidgetCodexSer
 
 export async function main() {
   const app = await buildWidgetCodexServer();
-  const port = Number(process.env.WIDGET_CODEX_PORT ?? '4102');
-  const host = process.env.WIDGET_CODEX_HOST ?? '127.0.0.1';
+  const port = Number(process.env.WIDGET_CODEX_PORT ?? process.env.PORT ?? '4102');
+  const host =
+    process.env.WIDGET_CODEX_HOST ??
+    process.env.HOST ??
+    (process.env.RAILWAY_ENVIRONMENT ? '0.0.0.0' : '127.0.0.1');
   await app.listen({ port, host });
 }
 

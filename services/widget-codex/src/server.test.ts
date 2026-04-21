@@ -96,31 +96,20 @@ describe('Widget Codex server', () => {
       const authCompleteResponse = await app.inject({
         method: 'POST',
         url: `/servers/${createdServer.id}/auth/complete`,
+        payload: {
+          widgetSessionId: 'wcws_123',
+          remoteWorkspaceId: 'present',
+        },
       });
       expect(authCompleteResponse.statusCode).toBe(200);
-      expect(authCompleteResponse.json().server.authState).toBe('login_required');
-
-      const patchServerResponse = await app.inject({
-        method: 'PATCH',
-        url: `/servers/${createdServer.id}`,
-        payload: {
-          authStrategy: 'none',
-          authUrl: null,
-        },
-      });
-      expect(patchServerResponse.statusCode).toBe(200);
-      expect(patchServerResponse.json().server.authState).toBe('authenticated');
-
-      const repatchServerResponse = await app.inject({
-        method: 'PATCH',
-        url: `/servers/${createdServer.id}`,
-        payload: {
-          authStrategy: 'external_url',
-          authUrl: 'https://remote-codex.example/login',
-        },
-      });
-      expect(repatchServerResponse.statusCode).toBe(200);
-      expect(repatchServerResponse.json().server.authState).toBe('login_required');
+      expect(authCompleteResponse.json().server.authState).toBe('authenticated');
+      expect(broker.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceSessionId: 'wcws_123',
+          remoteWorkingDirectory: '/srv/codex/repos/PRESENT',
+        }),
+      );
+      expect(broker.deleteSession).toHaveBeenCalledWith('cxs_widget');
 
       const createConnectionResponse = await app.inject({
         method: 'POST',
@@ -147,6 +136,11 @@ describe('Widget Codex server', () => {
         connection: { id: string; frameUrl: string };
       };
       expect(connectionPayload.connection.frameUrl).toContain('/sessions/cxs_widget/proxy/token/');
+      expect(JSON.stringify(createConnectionResponse.json())).not.toContain('https://remote-codex.example');
+
+      const serversResponse = await app.inject({ method: 'GET', url: '/servers' });
+      expect(serversResponse.statusCode).toBe(200);
+      expect(JSON.stringify(serversResponse.json())).not.toContain('directTargetUrl');
 
       const refreshConnectionResponse = await app.inject({
         method: 'GET',
@@ -173,5 +167,63 @@ describe('Widget Codex server', () => {
     } finally {
       await app.close();
     }
+  });
+
+  it('marks auth as expired when a verified auth probe fails with an auth-shaped broker error', async () => {
+    const broker = {
+      createSession: jest.fn().mockRejectedValue(new Error('401 unauthorized session expired')),
+      getSession: jest.fn(),
+      deleteSession: jest.fn(),
+    };
+    const service = new WidgetCodexService({
+      stateFilePath,
+      broker,
+      defaultServers: [
+        {
+          id: 'wcsrv_expired',
+          label: 'Expired Remote',
+          description: null,
+          authStrategy: 'external_url',
+          authState: 'pending',
+          authUrl: 'https://remote-codex.example/login',
+          transport: {
+            directTargetUrl: 'https://remote-codex.example/',
+          },
+          workspaces: [
+            {
+              id: 'present',
+              label: 'PRESENT',
+              path: '/srv/codex/repos/PRESENT',
+            },
+          ],
+        },
+      ],
+    });
+    const app = await buildWidgetCodexServer({ service });
+
+    try {
+      const authCompleteResponse = await app.inject({
+        method: 'POST',
+        url: '/servers/wcsrv_expired/auth/complete',
+        payload: {
+          remoteWorkspaceId: 'present',
+        },
+      });
+      expect(authCompleteResponse.statusCode).toBe(400);
+
+      const serversResponse = await app.inject({ method: 'GET', url: '/servers' });
+      expect(serversResponse.json().servers[0].authState).toBe('expired');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('fails fast when the state file path points at a directory', async () => {
+    const directoryPath = path.join(os.tmpdir(), `present-widget-codex-dir-${Date.now()}`);
+    await fs.mkdir(directoryPath, { recursive: true });
+    const service = new WidgetCodexService({ stateFilePath: directoryPath });
+
+    await expect(buildWidgetCodexServer({ service })).rejects.toThrow(/state file path points to a directory/i);
+    await fs.rm(directoryPath, { recursive: true, force: true });
   });
 });

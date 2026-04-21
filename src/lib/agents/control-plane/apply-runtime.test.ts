@@ -75,7 +75,7 @@ describe('apply runtime', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('dedupes railway discovery when both railway services apply concurrently', async () => {
+  it('dedupes railway discovery when all railway services apply concurrently', async () => {
     process.env[CONFIG_ENV] = JSON.stringify({
       railway: {
         token: 'railway-token',
@@ -83,6 +83,8 @@ describe('apply runtime', () => {
         environmentName: 'production',
         conductorServiceName: 'present-conductor',
         realtimeServiceName: 'present-realtime',
+        codexBrokerServiceName: 'present-codex-broker',
+        widgetCodexServiceName: 'present-widget-codex',
       },
     });
 
@@ -107,6 +109,8 @@ describe('apply runtime', () => {
                         edges: [
                           { node: { serviceId: 'svc-conductor', serviceName: 'present-conductor' } },
                           { node: { serviceId: 'svc-realtime', serviceName: 'present-realtime' } },
+                          { node: { serviceId: 'svc-codex-broker', serviceName: 'present-codex-broker' } },
+                          { node: { serviceId: 'svc-widget-codex', serviceName: 'present-widget-codex' } },
                         ],
                       },
                     },
@@ -132,17 +136,26 @@ describe('apply runtime', () => {
     const { runApplyService, __resetApplyRuntimeCachesForTests } = require('./apply-runtime');
     __resetApplyRuntimeCachesForTests();
 
-    const [conductor, realtime] = await Promise.all([
+    const [conductor, realtime, codexBroker, widgetCodex] = await Promise.all([
       runApplyService('railway_conductor'),
       runApplyService('railway_realtime'),
+      runApplyService('railway_codex_broker'),
+      runApplyService('railway_widget_codex'),
     ]);
-    if (conductor.status !== 'applied' || realtime.status !== 'applied') {
+    if (
+      conductor.status !== 'applied' ||
+      realtime.status !== 'applied' ||
+      codexBroker.status !== 'applied' ||
+      widgetCodex.status !== 'applied'
+    ) {
       throw new Error(
-        `railway apply failed in test: conductor=${conductor.detail || conductor.status}, realtime=${realtime.detail || realtime.status}`,
+        `railway apply failed in test: conductor=${conductor.detail || conductor.status}, realtime=${realtime.detail || realtime.status}, codexBroker=${codexBroker.detail || codexBroker.status}, widgetCodex=${widgetCodex.detail || widgetCodex.status}`,
       );
     }
     expect(conductor.status).toBe('applied');
     expect(realtime.status).toBe('applied');
+    expect(codexBroker.status).toBe('applied');
+    expect(widgetCodex.status).toBe('applied');
     expect(discoveryCalls).toBe(1);
   });
 });

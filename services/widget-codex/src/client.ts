@@ -90,10 +90,20 @@ export async function startWidgetCodexAuth(serverId: string) {
   );
 }
 
-export async function completeWidgetCodexAuth(serverId: string) {
+export async function completeWidgetCodexAuth(
+  serverId: string,
+  input: {
+    widgetSessionId?: string;
+    remoteWorkspaceId?: string;
+    remoteWorkspacePath?: string;
+  } = {},
+) {
   return widgetCodexRequest<{ server: WidgetCodexPublicServer }>(
     `/servers/${encodeURIComponent(serverId)}/auth/complete`,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    },
   );
 }
 

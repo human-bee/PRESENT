@@ -21,8 +21,12 @@ const ApplyConfigSchema = z
         environmentName: z.string().trim().min(1).optional(),
         conductorServiceId: z.string().trim().min(1).optional(),
         realtimeServiceId: z.string().trim().min(1).optional(),
+        codexBrokerServiceId: z.string().trim().min(1).optional(),
+        widgetCodexServiceId: z.string().trim().min(1).optional(),
         conductorServiceName: z.string().trim().min(1).optional(),
         realtimeServiceName: z.string().trim().min(1).optional(),
+        codexBrokerServiceName: z.string().trim().min(1).optional(),
+        widgetCodexServiceName: z.string().trim().min(1).optional(),
       })
       .strict()
       .optional(),

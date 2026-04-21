@@ -7,7 +7,7 @@ export const widgetCodexWorkspaceSchema = z.object({
 });
 
 export const widgetCodexAuthStrategySchema = z.enum(['none', 'external_url', 'iframe']);
-export const widgetCodexAuthStateSchema = z.enum(['unknown', 'login_required', 'pending', 'authenticated']);
+export const widgetCodexAuthStateSchema = z.enum(['unknown', 'login_required', 'pending', 'authenticated', 'expired']);
 export const widgetCodexConnectionStatusSchema = z.enum(['disconnected', 'connecting', 'ready', 'error']);
 
 export const widgetCodexServerInputSchema = z.object({
@@ -32,6 +32,12 @@ export const widgetCodexCreateConnectionInputSchema = z.object({
   widgetSessionId: z.string().min(1).optional(),
   title: z.string().min(1).optional(),
   serverId: z.string().min(1),
+  remoteWorkspaceId: z.string().min(1).optional(),
+  remoteWorkspacePath: z.string().min(1).optional(),
+});
+
+export const widgetCodexCompleteAuthInputSchema = z.object({
+  widgetSessionId: z.string().min(1).optional(),
   remoteWorkspaceId: z.string().min(1).optional(),
   remoteWorkspacePath: z.string().min(1).optional(),
 });

@@ -356,8 +356,11 @@ export async function buildCodexBrokerServer(options: { service?: CodexBrokerSer
 
 export async function main() {
   const app = await buildCodexBrokerServer();
-  const port = Number(process.env.CODEX_BROKER_PORT ?? '4101');
-  const host = process.env.CODEX_BROKER_HOST ?? '127.0.0.1';
+  const port = Number(process.env.CODEX_BROKER_PORT ?? process.env.PORT ?? '4101');
+  const host =
+    process.env.CODEX_BROKER_HOST ??
+    process.env.HOST ??
+    (process.env.RAILWAY_ENVIRONMENT ? '0.0.0.0' : '127.0.0.1');
   await app.listen({ port, host });
 }
 
