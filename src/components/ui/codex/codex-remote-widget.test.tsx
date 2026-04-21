@@ -105,73 +105,75 @@ describe('CodexRemoteWidget', () => {
       },
     };
 
-    (global.fetch as jest.Mock).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === '/api/widget-codex/servers') {
+    (global.fetch as jest.Mock).mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === '/api/widget-codex/servers') {
+          return {
+            ok: true,
+            json: async () => buildServersPayload(),
+          } as Response;
+        }
+        if (url === '/api/widget-codex/widgets/wcws_123') {
+          return {
+            ok: true,
+            json: async () => ({
+              realtimeUrl: null,
+              servers: buildServersPayload().servers,
+              ...connectedSnapshot,
+            }),
+          } as Response;
+        }
+        if (url === '/api/widget-codex/connections') {
+          return {
+            ok: true,
+            json: async () => connectedSnapshot,
+          } as Response;
+        }
+        if (url === '/api/reset/workspaces' && init?.method === 'POST') {
+          return {
+            ok: true,
+            json: async () => ({
+              workspace: {
+                id: 'ws_widget_1',
+                title: 'Widget wcws_123',
+                workspacePath: '/Users/bsteinher/PRESENT',
+              },
+            }),
+          } as Response;
+        }
+        if (url === '/api/reset/workspaces') {
+          return {
+            ok: true,
+            json: async () => ({
+              workspaces: [],
+            }),
+          } as Response;
+        }
+        if (url === '/api/reset/executors/register') {
+          return {
+            ok: true,
+            json: async () => ({
+              executorSession: {
+                id: 'exec_widget_1',
+              },
+            }),
+          } as Response;
+        }
+        if (url === '/api/reset/workspaces/ws_widget_1/state') {
+          return {
+            ok: true,
+            json: async () => ({
+              tasks: [],
+            }),
+          } as Response;
+        }
         return {
           ok: true,
-          json: async () => buildServersPayload(),
+          json: async () => ({}),
         } as Response;
-      }
-      if (url === '/api/widget-codex/widgets/wcws_123') {
-        return {
-          ok: true,
-          json: async () => ({
-            realtimeUrl: null,
-            servers: buildServersPayload().servers,
-            ...connectedSnapshot,
-          }),
-        } as Response;
-      }
-      if (url === '/api/widget-codex/connections') {
-        return {
-          ok: true,
-          json: async () => connectedSnapshot,
-        } as Response;
-      }
-      if (url === '/api/reset/workspaces' && init?.method === 'POST') {
-        return {
-          ok: true,
-          json: async () => ({
-            workspace: {
-              id: 'ws_widget_1',
-              title: 'Widget wcws_123',
-              workspacePath: '/Users/bsteinher/PRESENT',
-            },
-          }),
-        } as Response;
-      }
-      if (url === '/api/reset/workspaces') {
-        return {
-          ok: true,
-          json: async () => ({
-            workspaces: [],
-          }),
-        } as Response;
-      }
-      if (url === '/api/reset/executors/register') {
-        return {
-          ok: true,
-          json: async () => ({
-            executorSession: {
-              id: 'exec_widget_1',
-            },
-          }),
-        } as Response;
-      }
-      if (url === '/api/reset/workspaces/ws_widget_1/state') {
-        return {
-          ok: true,
-          json: async () => ({
-            tasks: [],
-          }),
-        } as Response;
-      }
-      return {
-        ok: true,
-        json: async () => ({}),
-      } as Response;
-    });
+      },
+    );
 
     render(<CodexRemoteWidget title="Remote Codex" />);
 
@@ -259,42 +261,44 @@ describe('CodexRemoteWidget', () => {
   });
 
   it('verifies auth completion with the selected workspace instead of closing the helper blindly', async () => {
-    (global.fetch as jest.Mock).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === '/api/widget-codex/servers') {
-        return {
-          ok: true,
-          json: async () => ({
-            realtimeUrl: null,
-            servers: [
-              {
+    (global.fetch as jest.Mock).mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === '/api/widget-codex/servers') {
+          return {
+            ok: true,
+            json: async () => ({
+              realtimeUrl: null,
+              servers: [
+                {
+                  ...buildServersPayload().servers[0],
+                  authStrategy: 'iframe',
+                  authState: 'pending',
+                  authUrl: 'https://remote-codex.example/login',
+                },
+              ],
+            }),
+          } as Response;
+        }
+        if (url === '/api/widget-codex/servers/wcsrv_1/auth/complete') {
+          return {
+            ok: true,
+            json: async () => ({
+              server: {
                 ...buildServersPayload().servers[0],
                 authStrategy: 'iframe',
-                authState: 'pending',
+                authState: 'authenticated',
                 authUrl: 'https://remote-codex.example/login',
               },
-            ],
-          }),
-        } as Response;
-      }
-      if (url === '/api/widget-codex/servers/wcsrv_1/auth/complete') {
+            }),
+          } as Response;
+        }
         return {
           ok: true,
-          json: async () => ({
-            server: {
-              ...buildServersPayload().servers[0],
-              authStrategy: 'iframe',
-              authState: 'authenticated',
-              authUrl: 'https://remote-codex.example/login',
-            },
-          }),
+          json: async () => buildServersPayload(),
         } as Response;
-      }
-      return {
-        ok: true,
-        json: async () => buildServersPayload(),
-      } as Response;
-    });
+      },
+    );
 
     render(<CodexRemoteWidget title="Remote Codex" />);
 
@@ -345,23 +349,98 @@ describe('CodexRemoteWidget', () => {
 
   it('creates an SSH-backed saved server from inside the widget', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
-    (global.fetch as jest.Mock).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      requests.push({ url, init });
-      if (url === '/api/widget-codex/servers' && init?.method === 'POST') {
+    (global.fetch as jest.Mock).mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        requests.push({ url, init });
+        if (url === '/api/widget-codex/servers' && init?.method === 'POST') {
+          return {
+            ok: true,
+            json: async () => ({
+              server: {
+                ...buildServersPayload().servers[0],
+                id: 'wcsrv_ssh',
+                label: 'Tailnet Codex',
+                transportKind: 'ssh',
+              },
+            }),
+          } as Response;
+        }
+        if (url === '/api/widget-codex/servers') {
+          return {
+            ok: true,
+            json: async () => ({
+              realtimeUrl: null,
+              servers: [],
+            }),
+          } as Response;
+        }
         return {
           ok: true,
-          json: async () => ({
-            server: {
-              ...buildServersPayload().servers[0],
-              id: 'wcsrv_ssh',
-              label: 'Tailnet Codex',
-              transportKind: 'ssh',
-            },
-          }),
+          json: async () => ({}),
         } as Response;
-      }
-      if (url === '/api/widget-codex/servers') {
+      },
+    );
+
+    render(<CodexRemoteWidget title="Remote Codex" />);
+
+    await screen.findByText('Add Server');
+    fireEvent.click(screen.getByText('Add Server'));
+    fireEvent.change(screen.getByLabelText('Server Label'), { target: { value: 'Tailnet Codex' } });
+    fireEvent.change(screen.getByLabelText('SSH Host'), {
+      target: { value: 'codex-box.tailnet.example' },
+    });
+    fireEvent.change(screen.getByLabelText('SSH Username'), { target: { value: 'ubuntu' } });
+    fireEvent.change(screen.getByLabelText('SSH Private Key'), {
+      target: {
+        value: '-----BEGIN OPENSSH PRIVATE KEY-----\ntest\n-----END OPENSSH PRIVATE KEY-----',
+      },
+    });
+    fireEvent.change(screen.getByLabelText('Host Key SHA256'), {
+      target: { value: 'SHA256:testHostKey1234567890' },
+    });
+    fireEvent.change(screen.getByLabelText('Workspaces'), {
+      target: {
+        value: 'PRESENT|/srv/codex/repos/PRESENT',
+      },
+    });
+    fireEvent.click(screen.getByText('Create Server'));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/widget-codex/servers',
+        expect.objectContaining({
+          method: 'POST',
+        }),
+      );
+    });
+    const createRequest = requests.find(
+      (request) => request.url === '/api/widget-codex/servers' && request.init?.method === 'POST',
+    );
+    expect(createRequest).toBeTruthy();
+    expect(JSON.parse(String(createRequest?.init?.body))).toMatchObject({
+      label: 'Tailnet Codex',
+      transportKind: 'ssh',
+      ssh: {
+        host: 'codex-box.tailnet.example',
+        username: 'ubuntu',
+        remotePort: 8390,
+        hostKeySha256: 'SHA256:testHostKey1234567890',
+        privateKey: expect.stringContaining('OPENSSH PRIVATE KEY'),
+      },
+      workspaces: [
+        {
+          id: 'workspace-present',
+          label: 'PRESENT',
+          path: '/srv/codex/repos/PRESENT',
+        },
+      ],
+    });
+  });
+
+  it('explains malformed SSH form input without posting the server', async () => {
+    (global.fetch as jest.Mock).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/widget-codex/servers') {
         return {
           ok: true,
           json: async () => ({
@@ -381,48 +460,95 @@ describe('CodexRemoteWidget', () => {
     await screen.findByText('Add Server');
     fireEvent.click(screen.getByText('Add Server'));
     fireEvent.change(screen.getByLabelText('Server Label'), { target: { value: 'Tailnet Codex' } });
-    fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'codex-box.tailnet.example' } });
+    fireEvent.change(screen.getByLabelText('SSH Host'), {
+      target: { value: 'codex-box.tailnet.example' },
+    });
+    fireEvent.change(screen.getByLabelText('SSH Username'), { target: { value: 'ubuntu' } });
+    fireEvent.change(screen.getByLabelText('SSH Private Key'), {
+      target: {
+        value: 'cat ~/.ssh/present_widget_codex',
+      },
+    });
+    fireEvent.change(screen.getByLabelText('Host Key SHA256'), {
+      target: { value: 'SHA256:testHostKey1234567890' },
+    });
+    fireEvent.change(screen.getByLabelText('Workspaces'), {
+      target: {
+        value: 'PRESENT|/Users/bsteinher/PRESENT',
+      },
+    });
+    fireEvent.click(screen.getByText('Create Server'));
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(
+          'Run the command in Terminal and paste the output, not the command or path.',
+        ).length,
+      ).toBeGreaterThan(0);
+    });
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      '/api/widget-codex/servers',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    );
+  });
+
+  it('shows a clear authorization error when server creation is rejected', async () => {
+    (global.fetch as jest.Mock).mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === '/api/widget-codex/servers' && init?.method === 'POST') {
+          return {
+            ok: false,
+            status: 401,
+            json: async () => ({ error: 'unauthorized' }),
+          } as Response;
+        }
+        if (url === '/api/widget-codex/servers') {
+          return {
+            ok: true,
+            json: async () => ({
+              realtimeUrl: null,
+              servers: [],
+            }),
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({}),
+        } as Response;
+      },
+    );
+
+    render(<CodexRemoteWidget title="Remote Codex" />);
+
+    await screen.findByText('Add Server');
+    fireEvent.click(screen.getByText('Add Server'));
+    fireEvent.change(screen.getByLabelText('Server Label'), { target: { value: 'Tailnet Codex' } });
+    fireEvent.change(screen.getByLabelText('SSH Host'), {
+      target: { value: 'codex-box.tailnet.example' },
+    });
     fireEvent.change(screen.getByLabelText('SSH Username'), { target: { value: 'ubuntu' } });
     fireEvent.change(screen.getByLabelText('SSH Private Key'), {
       target: {
         value: '-----BEGIN OPENSSH PRIVATE KEY-----\ntest\n-----END OPENSSH PRIVATE KEY-----',
       },
     });
-    fireEvent.change(screen.getByLabelText('Host Key SHA256'), { target: { value: 'SHA256:test' } });
+    fireEvent.change(screen.getByLabelText('Host Key SHA256'), {
+      target: { value: 'SHA256:testHostKey1234567890' },
+    });
     fireEvent.change(screen.getByLabelText('Workspaces'), {
       target: {
-        value: 'PRESENT|/srv/codex/repos/PRESENT',
+        value: 'PRESENT|/Users/bsteinher/PRESENT',
       },
     });
     fireEvent.click(screen.getByText('Create Server'));
 
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        '/api/widget-codex/servers',
-        expect.objectContaining({
-          method: 'POST',
-        }),
-      );
-    });
-    const createRequest = requests.find((request) => request.url === '/api/widget-codex/servers' && request.init?.method === 'POST');
-    expect(createRequest).toBeTruthy();
-    expect(JSON.parse(String(createRequest?.init?.body))).toMatchObject({
-      label: 'Tailnet Codex',
-      transportKind: 'ssh',
-      ssh: {
-        host: 'codex-box.tailnet.example',
-        username: 'ubuntu',
-        remotePort: 4500,
-        hostKeySha256: 'SHA256:test',
-        privateKey: expect.stringContaining('OPENSSH PRIVATE KEY'),
-      },
-      workspaces: [
-        {
-          id: 'workspace-present',
-          label: 'PRESENT',
-          path: '/srv/codex/repos/PRESENT',
-        },
-      ],
-    });
+    expect(
+      await screen.findByText(
+        'You are not signed in or this browser session is not authorized to manage Widget Codex servers. Sign in with an allowlisted admin account, then retry.',
+      ),
+    ).toBeTruthy();
   });
 });
