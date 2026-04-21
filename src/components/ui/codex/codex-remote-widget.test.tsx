@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { CodexRemoteWidget } from './codex-remote-widget';
+import { CodexRemoteWidget, deriveWidgetCodexWsUrl } from './codex-remote-widget';
 
 const componentRegistryUpdateMock = jest.fn().mockResolvedValue(undefined);
 const useComponentRegistrationMock = jest.fn();
@@ -68,6 +68,18 @@ describe('CodexRemoteWidget', () => {
 
   afterEach(() => {
     (global as any).WebSocket = originalWebSocket;
+  });
+
+  it('upgrades insecure widget websocket urls when the canvas is served over https', () => {
+    expect(
+      deriveWidgetCodexWsUrl(
+        'ws://present-widget-codex-production.up.railway.app/ws',
+        'https://app.present.best/canvas',
+      ),
+    ).toBe('wss://present-widget-codex-production.up.railway.app/ws');
+    expect(deriveWidgetCodexWsUrl('/ws', 'https://app.present.best/canvas')).toBe(
+      'wss://app.present.best/ws',
+    );
   });
 
   it('loads the multi-server setup flow when no widget session exists yet', async () => {

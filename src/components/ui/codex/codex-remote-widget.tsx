@@ -266,11 +266,27 @@ function buildInitialState(
   } satisfies PersistedWidgetState;
 }
 
-function deriveWsUrl(value: string | null) {
+export function deriveWidgetCodexWsUrl(value: string | null, baseHref?: string) {
   if (!value) return null;
   try {
-    const url = new URL(value);
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    const fallbackBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost/';
+    const url = new URL(value, baseHref ?? fallbackBase);
+    const pageProtocol =
+      baseHref !== undefined
+        ? new URL(baseHref).protocol
+        : typeof window !== 'undefined'
+          ? window.location.protocol
+          : 'http:';
+    const shouldUseSecureWebSocket = pageProtocol === 'https:' || url.protocol === 'https:';
+
+    if (url.protocol === 'http:' || url.protocol === 'ws:') {
+      url.protocol = shouldUseSecureWebSocket ? 'wss:' : 'ws:';
+    } else if (url.protocol === 'https:' || url.protocol === 'wss:') {
+      url.protocol = 'wss:';
+    } else {
+      return null;
+    }
+
     return url.toString();
   } catch {
     return null;
@@ -825,7 +841,7 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   );
 
   useEffect(() => {
-    const wsUrl = deriveWsUrl(realtimeUrl);
+    const wsUrl = deriveWidgetCodexWsUrl(realtimeUrl);
     if (!wsUrl || typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
     const url = new URL(wsUrl);
     if (state.widgetSessionId) {
