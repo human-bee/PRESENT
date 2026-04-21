@@ -37,7 +37,7 @@ type WidgetCodexServer = {
   label: string;
   description: string | null;
   authStrategy: 'none' | 'external_url' | 'iframe';
-  authState: 'unknown' | 'login_required' | 'pending' | 'authenticated';
+  authState: 'unknown' | 'login_required' | 'pending' | 'authenticated' | 'expired';
   authUrl: string | null;
   workspaces: Array<{
     id: string;
@@ -58,7 +58,7 @@ type WidgetCodexConnection = {
   frameUrl: string;
   proxyBaseUrl: string;
   status: 'disconnected' | 'connecting' | 'ready' | 'error';
-  authState: 'unknown' | 'login_required' | 'pending' | 'authenticated';
+  authState: 'unknown' | 'login_required' | 'pending' | 'authenticated' | 'expired';
   lastHeartbeatAt: string | null;
   lastError: string | null;
   createdAt: string;
@@ -73,7 +73,7 @@ type WidgetCodexWidgetSession = {
   remoteWorkspaceId: string | null;
   remoteWorkspacePath: string | null;
   status: 'disconnected' | 'connecting' | 'ready' | 'error';
-  authState: 'unknown' | 'login_required' | 'pending' | 'authenticated';
+  authState: 'unknown' | 'login_required' | 'pending' | 'authenticated' | 'expired';
   activeThreadId: string | null;
   lastHeartbeatAt: string | null;
   lastError: string | null;
@@ -712,6 +712,13 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     try {
       await requestJson(`/api/widget-codex/servers/${encodeURIComponent(selectedServerId)}/auth/complete`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          widgetSessionId: state.widgetSessionId ?? createWidgetSessionId(),
+          remoteWorkspaceId: selectedWorkspaceId || undefined,
+          remoteWorkspacePath:
+            workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.path ?? undefined,
+        }),
       });
       setLoginUrl(null);
       await loadServers();
@@ -1009,6 +1016,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
       ? 'Authenticated'
       : selectedServer?.authState === 'pending'
         ? 'Login Pending'
+        : selectedServer?.authState === 'expired'
+          ? 'Login Expired'
         : selectedServer?.authState === 'login_required'
           ? 'Login Required'
           : 'Unknown';

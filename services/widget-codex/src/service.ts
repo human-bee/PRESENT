@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
@@ -13,6 +14,7 @@ import type { CodexBrokerSessionSnapshot } from '@present/codex-broker/session-s
 import {
   widgetCodexAuthStateSchema,
   widgetCodexAuthStrategySchema,
+  widgetCodexCompleteAuthInputSchema,
   widgetCodexConnectionStatusSchema,
   widgetCodexCreateConnectionInputSchema,
   widgetCodexServerInputSchema,
@@ -117,10 +119,26 @@ export type WidgetCodexServiceConfig = {
 
 const DEFAULT_STATE_DIR = path.join(process.cwd(), '.present-data', 'widget-codex');
 const DEFAULT_STATE_FILE = path.join(DEFAULT_STATE_DIR, 'state.json');
+const AUTH_EXPIRED_PATTERN = /\b(auth|login|session|token|credential).*\b(expired|invalid|unauthorized|forbidden)|\b(401|403)\b/i;
 
 const createId = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`;
 
 const nowIso = () => new Date().toISOString();
+
+const isAuthExpiredError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return AUTH_EXPIRED_PATTERN.test(message);
+};
+
+const resolveStateFilePath = (input?: string | null) => {
+  const trimmed = input?.trim();
+  if (trimmed) return path.resolve(trimmed);
+  const railwayVolume = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim();
+  if (railwayVolume) {
+    return path.join(path.resolve(railwayVolume), 'widget-codex', 'state.json');
+  }
+  return DEFAULT_STATE_FILE;
+};
 
 const defaultBrokerClient: BrokerClient = {
   createSession: createCodexBrokerSession,
@@ -160,9 +178,107 @@ function normalizeDefaultServer(input: z.infer<typeof widgetCodexDefaultServerSc
 async function ensureStateFile(stateFilePath: string) {
   await fs.mkdir(path.dirname(stateFilePath), { recursive: true });
   try {
+    const stats = await fs.stat(stateFilePath);
+    if (stats.isDirectory()) {
+      throw new Error(`Widget Codex state file path points to a directory: ${stateFilePath}`);
+    }
     await fs.access(stateFilePath);
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
     await fs.writeFile(stateFilePath, JSON.stringify(widgetCodexStateSchema.parse({ schemaVersion: 1 }), null, 2), 'utf8');
+  }
+}
+
+async function assertStateFileWritable(stateFilePath: string) {
+  await ensureStateFile(stateFilePath);
+  await fs.access(stateFilePath, fsConstants.R_OK | fsConstants.W_OK);
+}
+
+async function removeProbeSession(broker: BrokerClient, sessionId: string) {
+  try {
+    await broker.deleteSession(sessionId);
+  } catch {
+    /* auth probes should not leave user-visible failures when teardown races */
+  }
+}
+
+function resolveWorkspaceForServer(
+  server: WidgetCodexServerInternal,
+  input: {
+    remoteWorkspaceId?: string;
+    remoteWorkspacePath?: string;
+  },
+) {
+  return (
+    (input.remoteWorkspaceId
+      ? server.workspaces.find((entry) => entry.id === input.remoteWorkspaceId)
+      : null) ??
+    (input.remoteWorkspacePath
+      ? server.workspaces.find((entry) => entry.path === input.remoteWorkspacePath)
+      : null) ??
+    server.workspaces[0] ??
+    (input.remoteWorkspacePath
+      ? {
+          id: createId('wcwsp'),
+          label: input.remoteWorkspacePath.split('/').filter(Boolean).at(-1) ?? input.remoteWorkspacePath,
+          path: input.remoteWorkspacePath,
+        }
+      : null)
+  );
+}
+
+function mergeWidgetSessionPatch(
+  session: WidgetCodexWidgetSession,
+  patch: Partial<Pick<WidgetCodexWidgetSession, 'authState' | 'status' | 'lastError' | 'lastHeartbeatAt'>>,
+) {
+  return widgetCodexWidgetSessionSchema.parse({
+    ...session,
+    ...patch,
+    updatedAt: nowIso(),
+  });
+}
+
+function mergeConnectionPatch(
+  connection: WidgetCodexConnectionRecord,
+  patch: Partial<Pick<WidgetCodexConnectionRecord, 'authState' | 'status' | 'lastError' | 'lastHeartbeatAt'>>,
+) {
+  return widgetCodexConnectionRecordSchema.parse({
+    ...connection,
+    ...patch,
+    updatedAt: nowIso(),
+  });
+}
+
+function authStateForFailedRemoteError(error: unknown, fallback: WidgetCodexAuthState) {
+  return isAuthExpiredError(error) ? 'expired' : fallback;
+}
+
+function patchValue<T extends Record<string, unknown>, K extends keyof T>(
+  input: T,
+  existing: T | null,
+  key: K,
+  fallback: T[K],
+) {
+  return Object.prototype.hasOwnProperty.call(input, key) ? input[key] : existing?.[key] ?? fallback;
+}
+
+async function verifyServerAuth(input: {
+  broker: BrokerClient;
+  server: WidgetCodexServerInternal;
+  widgetSessionId: string;
+  remoteWorkspacePath: string;
+}) {
+  const { session } = await input.broker.createSession({
+    workspaceSessionId: input.widgetSessionId,
+    remoteWorkingDirectory: input.remoteWorkspacePath,
+    reconnect: true,
+    transport: input.server.transport,
+  });
+  await removeProbeSession(input.broker, session.sessionId);
+  if (session.status !== 'ready') {
+    throw new Error(`Remote Codex auth probe did not become ready: ${session.status}`);
   }
 }
 
@@ -180,7 +296,7 @@ export class WidgetCodexService {
   private hydrated = false;
 
   constructor(config: WidgetCodexServiceConfig = {}) {
-    this.stateFilePath = config.stateFilePath?.trim() || DEFAULT_STATE_FILE;
+    this.stateFilePath = resolveStateFilePath(config.stateFilePath);
     this.realtimeUrl = config.realtimeUrl?.trim() || null;
     this.broker = config.broker ?? defaultBrokerClient;
     if (config.defaultServers?.length) {
@@ -198,7 +314,7 @@ export class WidgetCodexService {
 
   async hydrate() {
     if (this.hydrated) return;
-    await ensureStateFile(this.stateFilePath);
+    await assertStateFileWritable(this.stateFilePath);
     const raw = await fs.readFile(this.stateFilePath, 'utf8');
     const parsed = widgetCodexStateSchema.parse(JSON.parse(raw));
     const mergedServers = [...parsed.servers];
@@ -212,6 +328,14 @@ export class WidgetCodexService {
     });
     this.hydrated = true;
     await this.saveState();
+  }
+
+  getRuntimeStatus() {
+    return {
+      stateFilePath: this.stateFilePath,
+      realtimeUrl: this.realtimeUrl,
+      hydrated: this.hydrated,
+    };
   }
 
   subscribe(listener: (snapshot: WidgetCodexSnapshot) => void) {
@@ -380,14 +504,41 @@ export class WidgetCodexService {
     };
   }
 
-  async completeAuth(serverId: string) {
+  async completeAuth(serverId: string, input: z.infer<typeof widgetCodexCompleteAuthInputSchema> = {}) {
     await this.hydrate();
     const server = this.resolveServer(serverId);
     if (!server) return null;
+    const payload = widgetCodexCompleteAuthInputSchema.parse(input);
+    if (server.authStrategy !== 'none') {
+      const workspace = resolveWorkspaceForServer(server, payload);
+      if (!workspace) {
+        throw new Error('Server does not expose a workspace to verify authentication against.');
+      }
+      try {
+        await verifyServerAuth({
+          broker: this.broker,
+          server,
+          widgetSessionId: payload.widgetSessionId ?? `auth_probe_${server.id}`,
+          remoteWorkspacePath: workspace.path,
+        });
+      } catch (error) {
+        const failed = {
+          ...server,
+          authState: authStateForFailedRemoteError(error, 'login_required'),
+          updatedAt: nowIso(),
+        };
+        this.state = widgetCodexStateSchema.parse({
+          ...this.state,
+          servers: this.state.servers.map((entry) => (entry.id === serverId ? failed : entry)),
+        });
+        await this.saveState();
+        this.emitSnapshot(null);
+        throw error;
+      }
+    }
     const next = {
       ...server,
-      authState:
-        server.authStrategy === 'none' ? ('authenticated' as const) : server.authUrl ? ('login_required' as const) : ('unknown' as const),
+      authState: 'authenticated' as const,
       updatedAt: nowIso(),
     };
     this.state = widgetCodexStateSchema.parse({
@@ -419,14 +570,14 @@ export class WidgetCodexService {
     const widgetSession = widgetCodexWidgetSessionSchema.parse({
       id: existing?.id ?? input.widgetSessionId ?? createId('wcws'),
       title: input.title?.trim() || existing?.title || 'Remote Codex',
-      serverId: input.serverId ?? existing?.serverId ?? null,
-      connectionId: input.connectionId ?? existing?.connectionId ?? null,
-      remoteWorkspaceId: input.remoteWorkspaceId ?? existing?.remoteWorkspaceId ?? null,
-      remoteWorkspacePath: input.remoteWorkspacePath ?? existing?.remoteWorkspacePath ?? null,
+      serverId: patchValue(input, existing, 'serverId', null),
+      connectionId: patchValue(input, existing, 'connectionId', null),
+      remoteWorkspaceId: patchValue(input, existing, 'remoteWorkspaceId', null),
+      remoteWorkspacePath: patchValue(input, existing, 'remoteWorkspacePath', null),
       status: input.status,
       authState: input.authState,
       activeThreadId: existing?.activeThreadId ?? null,
-      lastHeartbeatAt: input.lastHeartbeatAt ?? existing?.lastHeartbeatAt ?? null,
+      lastHeartbeatAt: patchValue(input, existing, 'lastHeartbeatAt', null),
       lastError: input.lastError ?? null,
       createdAt: existing?.createdAt ?? timestamp,
       updatedAt: timestamp,
@@ -448,21 +599,15 @@ export class WidgetCodexService {
     if (!server) {
       throw new Error('Widget Codex server not found.');
     }
-    const workspace =
-      (payload.remoteWorkspaceId
-        ? server.workspaces.find((entry) => entry.id === payload.remoteWorkspaceId)
-        : null) ??
-      (payload.remoteWorkspacePath
-        ? server.workspaces.find((entry) => entry.path === payload.remoteWorkspacePath)
-        : null) ??
-      server.workspaces[0] ??
-      (payload.remoteWorkspacePath
-        ? {
-            id: createId('wcwsp'),
-            label: payload.remoteWorkspacePath.split('/').filter(Boolean).at(-1) ?? payload.remoteWorkspacePath,
-            path: payload.remoteWorkspacePath,
-          }
-        : null);
+    if (server.authStrategy !== 'none' && server.authState !== 'authenticated') {
+      throw new Error(
+        server.authState === 'expired'
+          ? 'Remote Codex authentication expired. Re-authenticate before connecting.'
+          : 'Remote Codex authentication is required before connecting.',
+      );
+    }
+
+    const workspace = resolveWorkspaceForServer(server, payload);
 
     if (!workspace) {
       throw new Error('Server does not expose any remote workspaces yet.');
@@ -484,12 +629,42 @@ export class WidgetCodexService {
       await this.deleteConnection(widgetSession.connectionId);
     }
 
-    const { session } = await this.broker.createSession({
-      workspaceSessionId: widgetSession.id,
-      remoteWorkingDirectory: workspace.path,
-      reconnect: true,
-      transport: server.transport,
-    });
+    let session: CodexBrokerSessionSnapshot;
+    try {
+      const result = await this.broker.createSession({
+        workspaceSessionId: widgetSession.id,
+        remoteWorkingDirectory: workspace.path,
+        reconnect: true,
+        transport: server.transport,
+      });
+      session = result.session;
+    } catch (error) {
+      const nextAuthState = authStateForFailedRemoteError(error, server.authState);
+      this.state = widgetCodexStateSchema.parse({
+        ...this.state,
+        servers: this.state.servers.map((entry) =>
+          entry.id === server.id
+            ? {
+                ...entry,
+                authState: nextAuthState,
+                updatedAt: nowIso(),
+              }
+            : entry,
+        ),
+        widgetSessions: this.state.widgetSessions.map((entry) =>
+          entry.id === widgetSession.id
+            ? mergeWidgetSessionPatch(entry, {
+                status: 'error',
+                authState: nextAuthState,
+                lastError: error instanceof Error ? error.message : 'Remote Codex connection failed.',
+              })
+            : entry,
+        ),
+      });
+      await this.saveState();
+      this.emitSnapshot(widgetSession.id);
+      throw error;
+    }
 
     const connection = widgetCodexConnectionRecordSchema.parse({
       id: createId('wccx'),
@@ -567,14 +742,23 @@ export class WidgetCodexService {
       return toPublicConnection(next);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Connection refresh failed.';
-      const next = widgetCodexConnectionRecordSchema.parse({
-        ...current,
+      const nextAuthState = authStateForFailedRemoteError(error, current.authState);
+      const next = mergeConnectionPatch(current, {
         status: 'error',
+        authState: nextAuthState,
         lastError: message,
-        updatedAt: nowIso(),
       });
       this.state = widgetCodexStateSchema.parse({
         ...this.state,
+        servers: this.state.servers.map((server) =>
+          server.id === next.serverId && nextAuthState === 'expired'
+            ? {
+                ...server,
+                authState: 'expired',
+                updatedAt: nowIso(),
+              }
+            : server,
+        ),
         connections: this.state.connections.map((entry) => (entry.id === connectionId ? next : entry)),
       });
       this.upsertWidgetSession({
@@ -584,7 +768,7 @@ export class WidgetCodexService {
         remoteWorkspaceId: next.remoteWorkspaceId,
         remoteWorkspacePath: next.remoteWorkspacePath,
         status: 'error',
-        authState: next.authState,
+        authState: nextAuthState,
         lastHeartbeatAt: next.lastHeartbeatAt,
         lastError: message,
       });
@@ -641,6 +825,7 @@ export function createWidgetCodexServiceFromEnv() {
 }
 
 export {
+  widgetCodexCompleteAuthInputSchema,
   widgetCodexCreateConnectionInputSchema,
   widgetCodexServerInputSchema,
   widgetCodexServerPatchSchema,

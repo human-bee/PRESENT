@@ -13,8 +13,15 @@ const DEFAULT_RAILWAY_PROJECT_ID = '98df8e65-3c11-452c-beb7-8fd0cb3754d3';
 const DEFAULT_RAILWAY_ENVIRONMENT_NAME = 'production';
 const DEFAULT_RAILWAY_CONDUCTOR_SERVICE_NAME = 'present-conductor';
 const DEFAULT_RAILWAY_REALTIME_SERVICE_NAME = 'present-realtime';
+const DEFAULT_RAILWAY_CODEX_BROKER_SERVICE_NAME = 'present-codex-broker';
+const DEFAULT_RAILWAY_WIDGET_CODEX_SERVICE_NAME = 'present-widget-codex';
 
-export type ApplyServiceName = 'vercel_web' | 'railway_conductor' | 'railway_realtime';
+export type ApplyServiceName =
+  | 'vercel_web'
+  | 'railway_conductor'
+  | 'railway_realtime'
+  | 'railway_codex_broker'
+  | 'railway_widget_codex';
 export type ApplyStepStatus = 'applied' | 'failed' | 'skipped_unconfigured';
 export type ApplyStepResult = {
   service: ApplyServiceName;
@@ -22,7 +29,13 @@ export type ApplyStepResult = {
   detail?: string;
 };
 
-const APPLY_SERVICES: readonly ApplyServiceName[] = ['vercel_web', 'railway_conductor', 'railway_realtime'];
+const APPLY_SERVICES: readonly ApplyServiceName[] = [
+  'vercel_web',
+  'railway_conductor',
+  'railway_realtime',
+  'railway_codex_broker',
+  'railway_widget_codex',
+];
 
 class MissingApplySettingError extends Error {
   constructor(public readonly key: string) {
@@ -216,10 +229,20 @@ const resolveRailwaySettings = async (service: ApplyServiceName) => {
           config.railway?.conductorServiceId,
           process.env.MODEL_CONTROL_APPLY_RAILWAY_CONDUCTOR_SERVICE_ID,
         )
-      : pickFirstNonEmpty(
-          config.railway?.realtimeServiceId,
-          process.env.MODEL_CONTROL_APPLY_RAILWAY_REALTIME_SERVICE_ID,
-        );
+      : service === 'railway_realtime'
+        ? pickFirstNonEmpty(
+            config.railway?.realtimeServiceId,
+            process.env.MODEL_CONTROL_APPLY_RAILWAY_REALTIME_SERVICE_ID,
+          )
+        : service === 'railway_codex_broker'
+          ? pickFirstNonEmpty(
+              config.railway?.codexBrokerServiceId,
+              process.env.MODEL_CONTROL_APPLY_RAILWAY_CODEX_BROKER_SERVICE_ID,
+            )
+          : pickFirstNonEmpty(
+              config.railway?.widgetCodexServiceId,
+              process.env.MODEL_CONTROL_APPLY_RAILWAY_WIDGET_CODEX_SERVICE_ID,
+            );
 
   if (directEnvironmentId && directServiceId) {
     return {
@@ -250,7 +273,11 @@ const resolveRailwaySettings = async (service: ApplyServiceName) => {
   const serviceName =
     service === 'railway_conductor'
       ? pickFirstNonEmpty(config.railway?.conductorServiceName, DEFAULT_RAILWAY_CONDUCTOR_SERVICE_NAME)
-      : pickFirstNonEmpty(config.railway?.realtimeServiceName, DEFAULT_RAILWAY_REALTIME_SERVICE_NAME);
+      : service === 'railway_realtime'
+        ? pickFirstNonEmpty(config.railway?.realtimeServiceName, DEFAULT_RAILWAY_REALTIME_SERVICE_NAME)
+        : service === 'railway_codex_broker'
+          ? pickFirstNonEmpty(config.railway?.codexBrokerServiceName, DEFAULT_RAILWAY_CODEX_BROKER_SERVICE_NAME)
+          : pickFirstNonEmpty(config.railway?.widgetCodexServiceName, DEFAULT_RAILWAY_WIDGET_CODEX_SERVICE_NAME);
 
   const discoveredServiceId = serviceName ? discovery.serviceIdsByName[serviceName] : null;
   const serviceId = directServiceId || discoveredServiceId;
@@ -264,7 +291,11 @@ const resolveRailwaySettings = async (service: ApplyServiceName) => {
     const missingKey =
       service === 'railway_conductor'
         ? 'MODEL_CONTROL_APPLY_RAILWAY_CONDUCTOR_SERVICE_ID'
-        : 'MODEL_CONTROL_APPLY_RAILWAY_REALTIME_SERVICE_ID';
+        : service === 'railway_realtime'
+          ? 'MODEL_CONTROL_APPLY_RAILWAY_REALTIME_SERVICE_ID'
+          : service === 'railway_codex_broker'
+            ? 'MODEL_CONTROL_APPLY_RAILWAY_CODEX_BROKER_SERVICE_ID'
+            : 'MODEL_CONTROL_APPLY_RAILWAY_WIDGET_CODEX_SERVICE_ID';
     throw new MissingApplySettingError(missingKey);
   }
 
@@ -402,6 +433,8 @@ const APPLY_ADAPTERS: Record<ApplyServiceName, ApplyAdapter> = {
   vercel_web: redeployVercel,
   railway_conductor: () => redeployRailway('railway_conductor'),
   railway_realtime: () => redeployRailway('railway_realtime'),
+  railway_codex_broker: () => redeployRailway('railway_codex_broker'),
+  railway_widget_codex: () => redeployRailway('railway_widget_codex'),
 };
 
 export function getApplyServices(): readonly ApplyServiceName[] {

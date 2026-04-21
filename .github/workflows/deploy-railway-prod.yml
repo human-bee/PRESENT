@@ -5,6 +5,11 @@ on:
     branches: [main]
     paths:
       - 'src/lib/agents/**'
+      - 'services/codex-broker/**'
+      - 'services/widget-codex/**'
+      - 'src/app/api/widget-codex/**'
+      - 'src/components/ui/codex/**'
+      - 'src/lib/widget-codex/**'
       - 'scripts/start-service.sh'
       - 'railway.toml'
       - 'Dockerfile'
@@ -23,6 +28,16 @@ on:
         required: false
         default: false
         type: boolean
+      force_codex_broker:
+        description: 'Force deploy present-codex-broker'
+        required: false
+        default: false
+        type: boolean
+      force_widget_codex:
+        description: 'Force deploy present-widget-codex'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -36,6 +51,8 @@ env:
   RAILWAY_ENVIRONMENT: production
   RAILWAY_CONDUCTOR_SERVICE: present-conductor
   RAILWAY_REALTIME_SERVICE: present-realtime
+  RAILWAY_CODEX_BROKER_SERVICE: present-codex-broker
+  RAILWAY_WIDGET_CODEX_SERVICE: present-widget-codex
 
 jobs:
   plan:
@@ -43,6 +60,8 @@ jobs:
     outputs:
       deploy_conductor: ${{ steps.plan.outputs.deploy_conductor }}
       deploy_realtime: ${{ steps.plan.outputs.deploy_realtime }}
+      deploy_codex_broker: ${{ steps.plan.outputs.deploy_codex_broker }}
+      deploy_widget_codex: ${{ steps.plan.outputs.deploy_widget_codex }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,6 +73,14 @@ jobs:
           filters: |
             agents:
               - 'src/lib/agents/**'
+            codex_broker:
+              - 'services/codex-broker/**'
+              - 'src/app/api/reset/codex/**'
+            widget_codex:
+              - 'services/widget-codex/**'
+              - 'src/app/api/widget-codex/**'
+              - 'src/components/ui/codex/**'
+              - 'src/lib/widget-codex/**'
             shared:
               - 'scripts/start-service.sh'
               - 'railway.toml'
@@ -74,6 +101,8 @@ jobs:
           set -euo pipefail
           deploy_conductor=false
           deploy_realtime=false
+          deploy_codex_broker=false
+          deploy_widget_codex=false
           is_dispatch_from_main=false
 
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
@@ -92,6 +121,17 @@ jobs:
             deploy_realtime=true
           fi
 
+          if [ "${{ steps.paths.outputs.shared }}" = "true" ] || \
+             [ "${{ steps.paths.outputs.codex_broker }}" = "true" ]; then
+            deploy_codex_broker=true
+          fi
+
+          if [ "${{ steps.paths.outputs.shared }}" = "true" ] || \
+             [ "${{ steps.paths.outputs.codex_broker }}" = "true" ] || \
+             [ "${{ steps.paths.outputs.widget_codex }}" = "true" ]; then
+            deploy_widget_codex=true
+          fi
+
           if [ "${{ github.event.inputs.force_conductor || 'false' }}" = "true" ]; then
             deploy_conductor=true
           fi
@@ -100,15 +140,29 @@ jobs:
             deploy_realtime=true
           fi
 
+          if [ "${{ github.event.inputs.force_codex_broker || 'false' }}" = "true" ]; then
+            deploy_codex_broker=true
+          fi
+
+          if [ "${{ github.event.inputs.force_widget_codex || 'false' }}" = "true" ]; then
+            deploy_widget_codex=true
+          fi
+
           if [ "$is_dispatch_from_main" = false ]; then
             deploy_conductor=false
             deploy_realtime=false
+            deploy_codex_broker=false
+            deploy_widget_codex=false
           fi
 
           echo "deploy_conductor=$deploy_conductor" >> "$GITHUB_OUTPUT"
           echo "deploy_realtime=$deploy_realtime" >> "$GITHUB_OUTPUT"
+          echo "deploy_codex_broker=$deploy_codex_broker" >> "$GITHUB_OUTPUT"
+          echo "deploy_widget_codex=$deploy_widget_codex" >> "$GITHUB_OUTPUT"
           echo "deploy_conductor=$deploy_conductor"
           echo "deploy_realtime=$deploy_realtime"
+          echo "deploy_codex_broker=$deploy_codex_broker"
+          echo "deploy_widget_codex=$deploy_widget_codex"
 
   deploy-conductor:
     runs-on: ubuntu-latest
@@ -247,3 +301,201 @@ jobs:
 
           run_with_railway_auth link railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT"
           run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_REALTIME_SERVICE" --yes
+
+  deploy-codex-broker:
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.deploy_codex_broker == 'true'
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli
+
+      - name: Redeploy present-codex-broker
+        env:
+          RAILWAY_API_KEY: ${{ secrets.RAILWAY_API_KEY || '' }}
+          RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_TOKEN || '' }}
+          CODEX_BROKER_AUTH_TOKEN: ${{ secrets.CODEX_BROKER_AUTH_TOKEN || '' }}
+          CODEX_BROKER_PUBLIC_BASE_URL: ${{ vars.CODEX_BROKER_PUBLIC_BASE_URL || '' }}
+          CODEX_BROKER_DIRECT_TARGET_URL: ${{ secrets.CODEX_BROKER_DIRECT_TARGET_URL || vars.CODEX_BROKER_DIRECT_TARGET_URL || '' }}
+          CODEX_BROKER_SSH_HOST: ${{ secrets.CODEX_BROKER_SSH_HOST || vars.CODEX_BROKER_SSH_HOST || '' }}
+          CODEX_BROKER_SSH_USERNAME: ${{ secrets.CODEX_BROKER_SSH_USERNAME || vars.CODEX_BROKER_SSH_USERNAME || '' }}
+          CODEX_BROKER_SSH_PORT: ${{ vars.CODEX_BROKER_SSH_PORT || '22' }}
+          CODEX_BROKER_REMOTE_HOST: ${{ vars.CODEX_BROKER_REMOTE_HOST || '127.0.0.1' }}
+          CODEX_BROKER_REMOTE_PORT: ${{ vars.CODEX_BROKER_REMOTE_PORT || '4500' }}
+          CODEX_BROKER_REMOTE_PROTOCOL: ${{ vars.CODEX_BROKER_REMOTE_PROTOCOL || 'http' }}
+          CODEX_BROKER_SSH_HOST_KEY_SHA256: ${{ secrets.CODEX_BROKER_SSH_HOST_KEY_SHA256 || vars.CODEX_BROKER_SSH_HOST_KEY_SHA256 || '' }}
+          CODEX_BROKER_SSH_PRIVATE_KEY: ${{ secrets.CODEX_BROKER_SSH_PRIVATE_KEY || '' }}
+          CODEX_BROKER_SSH_PRIVATE_KEY_PATH: ${{ vars.CODEX_BROKER_SSH_PRIVATE_KEY_PATH || '' }}
+          CODEX_BROKER_SSH_PASSPHRASE: ${{ secrets.CODEX_BROKER_SSH_PASSPHRASE || '' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RAILWAY_API_KEY:-}" ] && [ -z "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+            echo "::error::Missing Railway auth. Set RAILWAY_API_KEY and/or RAILWAY_TOKEN in GitHub Actions secrets."
+            exit 1
+          fi
+          if [ -z "${CODEX_BROKER_AUTH_TOKEN:-}" ]; then
+            echo "::error::Missing CODEX_BROKER_AUTH_TOKEN secret."
+            exit 1
+          fi
+          if [ -z "${CODEX_BROKER_PUBLIC_BASE_URL:-}" ]; then
+            echo "::error::Missing CODEX_BROKER_PUBLIC_BASE_URL repository variable."
+            exit 1
+          fi
+          if [ -z "${CODEX_BROKER_DIRECT_TARGET_URL:-}" ] && { [ -z "${CODEX_BROKER_SSH_HOST:-}" ] || [ -z "${CODEX_BROKER_SSH_USERNAME:-}" ]; }; then
+            echo "::error::Set CODEX_BROKER_DIRECT_TARGET_URL or CODEX_BROKER_SSH_HOST plus CODEX_BROKER_SSH_USERNAME."
+            exit 1
+          fi
+          tmp_dir="$(mktemp -d)"
+          cd "$tmp_dir"
+          run_with_railway_auth() {
+            local action="$1"
+            shift
+            local code=1
+            if [ -n "${RAILWAY_API_KEY:-}" ]; then
+              set +e
+              RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_API_KEY" "$@"
+              code=$?
+              set -e
+              if [ "$code" -eq 0 ]; then
+                echo "auth_source=RAILWAY_API_KEY action=$action"
+                return 0
+              fi
+            fi
+            if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+              set +e
+              RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" "$@"
+              code=$?
+              set -e
+              if [ "$code" -eq 0 ]; then
+                echo "auth_source=RAILWAY_TOKEN action=$action"
+                return 0
+              fi
+            fi
+            return "$code"
+          }
+          add_optional_set() {
+            local name="$1"
+            local value="$2"
+            if [ -n "$value" ]; then
+              variable_args+=(--set "$name=$value")
+            fi
+          }
+
+          run_with_railway_auth link railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT"
+          variable_args=(
+            railway variables
+            --service "$RAILWAY_CODEX_BROKER_SERVICE"
+            --environment "$RAILWAY_ENVIRONMENT"
+            --set "SERVICE_TYPE=codex-broker"
+            --set "CODEX_BROKER_HOST=0.0.0.0"
+            --set "CODEX_BROKER_AUTH_TOKEN=$CODEX_BROKER_AUTH_TOKEN"
+            --set "CODEX_BROKER_PUBLIC_BASE_URL=$CODEX_BROKER_PUBLIC_BASE_URL"
+            --set "CODEX_BROKER_REMOTE_HOST=$CODEX_BROKER_REMOTE_HOST"
+            --set "CODEX_BROKER_REMOTE_PORT=$CODEX_BROKER_REMOTE_PORT"
+            --set "CODEX_BROKER_REMOTE_PROTOCOL=$CODEX_BROKER_REMOTE_PROTOCOL"
+          )
+          add_optional_set CODEX_BROKER_DIRECT_TARGET_URL "$CODEX_BROKER_DIRECT_TARGET_URL"
+          add_optional_set CODEX_BROKER_SSH_HOST "$CODEX_BROKER_SSH_HOST"
+          add_optional_set CODEX_BROKER_SSH_USERNAME "$CODEX_BROKER_SSH_USERNAME"
+          add_optional_set CODEX_BROKER_SSH_PORT "$CODEX_BROKER_SSH_PORT"
+          add_optional_set CODEX_BROKER_SSH_HOST_KEY_SHA256 "$CODEX_BROKER_SSH_HOST_KEY_SHA256"
+          add_optional_set CODEX_BROKER_SSH_PRIVATE_KEY "$CODEX_BROKER_SSH_PRIVATE_KEY"
+          add_optional_set CODEX_BROKER_SSH_PRIVATE_KEY_PATH "$CODEX_BROKER_SSH_PRIVATE_KEY_PATH"
+          add_optional_set CODEX_BROKER_SSH_PASSPHRASE "$CODEX_BROKER_SSH_PASSPHRASE"
+          variable_args+=(--skip-deploys)
+          run_with_railway_auth variables "${variable_args[@]}"
+          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_CODEX_BROKER_SERVICE" --yes
+
+  deploy-widget-codex:
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.deploy_widget_codex == 'true'
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli
+
+      - name: Redeploy present-widget-codex
+        env:
+          RAILWAY_API_KEY: ${{ secrets.RAILWAY_API_KEY || '' }}
+          RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_TOKEN || '' }}
+          CODEX_BROKER_URL: ${{ vars.CODEX_BROKER_URL || '' }}
+          CODEX_BROKER_AUTH_TOKEN: ${{ secrets.CODEX_BROKER_AUTH_TOKEN || '' }}
+          WIDGET_CODEX_PUBLIC_WS_URL: ${{ vars.WIDGET_CODEX_PUBLIC_WS_URL || '' }}
+          WIDGET_CODEX_ALLOWED_ORIGIN: ${{ vars.WIDGET_CODEX_ALLOWED_ORIGIN || 'https://present.best' }}
+          WIDGET_CODEX_STATE_FILE: ${{ vars.WIDGET_CODEX_STATE_FILE || '/data/widget-codex/state.json' }}
+          WIDGET_CODEX_DEFAULT_SERVERS: ${{ secrets.WIDGET_CODEX_DEFAULT_SERVERS || vars.WIDGET_CODEX_DEFAULT_SERVERS || '' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RAILWAY_API_KEY:-}" ] && [ -z "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+            echo "::error::Missing Railway auth. Set RAILWAY_API_KEY and/or RAILWAY_TOKEN in GitHub Actions secrets."
+            exit 1
+          fi
+          if [ -z "${CODEX_BROKER_URL:-}" ]; then
+            echo "::error::Missing CODEX_BROKER_URL repository variable for widget-codex service."
+            exit 1
+          fi
+          if [ -z "${CODEX_BROKER_AUTH_TOKEN:-}" ]; then
+            echo "::error::Missing CODEX_BROKER_AUTH_TOKEN secret."
+            exit 1
+          fi
+          if [ -z "${WIDGET_CODEX_PUBLIC_WS_URL:-}" ]; then
+            echo "::error::Missing WIDGET_CODEX_PUBLIC_WS_URL repository variable."
+            exit 1
+          fi
+          if [ -z "${WIDGET_CODEX_DEFAULT_SERVERS:-}" ]; then
+            echo "::error::Missing WIDGET_CODEX_DEFAULT_SERVERS secret or repository variable."
+            exit 1
+          fi
+          tmp_dir="$(mktemp -d)"
+          cd "$tmp_dir"
+          run_with_railway_auth() {
+            local action="$1"
+            shift
+            local code=1
+            if [ -n "${RAILWAY_API_KEY:-}" ]; then
+              set +e
+              RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_API_KEY" "$@"
+              code=$?
+              set -e
+              if [ "$code" -eq 0 ]; then
+                echo "auth_source=RAILWAY_API_KEY action=$action"
+                return 0
+              fi
+            fi
+            if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+              set +e
+              RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" "$@"
+              code=$?
+              set -e
+              if [ "$code" -eq 0 ]; then
+                echo "auth_source=RAILWAY_TOKEN action=$action"
+                return 0
+              fi
+            fi
+            return "$code"
+          }
+
+          run_with_railway_auth link railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT"
+          run_with_railway_auth variables railway variables \
+            --service "$RAILWAY_WIDGET_CODEX_SERVICE" \
+            --environment "$RAILWAY_ENVIRONMENT" \
+            --set "SERVICE_TYPE=widget-codex" \
+            --set "WIDGET_CODEX_HOST=0.0.0.0" \
+            --set "CODEX_BROKER_URL=$CODEX_BROKER_URL" \
+            --set "CODEX_BROKER_AUTH_TOKEN=$CODEX_BROKER_AUTH_TOKEN" \
+            --set "WIDGET_CODEX_PUBLIC_WS_URL=$WIDGET_CODEX_PUBLIC_WS_URL" \
+            --set "WIDGET_CODEX_ALLOWED_ORIGIN=$WIDGET_CODEX_ALLOWED_ORIGIN" \
+            --set "WIDGET_CODEX_STATE_FILE=$WIDGET_CODEX_STATE_FILE" \
+            --set "WIDGET_CODEX_DEFAULT_SERVERS=$WIDGET_CODEX_DEFAULT_SERVERS" \
+            --skip-deploys
+          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_WIDGET_CODEX_SERVICE" --yes

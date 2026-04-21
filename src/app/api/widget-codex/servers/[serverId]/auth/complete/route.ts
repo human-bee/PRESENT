@@ -13,7 +13,8 @@ export async function POST(
   if (authResponse) return authResponse;
   try {
     const { serverId } = await params;
-    const response = await completeWidgetCodexAuth(serverId);
+    const body = await request.json().catch(() => ({}));
+    const response = await completeWidgetCodexAuth(serverId, body);
     return NextResponse.json(response);
   } catch (error) {
     return toWidgetCodexErrorResponse(error, 'Failed to complete Widget Codex auth.');
