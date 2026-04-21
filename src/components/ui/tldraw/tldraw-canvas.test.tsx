@@ -350,6 +350,78 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
     ]);
   });
 
+  it('grows again when measured content overflows a previously auto-fitted shape', () => {
+    const codexShape = {
+      ...defaultTestShape,
+      props: { ...defaultTestShape.props, name: 'CodexRemoteWidget', userResized: true },
+    };
+    const { rerender } = render(<TestShapeRenderer shape={codexShape} />);
+    expect(mockResizeObserverCallback).not.toBeNull();
+
+    act(() => {
+      emitMeasuredResize(720, 640);
+    });
+    act(() => {
+      jest.advanceTimersByTime(150);
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(mockUpdateShapes).toHaveBeenCalledTimes(1);
+    expect(mockUpdateShapes).toHaveBeenLastCalledWith([
+      { id: defaultTestShape.id, type: 'custom', props: { w: 720, h: 640 } },
+    ]);
+
+    rerender(
+      <TestShapeRenderer
+        shape={{ ...codexShape, props: { ...codexShape.props, w: 720, h: 640, userResized: true } }}
+      />,
+    );
+
+    act(() => {
+      emitMeasuredResize(720, 920);
+    });
+    act(() => {
+      jest.advanceTimersByTime(150);
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(mockUpdateShapes).toHaveBeenCalledTimes(2);
+    expect(mockUpdateShapes).toHaveBeenLastCalledWith([
+      { id: defaultTestShape.id, type: 'custom', props: { w: 720, h: 920 } },
+    ]);
+  });
+
+  it('remeasures overflowing content after rerender even when ResizeObserver does not fire', () => {
+    const resizedShape = {
+      ...defaultTestShape,
+      props: { ...defaultTestShape.props, w: 300, h: 250, userResized: true },
+    };
+    const { rerender } = render(<TestShapeRenderer shape={resizedShape} />);
+    expect(mockResizeObserverCallback).not.toBeNull();
+    expect(observedElement).not.toBeNull();
+
+    mockUpdateShapes.mockClear();
+    act(() => {
+      if (observedElement) {
+        setMeasuredSize(observedElement, 300, 430);
+      }
+      rerender(
+        <TestShapeRenderer
+          shape={{ ...resizedShape, props: { ...resizedShape.props, state: { showServerForm: true } } }}
+        />,
+      );
+    });
+    act(() => {
+      jest.advanceTimersByTime(16);
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(mockUpdateShapes).toHaveBeenCalledTimes(1);
+    expect(mockUpdateShapes).toHaveBeenLastCalledWith([
+      { id: defaultTestShape.id, type: 'custom', props: { w: 300, h: 430 } },
+    ]);
+  });
+
   it('does not call updateShapes if resize is below threshold', () => {
     render(
       <TestShapeRenderer

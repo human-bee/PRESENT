@@ -87,6 +87,16 @@ function resolveSizingComponentName(shapeName: string, stored: ReactNode | null 
   return embeddedKnownName ?? shapeName;
 }
 
+function readMeasuredElementSize(el: HTMLElement): { w: number; h: number } {
+  // Use layout metrics that are stable under CSS transforms so we do not chase our own scaling.
+  const widthCandidate = Math.max(el.scrollWidth, el.offsetWidth, el.clientWidth);
+  const heightCandidate = Math.max(el.scrollHeight, el.offsetHeight, el.clientHeight);
+  return {
+    w: Math.ceil(Number.isFinite(widthCandidate) ? widthCandidate : 0),
+    h: Math.ceil(Number.isFinite(heightCandidate) ? heightCandidate : 0),
+  };
+}
+
 export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scaleWrapperRef = useRef<HTMLDivElement>(null);
@@ -101,6 +111,7 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [pinnedNaturalSize, setPinnedNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const autoFittedRef = useRef(false);
+  const lastAutoFitSizeRef = useRef<{ w: number; h: number } | null>(null);
   const lastMeasuredSizeRef = useRef<{ w: number; h: number } | null>(null);
 
   const storedComponent = componentStore?.get(shape.props.customComponent);
@@ -118,11 +129,7 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
     let frame: number | null = null;
 
     const measure = () => {
-      // Use layout metrics that are stable under CSS transforms so we do not chase our own scaling
-      const widthCandidate = Math.max(el.scrollWidth, el.offsetWidth, el.clientWidth);
-      const heightCandidate = Math.max(el.scrollHeight, el.offsetHeight, el.clientHeight);
-      const w = Math.ceil(Number.isFinite(widthCandidate) ? widthCandidate : 0);
-      const h = Math.ceil(Number.isFinite(heightCandidate) ? heightCandidate : 0);
+      const { w, h } = readMeasuredElementSize(el);
       const prev = lastMeasuredSizeRef.current;
       if (!prev || Math.abs(prev.w - w) > 1 || Math.abs(prev.h - h) > 1) {
         lastMeasuredSizeRef.current = { w, h };
@@ -143,6 +150,25 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
       observer.disconnect();
     };
   }, [sizingPolicy, localPin, isFixedLivekitTile]);
+
+  useEffect(() => {
+    if (sizingPolicy === 'scale_only' || localPin || isFixedLivekitTile) return;
+    const el = contentInnerRef.current;
+    if (!el) return;
+
+    const frame = requestAnimationFrame(() => {
+      const { w, h } = readMeasuredElementSize(el);
+      const prev = lastMeasuredSizeRef.current;
+      if (!prev || Math.abs(prev.w - w) > 1 || Math.abs(prev.h - h) > 1) {
+        lastMeasuredSizeRef.current = { w, h };
+        setNaturalSize({ w, h });
+      }
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  });
 
   useEffect(() => {
     lastMeasuredSizeRef.current = null;
@@ -210,6 +236,7 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
 
   useEffect(() => {
     autoFittedRef.current = false;
+    lastAutoFitSizeRef.current = null;
   }, [shape.props.name]);
 
   useEffect(() => {
@@ -238,29 +265,37 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
     const policy = sizingPolicy;
     const userHasResized = Boolean(shape.props.userResized);
 
-    const shouldAutoFit =
+    const { h: rawH } = naturalSize;
+    // Guard: some components can transiently report 0 during first layout
+    const minH = Math.max(32, sizeInfo.minHeight * 0.5);
+    if (!Number.isFinite(rawH) || rawH < minH) {
+      return;
+    }
+    // Width: always use design width from sizeInfo (components have fixed design widths)
+    // Height: use measured height for dynamic content
+    const nw = sizeInfo.naturalWidth;
+    const nh = rawH;
+    const widthChanged = Math.abs(shape.props.w - nw) > 1;
+    const heightChanged = Math.abs(shape.props.h - nh) > 1;
+    const contentOverflowsShape = nh > shape.props.h + 1;
+    const lastAutoFitSize = lastAutoFitSizeRef.current;
+    const shapeReflectsLastAutoFit =
+      !lastAutoFitSize ||
+      (Math.abs(shape.props.w - lastAutoFitSize.w) <= 1 &&
+        Math.abs(shape.props.h - lastAutoFitSize.h) <= 1);
+    const canFitPolicy =
       policy === 'always_fit' || (policy === 'fit_until_user_resize' && !userHasResized);
+    const canApplyFit =
+      policy === 'always_fit' ||
+      (!autoFittedRef.current && (canFitPolicy || contentOverflowsShape)) ||
+      (shapeReflectsLastAutoFit && (canFitPolicy || contentOverflowsShape));
 
-    if (shouldAutoFit) {
-      const { h: rawH } = naturalSize;
-      // Guard: some components can transiently report 0 during first layout
-      const minH = Math.max(32, sizeInfo.minHeight * 0.5);
-      if (!Number.isFinite(rawH) || rawH < minH) {
-        return;
-      }
-      // Width: always use design width from sizeInfo (components have fixed design widths)
-      // Height: use measured height for dynamic content
-      const nw = sizeInfo.naturalWidth;
-      const nh = rawH;
-      const widthChanged = Math.abs(shape.props.w - nw) > 1;
-      const heightChanged = Math.abs(shape.props.h - nh) > 1;
-      const allowMultiple = policy === 'always_fit';
-      if ((widthChanged || heightChanged) && (allowMultiple || !autoFittedRef.current)) {
-        unsafeEditor.updateShapes?.([
-          { id: shape.id as any, type: 'custom', props: { w: nw, h: nh } },
-        ]);
-        if (!allowMultiple) autoFittedRef.current = true;
-      }
+    if ((widthChanged || heightChanged) && canApplyFit) {
+      unsafeEditor.updateShapes?.([
+        { id: shape.id as any, type: 'custom', props: { w: nw, h: nh } },
+      ]);
+      autoFittedRef.current = true;
+      lastAutoFitSizeRef.current = { w: nw, h: nh };
     }
   }, [editor, naturalSize, shape.id, shape.props.name, shape.props.userResized, shape.props.w, shape.props.h, sizingPolicy, sizeInfo.naturalWidth, sizeInfo.minHeight, localPin, isFixedLivekitTile]);
 
