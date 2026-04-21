@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CodexRemoteWidget, deriveWidgetCodexWsUrl } from './codex-remote-widget';
 
 const componentRegistryUpdateMock = jest.fn().mockResolvedValue(undefined);
@@ -80,6 +80,107 @@ describe('CodexRemoteWidget', () => {
     expect(deriveWidgetCodexWsUrl('/ws', 'https://app.present.best/canvas')).toBe(
       'wss://app.present.best/ws',
     );
+  });
+
+  it('keeps one websocket subscription alive across snapshot state updates', async () => {
+    type Listener = (event: { data?: string }) => void;
+    class MockWebSocket {
+      static instances: MockWebSocket[] = [];
+      listeners = new Map<string, Listener[]>();
+      sent: string[] = [];
+      url: string;
+
+      constructor(url: string | URL) {
+        this.url = String(url);
+        MockWebSocket.instances.push(this);
+      }
+
+      addEventListener(type: string, listener: Listener) {
+        this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+      }
+
+      send(message: string) {
+        this.sent.push(message);
+      }
+
+      close() {
+        this.listeners.get('close')?.forEach((listener) => listener({}));
+      }
+
+      emit(type: string, event: { data?: string }) {
+        this.listeners.get(type)?.forEach((listener) => listener(event));
+      }
+    }
+
+    (global as any).WebSocket = MockWebSocket;
+    (global.fetch as jest.Mock).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/widget-codex/servers') {
+        return {
+          ok: true,
+          json: async () => ({
+            realtimeUrl: 'wss://present-widget-codex-production.up.railway.app/ws',
+            servers: buildServersPayload().servers,
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({}),
+      } as Response;
+    });
+
+    render(<CodexRemoteWidget title="Remote Codex" />);
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(1);
+    });
+
+    const emitSnapshot = async (socket: MockWebSocket) => {
+      await act(async () => {
+        socket.emit('message', {
+          data: JSON.stringify({
+            type: 'snapshot',
+            payload: {
+              realtimeUrl: 'wss://present-widget-codex-production.up.railway.app/ws',
+              servers: buildServersPayload().servers,
+              widgetSession: {
+                id: 'wcws_live',
+                title: 'Remote Codex',
+                serverId: 'wcsrv_1',
+                connectionId: null,
+                remoteWorkspaceId: 'present',
+                remoteWorkspacePath: '/srv/codex/repos/PRESENT',
+                status: 'disconnected',
+                authState: 'authenticated',
+                activeThreadId: null,
+                lastHeartbeatAt: null,
+                lastError: null,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              },
+              connection: null,
+            },
+          }),
+        });
+      });
+    };
+
+    await emitSnapshot(MockWebSocket.instances[0]);
+
+    await waitFor(() => {
+      expect(componentRegistryUpdateMock).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          widgetSessionId: 'wcws_live',
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(2);
+    });
+
+    await emitSnapshot(MockWebSocket.instances[1]);
+    expect(MockWebSocket.instances).toHaveLength(2);
   });
 
   it('loads the multi-server setup flow when no widget session exists yet', async () => {
@@ -603,6 +704,42 @@ describe('CodexRemoteWidget', () => {
       await screen.findByText(
         'You are not signed in or this browser session is not authorized to manage Widget Codex servers. Sign in with an allowlisted admin account, then retry.',
       ),
+    ).toBeTruthy();
+  });
+
+  it('explains backend DNS failures when connecting to a tailnet host the service cannot resolve', async () => {
+    (global.fetch as jest.Mock).mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === '/api/widget-codex/connections' && init?.method === 'POST') {
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({
+              error: '{"error":"getaddrinfo ENOTFOUND bens-macbook-pro.tailb3d6e9.ts.net"}',
+            }),
+          } as Response;
+        }
+        if (url === '/api/widget-codex/servers') {
+          return {
+            ok: true,
+            json: async () => buildServersPayload(),
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({}),
+        } as Response;
+      },
+    );
+
+    render(<CodexRemoteWidget title="Remote Codex" />);
+
+    await screen.findByRole('option', { name: 'Remote Prod' });
+    fireEvent.click(screen.getByText('Connect Remote Codex'));
+
+    expect(
+      await screen.findByText(/Cannot resolve SSH host bens-macbook-pro\.tailb3d6e9\.ts\.net/),
     ).toBeTruthy();
   });
 });

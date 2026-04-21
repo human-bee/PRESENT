@@ -214,30 +214,76 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetchWithSupabaseAuth(input, init);
   const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
   if (!response.ok) {
-    const error = new Error(
-      typeof payload?.error === 'string'
-        ? payload.error
-        : `Request failed with status ${response.status}.`,
-    ) as HttpError;
+    const error = new Error(extractWidgetCodexErrorMessage(payload, response.status)) as HttpError;
     error.status = response.status;
     throw error;
   }
   return payload as T;
 }
 
+function extractNestedErrorMessage(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  let current = value.trim();
+
+  for (let index = 0; index < 3; index += 1) {
+    try {
+      const parsed = JSON.parse(current) as unknown;
+      if (isRecord(parsed) && typeof parsed.error === 'string' && parsed.error.trim().length > 0) {
+        current = parsed.error.trim();
+        continue;
+      }
+    } catch {
+      return current;
+    }
+    return current;
+  }
+
+  return current;
+}
+
+function formatConnectivityError(message: string) {
+  const host = message.match(/\bgetaddrinfo\s+ENOTFOUND\s+([^\s"'}]+)/)?.[1];
+  if (host) {
+    return `Cannot resolve SSH host ${host} from the Widget Codex backend. If this is a Tailscale DNS name, run widget-codex/codex-broker inside that tailnet or use a host the Railway service can resolve.`;
+  }
+
+  if (/\bECONNREFUSED\b/.test(message)) {
+    return `The Widget Codex backend reached the host, but the target port refused the connection. Check SSH access and the remote Codex app-server port.`;
+  }
+
+  if (/\bETIMEDOUT\b/.test(message)) {
+    return `The Widget Codex backend timed out reaching the host. Check firewall, Tailscale/backend network membership, and SSH reachability.`;
+  }
+
+  return message;
+}
+
+function extractWidgetCodexErrorMessage(payload: Record<string, unknown> | null, status: number) {
+  const raw = extractNestedErrorMessage(payload?.error);
+  return raw ? formatConnectivityError(raw) : `Request failed with status ${status}.`;
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
+  return error instanceof Error && error.message
+    ? formatConnectivityError(error.message)
+    : fallback;
+}
+
+function getWidgetCodexStatusMessage(status: number | undefined, message: string) {
+  if (status === 401 || message === 'unauthorized') {
+    return 'You are not signed in or this browser session is not authorized to manage Widget Codex servers. Sign in with an allowlisted admin account, then retry.';
+  }
+  if (status === 403 || message === 'forbidden') {
+    return 'This account is signed in but is not allowlisted for Widget Codex server actions.';
+  }
+  return null;
 }
 
 function getWidgetCodexErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error) {
     const status = (error as HttpError).status;
-    if (status === 401 || error.message === 'unauthorized') {
-      return 'You are not signed in or this browser session is not authorized to manage Widget Codex servers. Sign in with an allowlisted admin account, then retry.';
-    }
-    if (status === 403 || error.message === 'forbidden') {
-      return 'This account is signed in but is not allowlisted for Widget Codex server actions.';
-    }
+    const statusMessage = getWidgetCodexStatusMessage(status, error.message);
+    if (statusMessage) return statusMessage;
   }
   return getErrorMessage(error, fallback);
 }
@@ -530,6 +576,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   const fallbackIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const websocketRef = useRef<WebSocket | null>(null);
+  const websocketUrlRef = useRef<string | null>(null);
+  const websocketCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   if (!fallbackIdRef.current) {
     fallbackIdRef.current = createFallbackId();
   }
@@ -539,6 +587,7 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   const [state, setState] = useState<PersistedWidgetState>(() =>
     buildInitialState(persistedState, rest),
   );
+  const stateRef = useRef(state);
   const [servers, setServers] = useState<WidgetCodexServer[]>([]);
   const [workspaces, setWorkspaces] = useState<WidgetCodexServer['workspaces']>([]);
   const [realtimeUrl, setRealtimeUrl] = useState<string | null>(null);
@@ -561,9 +610,19 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   const [serverFormErrors, setServerFormErrors] = useState<ServerFormErrors>({});
 
   useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
     return () => {
       mountedRef.current = false;
+      if (websocketCloseTimerRef.current) {
+        clearTimeout(websocketCloseTimerRef.current);
+        websocketCloseTimerRef.current = null;
+      }
       websocketRef.current?.close();
+      websocketRef.current = null;
+      websocketUrlRef.current = null;
     };
   }, []);
 
@@ -627,6 +686,7 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
 
   const persistState = useCallback(
     async (nextState: PersistedWidgetState) => {
+      stateRef.current = nextState;
       setState(nextState);
       props.updateState?.(nextState);
       try {
@@ -635,18 +695,19 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
         /* shape can remount while async updates settle */
       }
     },
-    [messageId, props],
+    [messageId, props.updateState],
   );
 
   const selectedServer = servers.find((server) => server.id === selectedServerId) ?? null;
 
   const applySnapshot = useCallback(
     async (snapshot: WidgetCodexSnapshot) => {
+      const currentState = stateRef.current;
       const normalizedServers = normalizeServers(snapshot.servers);
       setServers(normalizedServers);
       setRealtimeUrl(snapshot.realtimeUrl);
       const nextServerId =
-        snapshot.widgetSession?.serverId ?? state.serverId ?? normalizedServers[0]?.id ?? '';
+        snapshot.widgetSession?.serverId ?? currentState.serverId ?? normalizedServers[0]?.id ?? '';
       if (mountedRef.current) {
         setSelectedServerId(nextServerId);
       }
@@ -658,22 +719,22 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
       if (mountedRef.current) {
         setSelectedWorkspaceId(
           snapshot.widgetSession?.remoteWorkspaceId ??
-            state.remoteWorkspaceId ??
+            currentState.remoteWorkspaceId ??
             server?.workspaces[0]?.id ??
             '',
         );
       }
       const nextState: PersistedWidgetState = {
-        title: snapshot.widgetSession?.title ?? state.title ?? 'Remote Codex',
-        subtitle: snapshot.widgetSession?.remoteWorkspacePath ?? state.subtitle,
+        title: snapshot.widgetSession?.title ?? currentState.title ?? 'Remote Codex',
+        subtitle: snapshot.widgetSession?.remoteWorkspacePath ?? currentState.subtitle,
         frameUrl: snapshot.connection?.frameUrl ?? undefined,
         widgetSessionId:
-          snapshot.widgetSession?.id ?? state.widgetSessionId ?? createWidgetSessionId(),
-        workspaceSessionId: state.workspaceSessionId,
-        remoteSessionId: snapshot.connection?.brokerSessionId ?? state.remoteSessionId,
+          snapshot.widgetSession?.id ?? currentState.widgetSessionId ?? createWidgetSessionId(),
+        workspaceSessionId: currentState.workspaceSessionId,
+        remoteSessionId: snapshot.connection?.brokerSessionId ?? currentState.remoteSessionId,
         serverId: snapshot.widgetSession?.serverId ?? (nextServerId || undefined),
         connectionId: snapshot.connection?.id ?? snapshot.widgetSession?.connectionId ?? undefined,
-        executorSessionId: state.executorSessionId,
+        executorSessionId: currentState.executorSessionId,
         remoteWorkspaceId: snapshot.widgetSession?.remoteWorkspaceId ?? undefined,
         remoteWorkspacePath: snapshot.widgetSession?.remoteWorkspacePath ?? undefined,
         status: snapshot.connection?.status ?? snapshot.widgetSession?.status ?? 'disconnected',
@@ -691,27 +752,23 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
         setIsEditing(!nextState.frameUrl);
       }
     },
-    [
-      persistState,
-      state.executorSessionId,
-      state.remoteWorkspaceId,
-      state.remoteSessionId,
-      state.serverId,
-      state.subtitle,
-      state.title,
-      state.widgetSessionId,
-      state.workspaceSessionId,
-    ],
+    [persistState],
   );
+  const applySnapshotRef = useRef(applySnapshot);
+
+  useEffect(() => {
+    applySnapshotRef.current = applySnapshot;
+  }, [applySnapshot]);
 
   const loadServers = useCallback(async () => {
+    const currentState = stateRef.current;
     const payload = await requestJson<{ realtimeUrl: string | null; servers: WidgetCodexServer[] }>(
       '/api/widget-codex/servers',
     );
     const normalizedServers = normalizeServers(payload.servers);
     setServers(normalizedServers);
     setRealtimeUrl(payload.realtimeUrl);
-    const nextServerId = state.serverId ?? normalizedServers[0]?.id ?? '';
+    const nextServerId = currentState.serverId ?? normalizedServers[0]?.id ?? '';
     if (mountedRef.current) {
       setSelectedServerId(nextServerId);
     }
@@ -719,9 +776,9 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
       normalizedServers.find((entry) => entry.id === nextServerId) ?? normalizedServers[0] ?? null;
     setWorkspaces(server?.workspaces ?? []);
     if (mountedRef.current) {
-      setSelectedWorkspaceId(state.remoteWorkspaceId ?? server?.workspaces[0]?.id ?? '');
+      setSelectedWorkspaceId(currentState.remoteWorkspaceId ?? server?.workspaces[0]?.id ?? '');
     }
-  }, [state.remoteWorkspaceId, state.serverId]);
+  }, []);
 
   const loadSnapshot = useCallback(async () => {
     if (!state.widgetSessionId) {
@@ -847,14 +904,28 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     if (state.widgetSessionId) {
       url.searchParams.set('widgetSessionId', state.widgetSessionId);
     }
+    const nextUrl = url.toString();
+    if (websocketCloseTimerRef.current) {
+      clearTimeout(websocketCloseTimerRef.current);
+      websocketCloseTimerRef.current = null;
+    }
+    if (websocketRef.current && websocketUrlRef.current === nextUrl) {
+      return;
+    }
+    if (websocketRef.current) {
+      websocketRef.current.close();
+      websocketRef.current = null;
+      websocketUrlRef.current = null;
+    }
     const socket = new WebSocket(url);
     websocketRef.current = socket;
+    websocketUrlRef.current = nextUrl;
 
     socket.addEventListener('message', (event) => {
       try {
         const payload = JSON.parse(event.data) as { type?: string; payload?: WidgetCodexSnapshot };
         if (payload.type === 'snapshot' && payload.payload) {
-          void applySnapshot(payload.payload);
+          void applySnapshotRef.current(payload.payload);
         }
       } catch {
         /* ignore malformed events */
@@ -871,9 +942,16 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     });
 
     return () => {
-      socket.close();
+      websocketCloseTimerRef.current = setTimeout(() => {
+        if (websocketRef.current === socket) {
+          socket.close();
+          websocketRef.current = null;
+          websocketUrlRef.current = null;
+        }
+        websocketCloseTimerRef.current = null;
+      }, 250);
     };
-  }, [applySnapshot, realtimeUrl, state.widgetSessionId]);
+  }, [realtimeUrl, state.widgetSessionId]);
 
   const saveServer = useCallback(async () => {
     const validation = validateServerForm(serverForm);
