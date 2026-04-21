@@ -29,7 +29,9 @@ type PersistedWidgetState = {
 
 type CanvasCodexRemoteWidgetProps = CodexRemoteWidgetProps & {
   state?: PersistedWidgetState;
-  updateState?: (patch: PersistedWidgetState | ((prev: PersistedWidgetState) => PersistedWidgetState)) => void;
+  updateState?: (
+    patch: PersistedWidgetState | ((prev: PersistedWidgetState) => PersistedWidgetState),
+  ) => void;
 };
 
 type WidgetCodexServer = {
@@ -120,14 +122,77 @@ type RemoteCodexMessage = {
   timestamp?: string | null;
 };
 
-const REMOTE_EXECUTOR_CAPABILITIES = ['code_edit', 'code_review', 'canvas_edit', 'widget_render', 'mcp_server'] as const;
+const REMOTE_EXECUTOR_CAPABILITIES = [
+  'code_edit',
+  'code_review',
+  'canvas_edit',
+  'widget_render',
+  'mcp_server',
+] as const;
 
 type HttpError = Error & {
   status?: number;
 };
 
+type ServerFormState = {
+  id: string;
+  label: string;
+  description: string;
+  transportKind: 'direct' | 'ssh';
+  directTargetUrl: string;
+  sshHost: string;
+  sshPort: string;
+  sshUsername: string;
+  sshPrivateKey: string;
+  sshPassphrase: string;
+  sshHostKeySha256: string;
+  sshRemoteHost: string;
+  sshRemotePort: string;
+  sshRemoteProtocol: 'http' | 'https';
+  authStrategy: 'none' | 'external_url' | 'iframe';
+  authUrl: string;
+  workspacesText: string;
+};
+
+type ServerFormErrors = Partial<
+  Record<
+    | 'form'
+    | 'label'
+    | 'directTargetUrl'
+    | 'sshHost'
+    | 'sshPort'
+    | 'sshUsername'
+    | 'sshPrivateKey'
+    | 'sshHostKeySha256'
+    | 'sshRemotePort'
+    | 'authUrl'
+    | 'workspacesText',
+    string
+  >
+>;
+
 const stopPointerPropagation: React.PointerEventHandler<HTMLElement> = (event) => {
   event.stopPropagation();
+};
+
+const emptyServerForm: ServerFormState = {
+  id: '',
+  label: '',
+  description: '',
+  transportKind: 'ssh',
+  directTargetUrl: '',
+  sshHost: '',
+  sshPort: '22',
+  sshUsername: '',
+  sshPrivateKey: '',
+  sshPassphrase: '',
+  sshHostKeySha256: '',
+  sshRemoteHost: '127.0.0.1',
+  sshRemotePort: '8390',
+  sshRemoteProtocol: 'http',
+  authStrategy: 'none',
+  authUrl: '',
+  workspacesText: '',
 };
 
 function createFallbackId() {
@@ -149,7 +214,9 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
   if (!response.ok) {
     const error = new Error(
-      typeof payload?.error === 'string' ? payload.error : `Request failed with status ${response.status}.`,
+      typeof payload?.error === 'string'
+        ? payload.error
+        : `Request failed with status ${response.status}.`,
     ) as HttpError;
     error.status = response.status;
     throw error;
@@ -159,6 +226,19 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function getWidgetCodexErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) {
+    const status = (error as HttpError).status;
+    if (status === 401 || error.message === 'unauthorized') {
+      return 'You are not signed in or this browser session is not authorized to manage Widget Codex servers. Sign in with an allowlisted admin account, then retry.';
+    }
+    if (status === 403 || error.message === 'forbidden') {
+      return 'This account is signed in but is not allowlisted for Widget Codex server actions.';
+    }
+  }
+  return getErrorMessage(error, fallback);
 }
 
 function buildInitialState(
@@ -211,6 +291,111 @@ function serializeWorkspacesInput(lines: string) {
         path,
       };
     });
+}
+
+function parsePort(value: string, fallback: number) {
+  const raw = value.trim();
+  const parsed = Number(raw || String(fallback));
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 65535 ? parsed : null;
+}
+
+function validateServerForm(serverForm: ServerFormState) {
+  const errors: ServerFormErrors = {};
+  const workspaces = serializeWorkspacesInput(serverForm.workspacesText);
+
+  if (!serverForm.label.trim()) {
+    errors.label = 'Add a display name for this server.';
+  }
+
+  if (serverForm.transportKind === 'direct') {
+    const targetUrl = serverForm.directTargetUrl.trim();
+    if (!targetUrl) {
+      errors.directTargetUrl = 'Enter the reachable Codex app-server URL.';
+    } else {
+      try {
+        const url = new URL(targetUrl);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+          errors.directTargetUrl = 'Use an http:// or https:// URL.';
+        }
+      } catch {
+        errors.directTargetUrl = 'Enter a valid http:// or https:// URL.';
+      }
+    }
+  } else {
+    if (!serverForm.sshHost.trim()) {
+      errors.sshHost = 'Enter the SSH host, for example a Tailscale DNS name.';
+    }
+    if (parsePort(serverForm.sshPort, 22) === null) {
+      errors.sshPort = 'Use a TCP port from 1 to 65535.';
+    }
+    if (!serverForm.sshUsername.trim()) {
+      errors.sshUsername = 'Enter the SSH username on that host.';
+    }
+    if (parsePort(serverForm.sshRemotePort, 8390) === null) {
+      errors.sshRemotePort = 'Use the port your remote Codex app-server is listening on.';
+    }
+
+    const privateKey = serverForm.sshPrivateKey.trim();
+    if (!privateKey) {
+      errors.sshPrivateKey = 'Paste the private key contents, not the file path.';
+    } else if (/^cat\s+/.test(privateKey) || privateKey.startsWith('~/.ssh/')) {
+      errors.sshPrivateKey =
+        'Run the command in Terminal and paste the output, not the command or path.';
+    } else if (
+      !privateKey.includes('-----BEGIN OPENSSH PRIVATE KEY-----') ||
+      !privateKey.includes('-----END OPENSSH PRIVATE KEY-----')
+    ) {
+      errors.sshPrivateKey =
+        'Paste the full OpenSSH private key block, including the BEGIN and END lines.';
+    }
+
+    const hostKey = serverForm.sshHostKeySha256.trim();
+    if (!hostKey) {
+      errors.sshHostKeySha256 = 'Paste the full remote host key fingerprint.';
+    } else if (!/^SHA256:[A-Za-z0-9+/=]+$/.test(hostKey) || hostKey.length < 20) {
+      errors.sshHostKeySha256 =
+        'Use the full SHA256 host-key fingerprint, for example SHA256:abc123...';
+    }
+  }
+
+  if (serverForm.authStrategy !== 'none') {
+    const authUrl = serverForm.authUrl.trim();
+    if (!authUrl) {
+      errors.authUrl = 'Enter the login URL for this server.';
+    } else {
+      try {
+        new URL(authUrl);
+      } catch {
+        errors.authUrl = 'Enter a valid login URL.';
+      }
+    }
+  }
+
+  if (workspaces.length === 0) {
+    errors.workspacesText = 'Add at least one workspace as Label|/absolute/path.';
+  } else if (workspaces.some((workspace) => !workspace.path.startsWith('/'))) {
+    errors.workspacesText =
+      'Workspace paths must be absolute paths on the SSH host, for example PRESENT|/Users/you/PRESENT.';
+  }
+
+  if (Object.keys(errors).length > 0) {
+    errors.form = Object.values(errors).find(Boolean);
+  }
+
+  return { errors, workspaces };
+}
+
+function fieldErrorClass(error: string | undefined, background = 'bg-surface') {
+  return cn(
+    'w-full rounded-lg border px-3 py-2 text-sm text-primary outline-none',
+    background,
+    error ? 'border-danger focus:border-danger' : 'border-default',
+  );
+}
+
+function FieldError({ children }: { children?: string }) {
+  if (!children) return null;
+  return <span className="text-xs text-danger">{children}</span>;
 }
 
 function workspacesToInput(workspaces: WidgetCodexServer['workspaces']) {
@@ -278,13 +463,19 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   const messageId = (__custom_message_id || propMessageId || fallbackIdRef.current)!;
   const persistedState = props.state;
 
-  const [state, setState] = useState<PersistedWidgetState>(() => buildInitialState(persistedState, rest));
+  const [state, setState] = useState<PersistedWidgetState>(() =>
+    buildInitialState(persistedState, rest),
+  );
   const [servers, setServers] = useState<WidgetCodexServer[]>([]);
   const [workspaces, setWorkspaces] = useState<WidgetCodexServer['workspaces']>([]);
   const [realtimeUrl, setRealtimeUrl] = useState<string | null>(null);
-  const [draftTitle, setDraftTitle] = useState(() => persistedState?.title ?? rest.title ?? 'Remote Codex');
+  const [draftTitle, setDraftTitle] = useState(
+    () => persistedState?.title ?? rest.title ?? 'Remote Codex',
+  );
   const [selectedServerId, setSelectedServerId] = useState(() => persistedState?.serverId ?? '');
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(() => persistedState?.remoteWorkspaceId ?? '');
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(
+    () => persistedState?.remoteWorkspaceId ?? '',
+  );
   const [loginUrl, setLoginUrl] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(() => !(persistedState?.frameUrl ?? rest.frameUrl));
   const [isBusy, setIsBusy] = useState(false);
@@ -293,25 +484,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   const [messages, setMessages] = useState<RemoteCodexMessage[]>([]);
   const [activeTaskRunId, setActiveTaskRunId] = useState<string | null>(null);
   const [showServerForm, setShowServerForm] = useState(false);
-  const [serverForm, setServerForm] = useState({
-    id: '',
-    label: '',
-    description: '',
-    transportKind: 'ssh' as 'direct' | 'ssh',
-    directTargetUrl: '',
-    sshHost: '',
-    sshPort: '22',
-    sshUsername: '',
-    sshPrivateKey: '',
-    sshPassphrase: '',
-    sshHostKeySha256: '',
-    sshRemoteHost: '127.0.0.1',
-    sshRemotePort: '4500',
-    sshRemoteProtocol: 'http' as 'http' | 'https',
-    authStrategy: 'none' as 'none' | 'external_url' | 'iframe',
-    authUrl: '',
-    workspacesText: '',
-  });
+  const [serverForm, setServerForm] = useState<ServerFormState>(emptyServerForm);
+  const [serverFormErrors, setServerFormErrors] = useState<ServerFormErrors>({});
 
   useEffect(() => {
     return () => {
@@ -358,19 +532,25 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     [className, contextKey, state],
   );
 
-  useComponentRegistration(messageId, 'CodexRemoteWidget', registryProps, contextKey || 'canvas', (patch) => {
-    setState((previous) => {
-      const next = {
-        ...previous,
-        ...patch,
-      } satisfies PersistedWidgetState;
-      setDraftTitle(next.title ?? 'Remote Codex');
-      setSelectedServerId(next.serverId ?? '');
-      setSelectedWorkspaceId(next.remoteWorkspaceId ?? '');
-      setIsEditing(!next.frameUrl);
-      return next;
-    });
-  });
+  useComponentRegistration(
+    messageId,
+    'CodexRemoteWidget',
+    registryProps,
+    contextKey || 'canvas',
+    (patch) => {
+      setState((previous) => {
+        const next = {
+          ...previous,
+          ...patch,
+        } satisfies PersistedWidgetState;
+        setDraftTitle(next.title ?? 'Remote Codex');
+        setSelectedServerId(next.serverId ?? '');
+        setSelectedWorkspaceId(next.remoteWorkspaceId ?? '');
+        setIsEditing(!next.frameUrl);
+        return next;
+      });
+    },
+  );
 
   const persistState = useCallback(
     async (nextState: PersistedWidgetState) => {
@@ -391,22 +571,28 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     async (snapshot: WidgetCodexSnapshot) => {
       setServers(snapshot.servers);
       setRealtimeUrl(snapshot.realtimeUrl);
-      const nextServerId = snapshot.widgetSession?.serverId ?? state.serverId ?? snapshot.servers[0]?.id ?? '';
+      const nextServerId =
+        snapshot.widgetSession?.serverId ?? state.serverId ?? snapshot.servers[0]?.id ?? '';
       if (mountedRef.current) {
         setSelectedServerId(nextServerId);
       }
-      const server = snapshot.servers.find((entry) => entry.id === nextServerId) ?? snapshot.servers[0] ?? null;
+      const server =
+        snapshot.servers.find((entry) => entry.id === nextServerId) ?? snapshot.servers[0] ?? null;
       setWorkspaces(server?.workspaces ?? []);
       if (mountedRef.current) {
         setSelectedWorkspaceId(
-          snapshot.widgetSession?.remoteWorkspaceId ?? state.remoteWorkspaceId ?? server?.workspaces[0]?.id ?? '',
+          snapshot.widgetSession?.remoteWorkspaceId ??
+            state.remoteWorkspaceId ??
+            server?.workspaces[0]?.id ??
+            '',
         );
       }
       const nextState: PersistedWidgetState = {
         title: snapshot.widgetSession?.title ?? state.title ?? 'Remote Codex',
         subtitle: snapshot.widgetSession?.remoteWorkspacePath ?? state.subtitle,
         frameUrl: snapshot.connection?.frameUrl ?? undefined,
-        widgetSessionId: snapshot.widgetSession?.id ?? state.widgetSessionId ?? createWidgetSessionId(),
+        widgetSessionId:
+          snapshot.widgetSession?.id ?? state.widgetSessionId ?? createWidgetSessionId(),
         workspaceSessionId: state.workspaceSessionId,
         remoteSessionId: snapshot.connection?.brokerSessionId ?? state.remoteSessionId,
         serverId: snapshot.widgetSession?.serverId ?? (nextServerId || undefined),
@@ -417,7 +603,10 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
         status: snapshot.connection?.status ?? snapshot.widgetSession?.status ?? 'disconnected',
         authState: snapshot.widgetSession?.authState ?? server?.authState ?? 'unknown',
         activeThreadId: snapshot.widgetSession?.activeThreadId ?? undefined,
-        lastHeartbeatAt: snapshot.connection?.lastHeartbeatAt ?? snapshot.widgetSession?.lastHeartbeatAt ?? undefined,
+        lastHeartbeatAt:
+          snapshot.connection?.lastHeartbeatAt ??
+          snapshot.widgetSession?.lastHeartbeatAt ??
+          undefined,
         lastError: snapshot.connection?.lastError ?? snapshot.widgetSession?.lastError ?? undefined,
       };
       await persistState(nextState);
@@ -449,7 +638,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     if (mountedRef.current) {
       setSelectedServerId(nextServerId);
     }
-    const server = payload.servers.find((entry) => entry.id === nextServerId) ?? payload.servers[0] ?? null;
+    const server =
+      payload.servers.find((entry) => entry.id === nextServerId) ?? payload.servers[0] ?? null;
     setWorkspaces(server?.workspaces ?? []);
     if (mountedRef.current) {
       setSelectedWorkspaceId(state.remoteWorkspaceId ?? server?.workspaces[0]?.id ?? '');
@@ -490,7 +680,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
       const nextThreadId =
         result && typeof result.codexThreadId === 'string' && result.codexThreadId.trim().length > 0
           ? result.codexThreadId.trim()
-          : typeof latestTask?.metadata.codexThreadId === 'string' && latestTask.metadata.codexThreadId.trim().length > 0
+          : typeof latestTask?.metadata.codexThreadId === 'string' &&
+              latestTask.metadata.codexThreadId.trim().length > 0
             ? latestTask.metadata.codexThreadId.trim()
             : state.activeThreadId;
       if (nextThreadId !== state.activeThreadId) {
@@ -512,42 +703,53 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     async (connection: WidgetCodexConnection) => {
       let workspaceSessionId = state.workspaceSessionId;
       if (!workspaceSessionId) {
-        const existing = await requestJson<{ workspaces: ResetWorkspaceSession[] }>('/api/reset/workspaces');
-        const existingWorkspace = existing.workspaces.find((workspace) => workspace.title === `Widget ${state.widgetSessionId}`) ?? null;
+        const existing = await requestJson<{ workspaces: ResetWorkspaceSession[] }>(
+          '/api/reset/workspaces',
+        );
+        const existingWorkspace =
+          existing.workspaces.find(
+            (workspace) => workspace.title === `Widget ${state.widgetSessionId}`,
+          ) ?? null;
         if (existingWorkspace) {
           workspaceSessionId = existingWorkspace.id;
         } else {
-          const created = await requestJson<{ workspace: ResetWorkspaceSession }>('/api/reset/workspaces', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              title: `Widget ${state.widgetSessionId ?? createWidgetSessionId()}`,
-              ownerUserId: 'widget-codex',
-            }),
-          });
+          const created = await requestJson<{ workspace: ResetWorkspaceSession }>(
+            '/api/reset/workspaces',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title: `Widget ${state.widgetSessionId ?? createWidgetSessionId()}`,
+                ownerUserId: 'widget-codex',
+              }),
+            },
+          );
           workspaceSessionId = created.workspace.id;
         }
       }
 
-      const result = await requestJson<{ executorSession: ResetExecutorSession }>('/api/reset/executors/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspaceSessionId,
-          identity: `widget-codex:${state.widgetSessionId ?? createWidgetSessionId()}`,
-          kind: 'hosted_executor',
-          authMode: 'shared_key',
-          codexBaseUrl: connection.proxyBaseUrl,
-          capabilities: [...REMOTE_EXECUTOR_CAPABILITIES],
-          metadata: {
-            remoteManagedAuth: true,
-            remoteSessionId: connection.brokerSessionId,
-            remoteWorkingDirectory: connection.remoteWorkspacePath,
-            proxyBaseUrl: connection.proxyBaseUrl,
-            remoteFrameUrl: connection.frameUrl,
-          },
-        }),
-      });
+      const result = await requestJson<{ executorSession: ResetExecutorSession }>(
+        '/api/reset/executors/register',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspaceSessionId,
+            identity: `widget-codex:${state.widgetSessionId ?? createWidgetSessionId()}`,
+            kind: 'hosted_executor',
+            authMode: 'shared_key',
+            codexBaseUrl: connection.proxyBaseUrl,
+            capabilities: [...REMOTE_EXECUTOR_CAPABILITIES],
+            metadata: {
+              remoteManagedAuth: true,
+              remoteSessionId: connection.brokerSessionId,
+              remoteWorkingDirectory: connection.remoteWorkspacePath,
+              proxyBaseUrl: connection.proxyBaseUrl,
+              remoteFrameUrl: connection.frameUrl,
+            },
+          }),
+        },
+      );
 
       const nextState = {
         ...state,
@@ -597,15 +799,27 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   }, [applySnapshot, realtimeUrl, state.widgetSessionId]);
 
   const saveServer = useCallback(async () => {
-    const workspacesPayload = serializeWorkspacesInput(serverForm.workspacesText);
+    const validation = validateServerForm(serverForm);
+    setServerFormErrors(validation.errors);
+    if (validation.errors.form) {
+      setState((previous) => ({
+        ...previous,
+        lastError: validation.errors.form,
+      }));
+      return;
+    }
+
+    const sshPort = parsePort(serverForm.sshPort, 22) ?? 22;
+    const remotePort = parsePort(serverForm.sshRemotePort, 8390) ?? 8390;
+    const workspacesPayload = validation.workspaces;
     const sshPayload =
       serverForm.transportKind === 'ssh'
         ? {
             host: serverForm.sshHost.trim(),
-            port: Number(serverForm.sshPort || '22'),
+            port: sshPort,
             username: serverForm.sshUsername.trim(),
             remoteHost: serverForm.sshRemoteHost.trim() || '127.0.0.1',
-            remotePort: Number(serverForm.sshRemotePort || '4500'),
+            remotePort,
             remoteProtocol: serverForm.sshRemoteProtocol,
             hostKeySha256: serverForm.sshHostKeySha256.trim(),
             privateKey: serverForm.sshPrivateKey.trim() || null,
@@ -628,7 +842,10 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
           ...(serverForm.transportKind === 'direct' && serverForm.directTargetUrl.trim()
             ? { directTargetUrl: serverForm.directTargetUrl.trim() }
             : {}),
-          ...(serverForm.transportKind === 'ssh' && sshPayload?.host && sshPayload.username && sshPayload.privateKey
+          ...(serverForm.transportKind === 'ssh' &&
+          sshPayload?.host &&
+          sshPayload.username &&
+          sshPayload.privateKey
             ? { ssh: sshPayload }
             : {}),
         };
@@ -651,30 +868,15 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
         });
       }
       setShowServerForm(false);
-      setServerForm({
-        id: '',
-        label: '',
-        description: '',
-        transportKind: 'ssh',
-        directTargetUrl: '',
-        sshHost: '',
-        sshPort: '22',
-        sshUsername: '',
-        sshPrivateKey: '',
-        sshPassphrase: '',
-        sshHostKeySha256: '',
-        sshRemoteHost: '127.0.0.1',
-        sshRemotePort: '4500',
-        sshRemoteProtocol: 'http',
-        authStrategy: 'none',
-        authUrl: '',
-        workspacesText: '',
-      });
+      setServerForm(emptyServerForm);
+      setServerFormErrors({});
       await loadServers();
     } catch (error) {
+      const message = getWidgetCodexErrorMessage(error, 'Failed to save Widget Codex server.');
+      setServerFormErrors({ form: message });
       setState((previous) => ({
         ...previous,
-        lastError: getErrorMessage(error, 'Failed to save Widget Codex server.'),
+        lastError: message,
       }));
     } finally {
       if (mountedRef.current) {
@@ -698,12 +900,13 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
       sshPassphrase: '',
       sshHostKeySha256: '',
       sshRemoteHost: '127.0.0.1',
-      sshRemotePort: '4500',
+      sshRemotePort: '8390',
       sshRemoteProtocol: 'http',
       authStrategy: selectedServer.authStrategy,
       authUrl: selectedServer.authUrl ?? '',
       workspacesText: workspacesToInput(selectedServer.workspaces),
     });
+    setServerFormErrors({});
     setShowServerForm(true);
   }, [selectedServer]);
 
@@ -761,16 +964,20 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     if (!selectedServerId) return;
     setIsBusy(true);
     try {
-      await requestJson(`/api/widget-codex/servers/${encodeURIComponent(selectedServerId)}/auth/complete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          widgetSessionId: state.widgetSessionId ?? createWidgetSessionId(),
-          remoteWorkspaceId: selectedWorkspaceId || undefined,
-          remoteWorkspacePath:
-            workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.path ?? undefined,
-        }),
-      });
+      await requestJson(
+        `/api/widget-codex/servers/${encodeURIComponent(selectedServerId)}/auth/complete`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            widgetSessionId: state.widgetSessionId ?? createWidgetSessionId(),
+            remoteWorkspaceId: selectedWorkspaceId || undefined,
+            remoteWorkspacePath:
+              workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.path ??
+              undefined,
+          }),
+        },
+      );
       setLoginUrl(null);
       await loadServers();
     } catch (error) {
@@ -819,7 +1026,10 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
         } catch (bindingError) {
           setState((previous) => ({
             ...previous,
-            lastError: getErrorMessage(bindingError, 'Connected, but widget executor binding is still pending.'),
+            lastError: getErrorMessage(
+              bindingError,
+              'Connected, but widget executor binding is still pending.',
+            ),
           }));
         }
       }
@@ -896,25 +1106,32 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   }, [loadWorkspaceConversation, state.workspaceSessionId]);
 
   useEffect(() => {
-    if (!state.frameUrl || !state.connectionId || state.workspaceSessionId || !state.widgetSessionId) return;
-    const connection = state.frameUrl && state.remoteWorkspacePath
-      ? {
-          id: state.connectionId,
-          widgetSessionId: state.widgetSessionId,
-          serverId: state.serverId ?? '',
-          brokerSessionId: state.remoteSessionId ?? state.connectionId,
-          remoteWorkspaceId: state.remoteWorkspaceId ?? null,
-          remoteWorkspacePath: state.remoteWorkspacePath,
-          frameUrl: state.frameUrl,
-          proxyBaseUrl: state.frameUrl.replace(/\/$/, ''),
-          status: (state.status as WidgetCodexConnection['status']) ?? 'ready',
-          authState: (state.authState as WidgetCodexConnection['authState']) ?? 'unknown',
-          lastHeartbeatAt: state.lastHeartbeatAt ?? null,
-          lastError: state.lastError ?? null,
-          createdAt: state.lastHeartbeatAt ?? new Date().toISOString(),
-          updatedAt: state.lastHeartbeatAt ?? new Date().toISOString(),
-        }
-      : null;
+    if (
+      !state.frameUrl ||
+      !state.connectionId ||
+      state.workspaceSessionId ||
+      !state.widgetSessionId
+    )
+      return;
+    const connection =
+      state.frameUrl && state.remoteWorkspacePath
+        ? {
+            id: state.connectionId,
+            widgetSessionId: state.widgetSessionId,
+            serverId: state.serverId ?? '',
+            brokerSessionId: state.remoteSessionId ?? state.connectionId,
+            remoteWorkspaceId: state.remoteWorkspaceId ?? null,
+            remoteWorkspacePath: state.remoteWorkspacePath,
+            frameUrl: state.frameUrl,
+            proxyBaseUrl: state.frameUrl.replace(/\/$/, ''),
+            status: (state.status as WidgetCodexConnection['status']) ?? 'ready',
+            authState: (state.authState as WidgetCodexConnection['authState']) ?? 'unknown',
+            lastHeartbeatAt: state.lastHeartbeatAt ?? null,
+            lastError: state.lastError ?? null,
+            createdAt: state.lastHeartbeatAt ?? new Date().toISOString(),
+            updatedAt: state.lastHeartbeatAt ?? new Date().toISOString(),
+          }
+        : null;
     if (!connection) return;
     void ensureWorkspaceBinding(connection).catch((error) => {
       if (!mountedRef.current) return;
@@ -1020,7 +1237,9 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   useEffect(() => {
     if (!activeTaskRunId || !state.workspaceSessionId) return;
     const interval = window.setInterval(() => {
-      void requestJson<{ taskRun: ResetTaskRun }>(`/api/reset/turns?taskRunId=${encodeURIComponent(activeTaskRunId)}`)
+      void requestJson<{ taskRun: ResetTaskRun }>(
+        `/api/reset/turns?taskRunId=${encodeURIComponent(activeTaskRunId)}`,
+      )
         .then(async ({ taskRun }) => {
           if (taskRun.status === 'running' || taskRun.status === 'queued') return;
           setActiveTaskRunId(null);
@@ -1069,9 +1288,9 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
         ? 'Login Pending'
         : selectedServer?.authState === 'expired'
           ? 'Login Expired'
-        : selectedServer?.authState === 'login_required'
-          ? 'Login Required'
-          : 'Unknown';
+          : selectedServer?.authState === 'login_required'
+            ? 'Login Required'
+            : 'Unknown';
 
   return (
     <div
@@ -1096,16 +1315,36 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
               <div className="rounded-full border border-default bg-[var(--color-panel)] px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-secondary">
                 {selectedServer?.label || 'No server'}
               </div>
-              <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={() => void refreshConnection()}>
+              <Button
+                size="sm"
+                variant="outline"
+                onPointerDown={stopPointerPropagation}
+                onClick={() => void refreshConnection()}
+              >
                 Refresh
               </Button>
-              <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={() => setIsEditing(true)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onPointerDown={stopPointerPropagation}
+                onClick={() => setIsEditing(true)}
+              >
                 Manage
               </Button>
-              <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={() => void disconnectRemoteCodex()}>
+              <Button
+                size="sm"
+                variant="outline"
+                onPointerDown={stopPointerPropagation}
+                onClick={() => void disconnectRemoteCodex()}
+              >
                 Disconnect
               </Button>
-              <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={() => setShowRemoteApp((value) => !value)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onPointerDown={stopPointerPropagation}
+                onClick={() => setShowRemoteApp((value) => !value)}
+              >
                 {showRemoteApp ? 'Hide Remote App' : 'Show Remote App'}
               </Button>
               <button
@@ -1124,12 +1363,15 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
             <div>Workspace Session: {state.workspaceSessionId ?? 'binding...'}</div>
             {state.activeThreadId ? <div>Thread: {state.activeThreadId}</div> : null}
             {activeTaskRunId ? <div>Active turn: {activeTaskRunId}</div> : null}
-            {state.lastError ? <div className="text-danger">Last error: {state.lastError}</div> : null}
+            {state.lastError ? (
+              <div className="text-danger">Last error: {state.lastError}</div>
+            ) : null}
           </div>
 
           {isEditing ? (
             <div className="rounded-lg border border-default bg-[var(--color-panel)] px-3 py-2 text-xs text-secondary">
-              The connection is live. Disconnect if you need to reconfigure the server or workspace selection.
+              The connection is live. Disconnect if you need to reconfigure the server or workspace
+              selection.
             </div>
           ) : null}
 
@@ -1160,7 +1402,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                 </div>
               ) : (
                 <div className="flex h-full items-center justify-center text-center text-sm text-secondary">
-                  Send a prompt here to use the widget as a native Remote Codex client. The remote app iframe is optional now.
+                  Send a prompt here to use the widget as a native Remote Codex client. The remote
+                  app iframe is optional now.
                 </div>
               )}
             </div>
@@ -1191,7 +1434,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
             {showRemoteApp ? (
               <div className="grid gap-2 rounded-xl border border-default bg-[var(--color-panel)] p-3">
                 <div className="text-xs text-secondary">
-                  Secondary remote app surface. The primary widget interaction path stays native in-canvas.
+                  Secondary remote app surface. The primary widget interaction path stays native
+                  in-canvas.
                 </div>
                 <iframe
                   title="Remote Codex App"
@@ -1207,7 +1451,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
           <div>
             <p className="text-sm font-semibold text-primary">Remote Codex</p>
             <p className="mt-1 text-xs text-secondary">
-              Litter-style widget sub-stack: saved servers, login handoff, remote workspace selection, and live connection state.
+              Litter-style widget sub-stack: saved servers, login handoff, remote workspace
+              selection, and live connection state.
             </p>
           </div>
 
@@ -1266,7 +1511,9 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                 className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
                 disabled={!selectedServerId || workspaces.length === 0}
               >
-                <option value="">{workspaces.length ? 'Select a workspace' : 'No workspaces yet'}</option>
+                <option value="">
+                  {workspaces.length ? 'Select a workspace' : 'No workspaces yet'}
+                </option>
                 {workspaces.map((workspace) => (
                   <option key={workspace.id} value={workspace.id}>
                     {workspace.label}
@@ -1280,31 +1527,65 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
             <div>Status: {statusLabel}</div>
             <div>Auth: {authLabel}</div>
             {state.remoteWorkspacePath ? <div>Workspace: {state.remoteWorkspacePath}</div> : null}
-            {state.lastHeartbeatAt ? <div>Last heartbeat: {new Date(state.lastHeartbeatAt).toLocaleString()}</div> : null}
-            {state.lastError ? <div className="text-danger">Last error: {state.lastError}</div> : null}
+            {state.lastHeartbeatAt ? (
+              <div>Last heartbeat: {new Date(state.lastHeartbeatAt).toLocaleString()}</div>
+            ) : null}
+            {state.lastError ? (
+              <div className="text-danger">Last error: {state.lastError}</div>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={() => setShowServerForm((value) => !value)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onPointerDown={stopPointerPropagation}
+              onClick={() => {
+                setServerFormErrors({});
+                setShowServerForm((value) => !value);
+              }}
+            >
               {showServerForm ? 'Hide Server Form' : 'Add Server'}
             </Button>
             {selectedServer ? (
-              <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={editServer}>
+              <Button
+                size="sm"
+                variant="outline"
+                onPointerDown={stopPointerPropagation}
+                onClick={editServer}
+              >
                 Edit Server
               </Button>
             ) : null}
             {selectedServer ? (
-              <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={() => void deleteServer()}>
+              <Button
+                size="sm"
+                variant="outline"
+                onPointerDown={stopPointerPropagation}
+                onClick={() => void deleteServer()}
+              >
                 Delete Server
               </Button>
             ) : null}
             {selectedServer && selectedServer.authStrategy !== 'none' ? (
-              <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={() => void startAuth()}>
+              <Button
+                size="sm"
+                variant="outline"
+                onPointerDown={stopPointerPropagation}
+                onClick={() => void startAuth()}
+              >
                 Open Login
               </Button>
             ) : null}
-            {selectedServer && selectedServer.authStrategy !== 'none' && (loginUrl || selectedServer.authState === 'pending') ? (
-              <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={() => void completeAuth()}>
+            {selectedServer &&
+            selectedServer.authStrategy !== 'none' &&
+            (loginUrl || selectedServer.authState === 'pending') ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onPointerDown={stopPointerPropagation}
+                onClick={() => void completeAuth()}
+              >
                 Close Login Helper
               </Button>
             ) : null}
@@ -1312,22 +1593,35 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
 
           {showServerForm ? (
             <div className="grid gap-3 rounded-xl border border-default bg-surface p-3">
+              {serverFormErrors.form ? (
+                <div
+                  className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger"
+                  role="alert"
+                >
+                  {serverFormErrors.form}
+                </div>
+              ) : null}
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-secondary">Server Label</span>
                 <input
                   value={serverForm.label}
                   onPointerDown={stopPointerPropagation}
-                  onChange={(event) => setServerForm((previous) => ({ ...previous, label: event.target.value }))}
-                  className="w-full rounded-lg border border-default bg-[var(--color-panel)] px-3 py-2 text-sm text-primary outline-none"
+                  onChange={(event) =>
+                    setServerForm((previous) => ({ ...previous, label: event.target.value }))
+                  }
+                  className={fieldErrorClass(serverFormErrors.label, 'bg-[var(--color-panel)]')}
                   placeholder="Remote Codex Prod"
                 />
+                <FieldError>{serverFormErrors.label}</FieldError>
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-secondary">Description</span>
                 <input
                   value={serverForm.description}
                   onPointerDown={stopPointerPropagation}
-                  onChange={(event) => setServerForm((previous) => ({ ...previous, description: event.target.value }))}
+                  onChange={(event) =>
+                    setServerForm((previous) => ({ ...previous, description: event.target.value }))
+                  }
                   className="w-full rounded-lg border border-default bg-[var(--color-panel)] px-3 py-2 text-sm text-primary outline-none"
                   placeholder="Primary remote Codex app"
                 />
@@ -1355,15 +1649,25 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                   <input
                     value={serverForm.directTargetUrl}
                     onPointerDown={stopPointerPropagation}
-                    onChange={(event) => setServerForm((previous) => ({ ...previous, directTargetUrl: event.target.value }))}
-                    className="w-full rounded-lg border border-default bg-[var(--color-panel)] px-3 py-2 text-sm text-primary outline-none"
+                    onChange={(event) =>
+                      setServerForm((previous) => ({
+                        ...previous,
+                        directTargetUrl: event.target.value,
+                      }))
+                    }
+                    className={fieldErrorClass(
+                      serverFormErrors.directTargetUrl,
+                      'bg-[var(--color-panel)]',
+                    )}
                     placeholder="https://remote-codex.example/"
                   />
+                  <FieldError>{serverFormErrors.directTargetUrl}</FieldError>
                 </label>
               ) : (
                 <div className="grid gap-3 rounded-lg border border-default bg-[var(--color-panel)] p-3">
                   <div className="text-xs text-secondary">
-                    SSH credentials are sent to the widget service only. They are not stored in TLDraw shape state or returned by list APIs.
+                    SSH credentials are sent to the widget service only. They are not stored in
+                    TLDraw shape state or returned by list APIs.
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="flex flex-col gap-1">
@@ -1371,40 +1675,64 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                       <input
                         value={serverForm.sshHost}
                         onPointerDown={stopPointerPropagation}
-                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshHost: event.target.value }))}
-                        className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
+                        onChange={(event) =>
+                          setServerForm((previous) => ({
+                            ...previous,
+                            sshHost: event.target.value,
+                          }))
+                        }
+                        className={fieldErrorClass(serverFormErrors.sshHost)}
                         placeholder="codex-box.tailnet.ts.net"
                       />
+                      <FieldError>{serverFormErrors.sshHost}</FieldError>
                     </label>
                     <label className="flex flex-col gap-1">
                       <span className="text-xs text-secondary">SSH Port</span>
                       <input
                         value={serverForm.sshPort}
                         onPointerDown={stopPointerPropagation}
-                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshPort: event.target.value }))}
-                        className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
+                        onChange={(event) =>
+                          setServerForm((previous) => ({
+                            ...previous,
+                            sshPort: event.target.value,
+                          }))
+                        }
+                        className={fieldErrorClass(serverFormErrors.sshPort)}
                         placeholder="22"
                       />
+                      <FieldError>{serverFormErrors.sshPort}</FieldError>
                     </label>
                     <label className="flex flex-col gap-1">
                       <span className="text-xs text-secondary">SSH Username</span>
                       <input
                         value={serverForm.sshUsername}
                         onPointerDown={stopPointerPropagation}
-                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshUsername: event.target.value }))}
-                        className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
-                        placeholder="ubuntu"
+                        onChange={(event) =>
+                          setServerForm((previous) => ({
+                            ...previous,
+                            sshUsername: event.target.value,
+                          }))
+                        }
+                        className={fieldErrorClass(serverFormErrors.sshUsername)}
+                        placeholder="bsteinher"
                       />
+                      <FieldError>{serverFormErrors.sshUsername}</FieldError>
                     </label>
                     <label className="flex flex-col gap-1">
                       <span className="text-xs text-secondary">Remote Codex Port</span>
                       <input
                         value={serverForm.sshRemotePort}
                         onPointerDown={stopPointerPropagation}
-                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshRemotePort: event.target.value }))}
-                        className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
-                        placeholder="4500"
+                        onChange={(event) =>
+                          setServerForm((previous) => ({
+                            ...previous,
+                            sshRemotePort: event.target.value,
+                          }))
+                        }
+                        className={fieldErrorClass(serverFormErrors.sshRemotePort)}
+                        placeholder="8390"
                       />
+                      <FieldError>{serverFormErrors.sshRemotePort}</FieldError>
                     </label>
                   </div>
                   <label className="flex flex-col gap-1">
@@ -1412,10 +1740,21 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                     <textarea
                       value={serverForm.sshPrivateKey}
                       onPointerDown={stopPointerPropagation}
-                      onChange={(event) => setServerForm((previous) => ({ ...previous, sshPrivateKey: event.target.value }))}
-                      className="min-h-24 w-full rounded-lg border border-default bg-surface px-3 py-2 font-mono text-xs text-primary outline-none"
-                      placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                      onChange={(event) =>
+                        setServerForm((previous) => ({
+                          ...previous,
+                          sshPrivateKey: event.target.value,
+                        }))
+                      }
+                      className={cn(
+                        'min-h-24 w-full rounded-lg border bg-surface px-3 py-2 font-mono text-xs text-primary outline-none',
+                        serverFormErrors.sshPrivateKey
+                          ? 'border-danger focus:border-danger'
+                          : 'border-default',
+                      )}
+                      placeholder={`-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----`}
                     />
+                    <FieldError>{serverFormErrors.sshPrivateKey}</FieldError>
                   </label>
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="flex flex-col gap-1">
@@ -1424,7 +1763,12 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                         value={serverForm.sshPassphrase}
                         type="password"
                         onPointerDown={stopPointerPropagation}
-                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshPassphrase: event.target.value }))}
+                        onChange={(event) =>
+                          setServerForm((previous) => ({
+                            ...previous,
+                            sshPassphrase: event.target.value,
+                          }))
+                        }
                         className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
                         placeholder="optional"
                       />
@@ -1434,10 +1778,16 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                       <input
                         value={serverForm.sshHostKeySha256}
                         onPointerDown={stopPointerPropagation}
-                        onChange={(event) => setServerForm((previous) => ({ ...previous, sshHostKeySha256: event.target.value }))}
-                        className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none"
-                        placeholder="required, e.g. SHA256:..."
+                        onChange={(event) =>
+                          setServerForm((previous) => ({
+                            ...previous,
+                            sshHostKeySha256: event.target.value,
+                          }))
+                        }
+                        className={fieldErrorClass(serverFormErrors.sshHostKeySha256)}
+                        placeholder="SHA256:hg21+tjDwXo3cYyAxc23NHw2g2PLOaWgh6KHORwfvow"
                       />
+                      <FieldError>{serverFormErrors.sshHostKeySha256}</FieldError>
                     </label>
                   </div>
                 </div>
@@ -1466,10 +1816,13 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                   <input
                     value={serverForm.authUrl}
                     onPointerDown={stopPointerPropagation}
-                    onChange={(event) => setServerForm((previous) => ({ ...previous, authUrl: event.target.value }))}
-                    className="w-full rounded-lg border border-default bg-[var(--color-panel)] px-3 py-2 text-sm text-primary outline-none"
+                    onChange={(event) =>
+                      setServerForm((previous) => ({ ...previous, authUrl: event.target.value }))
+                    }
+                    className={fieldErrorClass(serverFormErrors.authUrl, 'bg-[var(--color-panel)]')}
                     placeholder="https://remote-codex.example/login"
                   />
+                  <FieldError>{serverFormErrors.authUrl}</FieldError>
                 </label>
               ) : null}
               <label className="flex flex-col gap-1">
@@ -1477,14 +1830,30 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                 <textarea
                   value={serverForm.workspacesText}
                   onPointerDown={stopPointerPropagation}
-                  onChange={(event) => setServerForm((previous) => ({ ...previous, workspacesText: event.target.value }))}
-                  className="min-h-28 w-full rounded-lg border border-default bg-[var(--color-panel)] px-3 py-2 text-sm text-primary outline-none"
-                  placeholder={`PRESENT|/srv/codex/repos/PRESENT\nLitter|/srv/codex/repos/litter`}
+                  onChange={(event) =>
+                    setServerForm((previous) => ({
+                      ...previous,
+                      workspacesText: event.target.value,
+                    }))
+                  }
+                  className={cn(
+                    'min-h-28 w-full rounded-lg border bg-[var(--color-panel)] px-3 py-2 text-sm text-primary outline-none',
+                    serverFormErrors.workspacesText
+                      ? 'border-danger focus:border-danger'
+                      : 'border-default',
+                  )}
+                  placeholder={`PRESENT|/Users/you/PRESENT\nLitter|/Users/you/litter`}
                 />
+                <FieldError>{serverFormErrors.workspacesText}</FieldError>
               </label>
               <div className="flex gap-2">
-                <Button size="sm" onPointerDown={stopPointerPropagation} onClick={() => void saveServer()} disabled={isBusy}>
-                  {serverForm.id ? 'Save Server' : 'Create Server'}
+                <Button
+                  size="sm"
+                  onPointerDown={stopPointerPropagation}
+                  onClick={() => void saveServer()}
+                  disabled={isBusy}
+                >
+                  {isBusy ? 'Saving...' : serverForm.id ? 'Save Server' : 'Create Server'}
                 </Button>
                 <Button
                   size="sm"
@@ -1492,25 +1861,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
                   onPointerDown={stopPointerPropagation}
                   onClick={() => {
                     setShowServerForm(false);
-                    setServerForm({
-                    id: '',
-                    label: '',
-                    description: '',
-                    transportKind: 'ssh',
-                    directTargetUrl: '',
-                    sshHost: '',
-                    sshPort: '22',
-                    sshUsername: '',
-                    sshPrivateKey: '',
-                    sshPassphrase: '',
-                    sshHostKeySha256: '',
-                    sshRemoteHost: '127.0.0.1',
-                    sshRemotePort: '4500',
-                    sshRemoteProtocol: 'http',
-                    authStrategy: 'none',
-                    authUrl: '',
-                    workspacesText: '',
-                    });
+                    setServerForm(emptyServerForm);
+                    setServerFormErrors({});
                   }}
                 >
                   Cancel
@@ -1522,7 +1874,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
           {loginUrl ? (
             <div className="grid gap-2 rounded-xl border border-default bg-surface p-3">
               <div className="text-xs text-secondary">
-                Use this as a login handoff helper. The widget does not claim server-side auth proof until a real callback flow exists.
+                Use this as a login handoff helper. The widget does not claim server-side auth proof
+                until a real callback flow exists.
               </div>
               <iframe
                 title="Widget Codex Login"
@@ -1539,10 +1892,19 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
               onClick={() => void connectRemoteCodex()}
               disabled={isBusy || !selectedServerId}
             >
-              {isBusy ? 'Working...' : state.connectionId ? 'Reconnect Remote Codex' : 'Connect Remote Codex'}
+              {isBusy
+                ? 'Working...'
+                : state.connectionId
+                  ? 'Reconnect Remote Codex'
+                  : 'Connect Remote Codex'}
             </Button>
             {state.connectionId ? (
-              <Button size="sm" variant="outline" onPointerDown={stopPointerPropagation} onClick={() => void disconnectRemoteCodex()}>
+              <Button
+                size="sm"
+                variant="outline"
+                onPointerDown={stopPointerPropagation}
+                onClick={() => void disconnectRemoteCodex()}
+              >
                 Disconnect
               </Button>
             ) : null}
