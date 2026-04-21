@@ -80,6 +80,38 @@ describe('CodexRemoteWidget', () => {
     expect(screen.getByRole('option', { name: 'Remote Prod' })).toBeTruthy();
   });
 
+  it('does not crash when the server list omits workspaces', async () => {
+    (global.fetch as jest.Mock).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/widget-codex/servers') {
+        return {
+          ok: true,
+          json: async () => ({
+            realtimeUrl: null,
+            servers: [
+              {
+                id: 'wcsrv_partial',
+                label: 'Partial Server',
+                authStrategy: 'none',
+                authState: 'authenticated',
+                transportKind: 'ssh',
+              },
+            ],
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({}),
+      } as Response;
+    });
+
+    render(<CodexRemoteWidget title="Remote Codex" />);
+
+    expect(await screen.findByText('Connect Remote Codex')).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Partial Server' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'No workspaces yet' })).toBeTruthy();
+  });
+
   it('connects through the widget-codex api and persists the returned remote session state', async () => {
     const connectedSnapshot = {
       widgetSession: {
