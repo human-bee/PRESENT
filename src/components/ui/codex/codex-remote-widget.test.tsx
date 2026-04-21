@@ -3,12 +3,17 @@ import { CodexRemoteWidget } from './codex-remote-widget';
 
 const componentRegistryUpdateMock = jest.fn().mockResolvedValue(undefined);
 const useComponentRegistrationMock = jest.fn();
+const fetchWithSupabaseAuthMock = jest.fn();
 
 jest.mock('@/lib/component-registry', () => ({
   ComponentRegistry: {
     update: (...args: unknown[]) => componentRegistryUpdateMock(...args),
   },
   useComponentRegistration: (...args: unknown[]) => useComponentRegistrationMock(...args),
+}));
+
+jest.mock('@/lib/supabase/auth-headers', () => ({
+  fetchWithSupabaseAuth: (...args: unknown[]) => fetchWithSupabaseAuthMock(...args),
 }));
 
 const buildServersPayload = () => ({
@@ -41,6 +46,7 @@ describe('CodexRemoteWidget', () => {
   beforeEach(() => {
     componentRegistryUpdateMock.mockClear();
     useComponentRegistrationMock.mockClear();
+    fetchWithSupabaseAuthMock.mockClear();
     (global as any).WebSocket = undefined;
     global.fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -55,6 +61,9 @@ describe('CodexRemoteWidget', () => {
         json: async () => ({}),
       } as Response;
     });
+    fetchWithSupabaseAuthMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) =>
+      fetch(input, init),
+    );
   });
 
   afterEach(() => {
@@ -66,6 +75,7 @@ describe('CodexRemoteWidget', () => {
 
     expect(await screen.findByText('Connect Remote Codex')).toBeTruthy();
     expect(await screen.findByText(/saved servers, login handoff/i)).toBeTruthy();
+    expect(fetchWithSupabaseAuthMock).toHaveBeenCalledWith('/api/widget-codex/servers', undefined);
     expect(global.fetch).toHaveBeenCalledWith('/api/widget-codex/servers', undefined);
     expect(screen.getByRole('option', { name: 'Remote Prod' })).toBeTruthy();
   });
