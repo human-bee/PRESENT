@@ -11,11 +11,19 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditor } from '@tldraw/tldraw';
-import { componentSizeInfo, getComponentSizeInfo } from '@/lib/component-sizing';
+import { getComponentSizeInfo } from '@/lib/component-sizing';
 import { ComponentStoreContext } from '../hooks/useCanvasStore';
 import type { CustomShape } from '../utils/shapeUtils';
 import { useContextKey } from '@/components/RoomScopedProviders';
 import { clearLocalPin, getLocalPin, type LocalPinData } from '../../utils/local-pin-store';
+import {
+  getCustomWidgetAutoFitSize,
+  getCustomWidgetLayout,
+  resolveSizingComponentName,
+  shouldMeasureCustomWidget,
+  type WidgetSize,
+} from './custom-widget-sizing';
+import { useMeasuredCustomWidgetSize } from './useMeasuredCustomWidgetSize';
 
 export class ComponentErrorBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
@@ -42,61 +50,6 @@ export class ComponentErrorBoundary extends Component<
   }
 }
 
-function getStoredComponentTypeName(stored: ReactNode | null | undefined): string | null {
-  const readTypeName = (type: unknown): string | null => {
-    if (!type || typeof type === 'string') return null;
-    const record = type as { displayName?: unknown; name?: unknown };
-    if (typeof record.displayName === 'string' && record.displayName.trim()) {
-      return record.displayName.trim();
-    }
-    if (typeof record.name === 'string' && record.name.trim()) {
-      return record.name.trim();
-    }
-    return null;
-  };
-
-  if (React.isValidElement(stored)) {
-    return readTypeName(stored.type);
-  }
-
-  if (stored && typeof stored === 'object') {
-    const record = stored as {
-      type?: unknown;
-      Component?: unknown;
-      component?: unknown;
-      props?: { componentType?: unknown; type?: unknown };
-    };
-    const propComponentType = record.props?.componentType ?? record.props?.type;
-    if (typeof propComponentType === 'string' && propComponentType.trim()) {
-      return propComponentType.trim();
-    }
-    return readTypeName(record.type ?? record.Component ?? record.component);
-  }
-
-  return null;
-}
-
-function resolveSizingComponentName(shapeName: string, stored: ReactNode | null | undefined): string {
-  if (componentSizeInfo[shapeName]) return shapeName;
-
-  const storedTypeName = getStoredComponentTypeName(stored);
-  if (!storedTypeName) return shapeName;
-  if (componentSizeInfo[storedTypeName]) return storedTypeName;
-
-  const embeddedKnownName = Object.keys(componentSizeInfo).find((name) => storedTypeName.includes(name));
-  return embeddedKnownName ?? shapeName;
-}
-
-function readMeasuredElementSize(el: HTMLElement): { w: number; h: number } {
-  // Use layout metrics that are stable under CSS transforms so we do not chase our own scaling.
-  const widthCandidate = Math.max(el.scrollWidth, el.offsetWidth, el.clientWidth);
-  const heightCandidate = Math.max(el.scrollHeight, el.offsetHeight, el.clientHeight);
-  return {
-    w: Math.ceil(Number.isFinite(widthCandidate) ? widthCandidate : 0),
-    h: Math.ceil(Number.isFinite(heightCandidate) ? heightCandidate : 0),
-  };
-}
-
 export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scaleWrapperRef = useRef<HTMLDivElement>(null);
@@ -108,72 +61,25 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const roomName = useContextKey() || 'canvas';
   const [localPin, setLocalPinState] = useState<LocalPinData | null>(null);
 
-  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
-  const [pinnedNaturalSize, setPinnedNaturalSize] = useState<{ w: number; h: number } | null>(null);
+  const [pinnedNaturalSize, setPinnedNaturalSize] = useState<WidgetSize | null>(null);
   const autoFittedRef = useRef(false);
-  const lastAutoFitSizeRef = useRef<{ w: number; h: number } | null>(null);
-  const lastMeasuredSizeRef = useRef<{ w: number; h: number } | null>(null);
+  const lastAutoFitSizeRef = useRef<WidgetSize | null>(null);
 
   const storedComponent = componentStore?.get(shape.props.customComponent);
   const sizingComponentName = resolveSizingComponentName(shape.props.name, storedComponent);
   const sizeInfo = getComponentSizeInfo(sizingComponentName);
   const sizingPolicy = sizeInfo.sizingPolicy || 'fit_until_user_resize';
-  const isFixedLivekitTile =
+  const isFixedSizeWidget =
     shape.props.name === 'LivekitParticipantTile' || shape.props.name === 'LivekitScreenShareTile';
-
-  useEffect(() => {
-    if (sizingPolicy === 'scale_only' || localPin || isFixedLivekitTile) return;
-    const el = contentInnerRef.current;
-    if (!el) return;
-
-    let frame: number | null = null;
-
-    const measure = () => {
-      const { w, h } = readMeasuredElementSize(el);
-      const prev = lastMeasuredSizeRef.current;
-      if (!prev || Math.abs(prev.w - w) > 1 || Math.abs(prev.h - h) > 1) {
-        lastMeasuredSizeRef.current = { w, h };
-        setNaturalSize({ w, h });
-      }
-    };
-
-    const observer = new ResizeObserver(() => {
-      if (frame !== null) cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(measure);
-    });
-
-    observer.observe(el);
-    frame = requestAnimationFrame(measure);
-
-    return () => {
-      if (frame !== null) cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-  }, [sizingPolicy, localPin, isFixedLivekitTile]);
-
-  useEffect(() => {
-    if (sizingPolicy === 'scale_only' || localPin || isFixedLivekitTile) return;
-    const el = contentInnerRef.current;
-    if (!el) return;
-
-    const frame = requestAnimationFrame(() => {
-      const { w, h } = readMeasuredElementSize(el);
-      const prev = lastMeasuredSizeRef.current;
-      if (!prev || Math.abs(prev.w - w) > 1 || Math.abs(prev.h - h) > 1) {
-        lastMeasuredSizeRef.current = { w, h };
-        setNaturalSize({ w, h });
-      }
-    });
-
-    return () => {
-      cancelAnimationFrame(frame);
-    };
+  const naturalSize = useMeasuredCustomWidgetSize({
+    enabled: shouldMeasureCustomWidget({
+      sizingPolicy,
+      isPinned: Boolean(localPin),
+      isFixedSizeWidget,
+    }),
+    contentRef: contentInnerRef,
+    resetKey: shape.props.customComponent,
   });
-
-  useEffect(() => {
-    lastMeasuredSizeRef.current = null;
-    setNaturalSize(null);
-  }, [shape.props.customComponent]);
 
   useEffect(() => {
     if (localPin) {
@@ -259,56 +165,26 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   }, [roomName, shape.id]);
 
   useEffect(() => {
-    if (!editor || !naturalSize || localPin || isFixedLivekitTile) return;
+    if (!editor || localPin || isFixedSizeWidget) return;
     const unsafeEditor = editor as any;
+    const nextSize = getCustomWidgetAutoFitSize({
+      naturalSize,
+      shapeSize: { w: shape.props.w, h: shape.props.h },
+      sizeInfo,
+      sizingPolicy,
+      userHasResized: Boolean(shape.props.userResized),
+      autoFitted: autoFittedRef.current,
+      lastAutoFitSize: lastAutoFitSizeRef.current,
+    });
 
-    const policy = sizingPolicy;
-    const userHasResized = Boolean(shape.props.userResized);
-
-    const { h: rawH } = naturalSize;
-    // Guard: some components can transiently report 0 during first layout
-    const minH = Math.max(32, sizeInfo.minHeight * 0.5);
-    if (!Number.isFinite(rawH) || rawH < minH) {
-      return;
-    }
-    // Width: always use design width from sizeInfo (components have fixed design widths)
-    // Height: use measured height for dynamic content
-    const nw = sizeInfo.naturalWidth;
-    const nh = rawH;
-    const widthChanged = Math.abs(shape.props.w - nw) > 1;
-    const heightChanged = Math.abs(shape.props.h - nh) > 1;
-    const contentOverflowsShape = nh > shape.props.h + 1;
-    const lastAutoFitSize = lastAutoFitSizeRef.current;
-    const shapeReflectsLastAutoFit =
-      !lastAutoFitSize ||
-      (Math.abs(shape.props.w - lastAutoFitSize.w) <= 1 &&
-        Math.abs(shape.props.h - lastAutoFitSize.h) <= 1);
-    const canFitPolicy =
-      policy === 'always_fit' || (policy === 'fit_until_user_resize' && !userHasResized);
-    const canApplyFit =
-      policy === 'always_fit' ||
-      (!autoFittedRef.current && (canFitPolicy || contentOverflowsShape)) ||
-      (shapeReflectsLastAutoFit && (canFitPolicy || contentOverflowsShape));
-
-    if ((widthChanged || heightChanged) && canApplyFit) {
+    if (nextSize) {
       unsafeEditor.updateShapes?.([
-        { id: shape.id as any, type: 'custom', props: { w: nw, h: nh } },
+        { id: shape.id as any, type: 'custom', props: nextSize },
       ]);
       autoFittedRef.current = true;
-      lastAutoFitSizeRef.current = { w: nw, h: nh };
+      lastAutoFitSizeRef.current = nextSize;
     }
-  }, [editor, naturalSize, shape.id, shape.props.name, shape.props.userResized, shape.props.w, shape.props.h, sizingPolicy, sizeInfo.naturalWidth, sizeInfo.minHeight, localPin, isFixedLivekitTile]);
-
-  // For width: Always use the component's design width to avoid feedback loops
-  // (components like DebateScorecard have fixed widths like w-[1200px])
-  // For height: Use measured height for dynamic content, or natural height for scale_only
-  const baseW = sizeInfo.naturalWidth;
-  const measuredHeight = isFixedLivekitTile
-    ? sizeInfo.naturalHeight
-    : localPin
-      ? (pinnedNaturalSize?.h ?? naturalSize?.h ?? sizeInfo.naturalHeight)
-      : (naturalSize?.h ?? sizeInfo.naturalHeight);
-  const baseH = sizingPolicy === 'scale_only' ? sizeInfo.naturalHeight : measuredHeight;
+  }, [editor, naturalSize, shape.id, shape.props.userResized, shape.props.w, shape.props.h, sizingPolicy, sizeInfo, localPin, isFixedSizeWidget]);
 
   const pinnedShapeW =
     localPin && Number.isFinite(localPin.shapeW) && (localPin.shapeW as number) > 0
@@ -318,24 +194,22 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
     localPin && Number.isFinite(localPin.shapeH) && (localPin.shapeH as number) > 0
       ? (localPin.shapeH as number)
       : undefined;
-  const layoutW = pinnedShapeW ?? shape.props.w;
-  const layoutH = pinnedShapeH ?? shape.props.h;
-
-  const scaleX = layoutW / baseW;
-  const scaleY = layoutH / baseH;
-  const scale = Math.min(scaleX, scaleY);
-
-  const scaledWidth = baseW * scale;
-  const scaledHeight = baseH * scale;
-  const offsetX = (layoutW - scaledWidth) / 2;
-  const offsetY = (layoutH - scaledHeight) / 2;
+  const layout = getCustomWidgetLayout({
+    sizeInfo,
+    sizingPolicy,
+    isFixedSizeWidget,
+    naturalSize,
+    pinnedNaturalSize: localPin ? pinnedNaturalSize : null,
+    shapeSize: { w: shape.props.w, h: shape.props.h },
+    pinnedShapeSize: { w: pinnedShapeW, h: pinnedShapeH },
+  });
 
   const content = (
     <div
       ref={containerRef}
       style={{
-        width: `${layoutW}px`,
-        height: `${layoutH}px`,
+        width: `${layout.layoutW}px`,
+        height: `${layout.layoutH}px`,
         overflow: 'hidden',
         position: 'relative',
         background: 'transparent',
@@ -364,18 +238,18 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
         ref={scaleWrapperRef}
         style={{
           position: 'absolute',
-          left: `${offsetX}px`,
-          top: `${offsetY}px`,
-          width: `${baseW}px`,
-          height: `${baseH}px`,
-          transform: `scale(${scale})`,
+          left: `${layout.offsetX}px`,
+          top: `${layout.offsetY}px`,
+          width: `${layout.baseW}px`,
+          height: `${layout.baseH}px`,
+          transform: `scale(${layout.scale})`,
           transformOrigin: 'top left',
         }}
       >
         {/* Ensure percentage-based layouts (w-full, aspect-ratio padding) have a stable containing box. */}
         <div
           ref={contentInnerRef}
-          style={{ width: `${baseW}px`, height: `${baseH}px`, display: 'block' }}
+          style={{ width: `${layout.baseW}px`, height: `${layout.baseH}px`, display: 'block' }}
         >
           <ComponentErrorBoundary
             fallback={<div style={{ padding: 10, color: 'var(--color-text-muted)' }}>Component error</div>}
