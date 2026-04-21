@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/shared/button';
 import { ComponentRegistry, useComponentRegistration } from '@/lib/component-registry';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import { cn } from '@/lib/utils';
 import { codexRemoteWidgetSchema, type CodexRemoteWidgetProps } from './codex-remote-widget-schema';
 
@@ -210,7 +211,7 @@ function createWidgetSessionId() {
 }
 
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, init);
+  const response = await fetchWithSupabaseAuth(input, init);
   const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
   if (!response.ok) {
     const error = new Error(
