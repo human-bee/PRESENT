@@ -1,7 +1,13 @@
 import React from 'react';
 import { render, act, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { customShapeUtil, customShape, TldrawCanvasProps, TldrawCanvas } from './tldraw-canvas'; // Assuming customShape type is exported
+import {
+  ComponentStoreContext,
+  customShapeUtil,
+  customShape,
+  TldrawCanvasProps,
+  TldrawCanvas,
+} from './tldraw-canvas'; // Assuming customShape type is exported
 import { Editor, TLBaseShape } from '@tldraw/tldraw';
 
 const mockUpdateShapes = jest.fn();
@@ -172,6 +178,10 @@ const defaultTestShape: customShape = {
   meta: {},
 };
 
+function CodexRemoteWidget() {
+  return <div>Remote Codex</div>;
+}
+
 describe('customShapeUtil.component - ResizeObserver Logic', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -268,6 +278,62 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
       <TestShapeRenderer
         shape={{ ...codexShape, props: { ...codexShape.props, w: 720, h: 640 } }}
       />,
+    );
+
+    act(() => {
+      emitMeasuredResize(720, 860);
+    });
+    act(() => {
+      jest.advanceTimersByTime(150);
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(mockUpdateShapes).toHaveBeenCalledTimes(2);
+    expect(mockUpdateShapes).toHaveBeenLastCalledWith([
+      { id: defaultTestShape.id, type: 'custom', props: { w: 720, h: 860 } },
+    ]);
+  });
+
+  it('uses the stored widget component type for sizing when the shape name is a display label', () => {
+    const codexMessageId = 'codex-widget-message';
+    const codexShape = {
+      ...defaultTestShape,
+      props: {
+        ...defaultTestShape.props,
+        customComponent: codexMessageId,
+        name: 'Remote Codex',
+      },
+    };
+    const componentStore = new Map<string, React.ReactNode>([
+      [codexMessageId, <CodexRemoteWidget key="codex" />],
+    ]);
+
+    const { rerender } = render(
+      <ComponentStoreContext.Provider value={componentStore}>
+        <TestShapeRenderer shape={codexShape} />
+      </ComponentStoreContext.Provider>,
+    );
+    expect(mockResizeObserverCallback).not.toBeNull();
+
+    act(() => {
+      emitMeasuredResize(720, 640);
+    });
+    act(() => {
+      jest.advanceTimersByTime(150);
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(mockUpdateShapes).toHaveBeenCalledTimes(1);
+    expect(mockUpdateShapes).toHaveBeenLastCalledWith([
+      { id: defaultTestShape.id, type: 'custom', props: { w: 720, h: 640 } },
+    ]);
+
+    rerender(
+      <ComponentStoreContext.Provider value={componentStore}>
+        <TestShapeRenderer
+          shape={{ ...codexShape, props: { ...codexShape.props, w: 720, h: 640 } }}
+        />
+      </ComponentStoreContext.Provider>,
     );
 
     act(() => {
