@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
@@ -346,8 +347,14 @@ let lastSupabaseHydratedAt = 0;
 const pendingMirrorWrites = new Set<Promise<void>>();
 let warningKeys = new Set<string>();
 
-const getStatePath = () =>
-  process.env.PRESENT_RESET_STATE_PATH ?? path.join(process.cwd(), '.tmp', 'present-reset-state.json');
+const getDefaultWritableStatePath = () => {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.cwd() === '/var/task') {
+    return path.join(os.tmpdir(), 'present-reset-state.json');
+  }
+  return path.join(process.cwd(), '.tmp', 'present-reset-state.json');
+};
+
+const getStatePath = () => process.env.PRESENT_RESET_STATE_PATH ?? getDefaultWritableStatePath();
 
 const getSupabaseCacheTtlMs = () => {
   const rawValue = Number(process.env.PRESENT_RESET_SUPABASE_CACHE_TTL_MS ?? '2000');

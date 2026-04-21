@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { KernelEvent, ModelProfile, WorkspaceSession } from '@present/contracts';
 
@@ -77,6 +78,7 @@ describe('reset persistence', () => {
     resetSupabaseTables();
     delete process.env.PRESENT_RESET_STATE_PATH;
     delete process.env.PRESENT_RESET_SUPABASE_CACHE_TTL_MS;
+    delete process.env.VERCEL;
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   });
@@ -280,5 +282,15 @@ describe('reset persistence', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('could not be read'));
 
     warnSpy.mockRestore();
+  });
+
+  it('uses os temp storage by default in serverless runtimes', async () => {
+    delete process.env.PRESENT_RESET_STATE_PATH;
+    process.env.VERCEL = '1';
+    resetKernelStateForTests();
+
+    expect(getResetKernelStatePath()).toBe(path.join(os.tmpdir(), 'present-reset-state.json'));
+
+    delete process.env.VERCEL;
   });
 });

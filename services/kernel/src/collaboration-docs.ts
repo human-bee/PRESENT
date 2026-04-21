@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import * as Y from 'yjs';
 import { z } from 'zod';
@@ -29,9 +30,15 @@ export type CollaborationDocument = z.infer<typeof collaborationDocumentSchema>;
 const COLLABORATOR_TTL_MS = 30_000;
 let storeLock: Promise<void> = Promise.resolve();
 
+const getDefaultWritableStorePath = () => {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.cwd() === '/var/task') {
+    return path.join(os.tmpdir(), 'present-reset-collaboration.json');
+  }
+  return path.join(process.cwd(), '.tmp', 'present-reset-collaboration.json');
+};
+
 const getStorePath = () =>
-  process.env.PRESENT_RESET_COLLABORATION_PATH ??
-  path.join(process.cwd(), '.tmp', 'present-reset-collaboration.json');
+  process.env.PRESENT_RESET_COLLABORATION_PATH ?? getDefaultWritableStorePath();
 
 const ensureParentDirectory = (storePath: string) => {
   fs.mkdirSync(path.dirname(storePath), { recursive: true });
