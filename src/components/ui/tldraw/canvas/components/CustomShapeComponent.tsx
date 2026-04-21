@@ -11,7 +11,7 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditor } from '@tldraw/tldraw';
-import { getComponentSizeInfo } from '@/lib/component-sizing';
+import { componentSizeInfo, getComponentSizeInfo } from '@/lib/component-sizing';
 import { ComponentStoreContext } from '../hooks/useCanvasStore';
 import type { CustomShape } from '../utils/shapeUtils';
 import { useContextKey } from '@/components/RoomScopedProviders';
@@ -42,6 +42,51 @@ export class ComponentErrorBoundary extends Component<
   }
 }
 
+function getStoredComponentTypeName(stored: ReactNode | null | undefined): string | null {
+  const readTypeName = (type: unknown): string | null => {
+    if (!type || typeof type === 'string') return null;
+    const record = type as { displayName?: unknown; name?: unknown };
+    if (typeof record.displayName === 'string' && record.displayName.trim()) {
+      return record.displayName.trim();
+    }
+    if (typeof record.name === 'string' && record.name.trim()) {
+      return record.name.trim();
+    }
+    return null;
+  };
+
+  if (React.isValidElement(stored)) {
+    return readTypeName(stored.type);
+  }
+
+  if (stored && typeof stored === 'object') {
+    const record = stored as {
+      type?: unknown;
+      Component?: unknown;
+      component?: unknown;
+      props?: { componentType?: unknown; type?: unknown };
+    };
+    const propComponentType = record.props?.componentType ?? record.props?.type;
+    if (typeof propComponentType === 'string' && propComponentType.trim()) {
+      return propComponentType.trim();
+    }
+    return readTypeName(record.type ?? record.Component ?? record.component);
+  }
+
+  return null;
+}
+
+function resolveSizingComponentName(shapeName: string, stored: ReactNode | null | undefined): string {
+  if (componentSizeInfo[shapeName]) return shapeName;
+
+  const storedTypeName = getStoredComponentTypeName(stored);
+  if (!storedTypeName) return shapeName;
+  if (componentSizeInfo[storedTypeName]) return storedTypeName;
+
+  const embeddedKnownName = Object.keys(componentSizeInfo).find((name) => storedTypeName.includes(name));
+  return embeddedKnownName ?? shapeName;
+}
+
 export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scaleWrapperRef = useRef<HTMLDivElement>(null);
@@ -58,7 +103,9 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const autoFittedRef = useRef(false);
   const lastMeasuredSizeRef = useRef<{ w: number; h: number } | null>(null);
 
-  const sizeInfo = getComponentSizeInfo(shape.props.name);
+  const storedComponent = componentStore?.get(shape.props.customComponent);
+  const sizingComponentName = resolveSizingComponentName(shape.props.name, storedComponent);
+  const sizeInfo = getComponentSizeInfo(sizingComponentName);
   const sizingPolicy = sizeInfo.sizingPolicy || 'fit_until_user_resize';
   const isFixedLivekitTile =
     shape.props.name === 'LivekitParticipantTile' || shape.props.name === 'LivekitScreenShareTile';
