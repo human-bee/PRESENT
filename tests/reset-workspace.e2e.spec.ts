@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const brokeredProxyUrl = /127\.0\.0\.1:4101\/sessions\/.+\/proxy\/(?:[^/]+\/)?$/;
+
 test.describe('reset workspace shell', () => {
   test('renders the reset mission control shell as the primary entrypoint', async ({ page }) => {
     await page.goto('/');
@@ -34,16 +36,16 @@ test.describe('reset workspace shell', () => {
     await expect(page.locator('select')).toContainText('remote-codex:');
 
     const remoteFrame = page.locator('iframe[title="Remote Codex"]');
-    await expect(remoteFrame).toHaveAttribute('src', /127\.0\.0\.1:4101\/sessions\/.+\/proxy\/$/);
+    await expect(remoteFrame).toHaveAttribute('src', brokeredProxyUrl);
     await expect(page.getByRole('link', { name: 'Pop Out' })).toHaveAttribute(
       'href',
-      /127\.0\.0\.1:4101\/sessions\/.+\/proxy\/$/,
+      brokeredProxyUrl,
     );
 
     await page.reload();
     await expect(page.locator('iframe[title="Remote Codex"]')).toHaveAttribute(
       'src',
-      /127\.0\.0\.1:4101\/sessions\/.+\/proxy\/$/,
+      brokeredProxyUrl,
     );
   });
 });

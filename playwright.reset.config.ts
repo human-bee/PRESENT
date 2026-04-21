@@ -9,7 +9,8 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   webServer: [
     {
-      command: 'npm run build && CODEX_BROKER_URL=http://127.0.0.1:4101 PORT=3011 npm run start',
+      command:
+        'NEXT_PUBLIC_CANVAS_DEV_BYPASS=true npm run build && NEXT_PUBLIC_CANVAS_DEV_BYPASS=true CODEX_BROKER_URL=http://127.0.0.1:4101 PORT=3011 npm run start',
       url: 'http://127.0.0.1:3011',
       reuseExistingServer: false,
       timeout: 240000,
