@@ -251,7 +251,7 @@ jobs:
             exit 1
           fi
 
-          if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+          if [ -z "${RAILWAY_API_KEY:-}" ] && [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
             echo "auth_source=RAILWAY_TOKEN action=redeploy"
             echo "Project token mode: skipping variable sync; Railway project tokens are deployment-scoped."
             RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_CONDUCTOR_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
@@ -321,7 +321,7 @@ jobs:
             return "$code"
           }
 
-          if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+          if [ -z "${RAILWAY_API_KEY:-}" ] && [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
             echo "auth_source=RAILWAY_TOKEN action=redeploy"
             RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_REALTIME_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
             exit 0
@@ -413,7 +413,7 @@ jobs:
             fi
           }
 
-          if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+          if [ -z "${RAILWAY_API_KEY:-}" ] && [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
             echo "auth_source=RAILWAY_TOKEN action=redeploy"
             echo "Project token mode: skipping variable sync; Railway project tokens are deployment-scoped."
             RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_CODEX_BROKER_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
@@ -515,7 +515,7 @@ jobs:
             return "$code"
           }
 
-          if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+          if [ -z "${RAILWAY_API_KEY:-}" ] && [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
             echo "auth_source=RAILWAY_TOKEN action=redeploy"
             echo "Project token mode: skipping variable sync; Railway project tokens are deployment-scoped."
             RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_WIDGET_CODEX_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
@@ -622,7 +622,7 @@ jobs:
             return "$code"
           }
 
-          if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+          if [ -z "${RAILWAY_API_KEY:-}" ] && [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
             echo "auth_source=RAILWAY_TOKEN action=redeploy"
             echo "Project token mode: skipping variable sync; Railway project tokens are deployment-scoped."
             RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_RAILTAIL_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
