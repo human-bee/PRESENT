@@ -263,6 +263,11 @@ function extractWidgetCodexErrorMessage(payload: Record<string, unknown> | null,
   return raw ? formatConnectivityError(raw) : `Request failed with status ${status}.`;
 }
 
+function normalizeWidgetCodexErrorForDisplay(value: string | null | undefined) {
+  const raw = extractNestedErrorMessage(value);
+  return raw ? formatConnectivityError(raw) : undefined;
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message
     ? formatConnectivityError(error.message)
@@ -308,7 +313,7 @@ function buildInitialState(
     authState: persistedState?.authState ?? 'unknown',
     activeThreadId: persistedState?.activeThreadId,
     lastHeartbeatAt: persistedState?.lastHeartbeatAt,
-    lastError: persistedState?.lastError,
+    lastError: normalizeWidgetCodexErrorForDisplay(persistedState?.lastError),
   } satisfies PersistedWidgetState;
 }
 
@@ -699,6 +704,7 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   );
 
   const selectedServer = servers.find((server) => server.id === selectedServerId) ?? null;
+  const displayLastError = normalizeWidgetCodexErrorForDisplay(state.lastError);
 
   const applySnapshot = useCallback(
     async (snapshot: WidgetCodexSnapshot) => {
@@ -744,7 +750,9 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
           snapshot.connection?.lastHeartbeatAt ??
           snapshot.widgetSession?.lastHeartbeatAt ??
           undefined,
-        lastError: snapshot.connection?.lastError ?? snapshot.widgetSession?.lastError ?? undefined,
+        lastError: normalizeWidgetCodexErrorForDisplay(
+          snapshot.connection?.lastError ?? snapshot.widgetSession?.lastError,
+        ),
       };
       await persistState(nextState);
       if (mountedRef.current) {
@@ -1228,7 +1236,7 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
         status: payload.connection.status,
         authState: payload.connection.authState,
         lastHeartbeatAt: payload.connection.lastHeartbeatAt ?? undefined,
-        lastError: payload.connection.lastError ?? undefined,
+        lastError: normalizeWidgetCodexErrorForDisplay(payload.connection.lastError),
       });
     } catch (error) {
       setState((previous) => ({
@@ -1520,8 +1528,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
             <div>Workspace Session: {state.workspaceSessionId ?? 'binding...'}</div>
             {state.activeThreadId ? <div>Thread: {state.activeThreadId}</div> : null}
             {activeTaskRunId ? <div>Active turn: {activeTaskRunId}</div> : null}
-            {state.lastError ? (
-              <div className="text-danger">Last error: {state.lastError}</div>
+            {displayLastError ? (
+              <div className="text-danger">Last error: {displayLastError}</div>
             ) : null}
           </div>
 
@@ -1687,8 +1695,8 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
             {state.lastHeartbeatAt ? (
               <div>Last heartbeat: {new Date(state.lastHeartbeatAt).toLocaleString()}</div>
             ) : null}
-            {state.lastError ? (
-              <div className="text-danger">Last error: {state.lastError}</div>
+            {displayLastError ? (
+              <div className="text-danger">Last error: {displayLastError}</div>
             ) : null}
           </div>
 
