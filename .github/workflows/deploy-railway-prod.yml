@@ -38,6 +38,11 @@ on:
         required: false
         default: false
         type: boolean
+      force_railtail:
+        description: 'Force deploy present-railtail'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -53,6 +58,7 @@ env:
   RAILWAY_REALTIME_SERVICE: present-realtime
   RAILWAY_CODEX_BROKER_SERVICE: present-codex-broker
   RAILWAY_WIDGET_CODEX_SERVICE: present-widget-codex
+  RAILWAY_RAILTAIL_SERVICE: present-railtail
 
 jobs:
   plan:
@@ -62,6 +68,7 @@ jobs:
       deploy_realtime: ${{ steps.plan.outputs.deploy_realtime }}
       deploy_codex_broker: ${{ steps.plan.outputs.deploy_codex_broker }}
       deploy_widget_codex: ${{ steps.plan.outputs.deploy_widget_codex }}
+      deploy_railtail: ${{ steps.plan.outputs.deploy_railtail }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -103,6 +110,7 @@ jobs:
           deploy_realtime=false
           deploy_codex_broker=false
           deploy_widget_codex=false
+          deploy_railtail=false
           is_dispatch_from_main=false
 
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
@@ -148,21 +156,28 @@ jobs:
             deploy_widget_codex=true
           fi
 
+          if [ "${{ github.event.inputs.force_railtail || 'false' }}" = "true" ]; then
+            deploy_railtail=true
+          fi
+
           if [ "$is_dispatch_from_main" = false ]; then
             deploy_conductor=false
             deploy_realtime=false
             deploy_codex_broker=false
             deploy_widget_codex=false
+            deploy_railtail=false
           fi
 
           echo "deploy_conductor=$deploy_conductor" >> "$GITHUB_OUTPUT"
           echo "deploy_realtime=$deploy_realtime" >> "$GITHUB_OUTPUT"
           echo "deploy_codex_broker=$deploy_codex_broker" >> "$GITHUB_OUTPUT"
           echo "deploy_widget_codex=$deploy_widget_codex" >> "$GITHUB_OUTPUT"
+          echo "deploy_railtail=$deploy_railtail" >> "$GITHUB_OUTPUT"
           echo "deploy_conductor=$deploy_conductor"
           echo "deploy_realtime=$deploy_realtime"
           echo "deploy_codex_broker=$deploy_codex_broker"
           echo "deploy_widget_codex=$deploy_widget_codex"
+          echo "deploy_railtail=$deploy_railtail"
 
   deploy-conductor:
     runs-on: ubuntu-latest
@@ -527,3 +542,103 @@ jobs:
               --skip-deploys
           fi
           run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_WIDGET_CODEX_SERVICE" --yes
+
+  deploy-railtail:
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.deploy_railtail == 'true'
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli
+
+      - name: Redeploy present-railtail
+        env:
+          RAILWAY_API_KEY: ${{ secrets.RAILWAY_API_KEY || '' }}
+          RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_TOKEN || '' }}
+          RAILTAIL_TARGET_ADDR: ${{ vars.RAILTAIL_TARGET_ADDR || 'bens-macbook-pro.tailb3d6e9.ts.net:22' }}
+          RAILTAIL_LISTEN_PORT: ${{ vars.RAILTAIL_LISTEN_PORT || '2222' }}
+          RAILTAIL_TS_HOSTNAME: ${{ vars.RAILTAIL_TS_HOSTNAME || 'present-railtail' }}
+          RAILTAIL_TS_STATEDIR_PATH: ${{ vars.RAILTAIL_TS_STATEDIR_PATH || '/tmp/railtail' }}
+          RAILTAIL_TS_EXTRA_ARGS: ${{ vars.RAILTAIL_TS_EXTRA_ARGS || '' }}
+          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY || secrets.RAILTAIL_TS_AUTH_KEY || '' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RAILWAY_API_KEY:-}" ] && [ -z "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+            echo "::error::Missing Railway auth. Set RAILWAY_API_KEY and/or RAILWAY_TOKEN in GitHub Actions secrets."
+            exit 1
+          fi
+          if [ -z "${TAILSCALE_AUTH_KEY:-}" ]; then
+            echo "::error::Missing TAILSCALE_AUTH_KEY secret for present-railtail."
+            exit 1
+          fi
+          if [ -z "${RAILTAIL_TARGET_ADDR:-}" ]; then
+            echo "::error::Missing RAILTAIL_TARGET_ADDR repository variable."
+            exit 1
+          fi
+          if [ -z "${RAILTAIL_LISTEN_PORT:-}" ]; then
+            echo "::error::Missing RAILTAIL_LISTEN_PORT repository variable."
+            exit 1
+          fi
+          if ! [[ "$RAILTAIL_LISTEN_PORT" =~ ^[0-9]+$ ]] || [ "$RAILTAIL_LISTEN_PORT" -eq 0 ]; then
+            echo "::error::RAILTAIL_LISTEN_PORT must be a positive integer."
+            exit 1
+          fi
+          if [ -z "${RAILTAIL_TS_HOSTNAME:-}" ]; then
+            echo "::error::Missing RAILTAIL_TS_HOSTNAME repository variable."
+            exit 1
+          fi
+
+          tmp_dir="$(mktemp -d)"
+          cd "$tmp_dir"
+          run_with_railway_auth() {
+            local action="$1"
+            shift
+            local code=1
+            if [ -n "${RAILWAY_API_KEY:-}" ]; then
+              set +e
+              RAILWAY_API_TOKEN="$RAILWAY_API_KEY" RAILWAY_TOKEN="" "$@"
+              code=$?
+              set -e
+              if [ "$code" -eq 0 ]; then
+                echo "auth_source=RAILWAY_API_KEY action=$action"
+                return 0
+              fi
+            fi
+            if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+              set +e
+              RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" "$@"
+              code=$?
+              set -e
+              if [ "$code" -eq 0 ]; then
+                echo "auth_source=RAILWAY_TOKEN action=$action"
+                return 0
+              fi
+            fi
+            return "$code"
+          }
+
+          if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+            echo "auth_source=RAILWAY_TOKEN action=redeploy"
+            echo "Project token mode: skipping variable sync; Railway project tokens are deployment-scoped."
+            RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_RAILTAIL_SERVICE" --yes
+            exit 0
+          fi
+
+          run_with_railway_auth link railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT"
+          run_with_railway_auth variables railway variables \
+            --service "$RAILWAY_RAILTAIL_SERVICE" \
+            --environment "$RAILWAY_ENVIRONMENT" \
+            --set "SERVICE_TYPE=railtail" \
+            --set "TARGET_ADDR=$RAILTAIL_TARGET_ADDR" \
+            --set "LISTEN_PORT=$RAILTAIL_LISTEN_PORT" \
+            --set "TS_HOSTNAME=$RAILTAIL_TS_HOSTNAME" \
+            --set "TS_AUTH_KEY=$TAILSCALE_AUTH_KEY" \
+            --set "TS_STATEDIR_PATH=$RAILTAIL_TS_STATEDIR_PATH" \
+            --set "TS_EXTRA_ARGS=$RAILTAIL_TS_EXTRA_ARGS" \
+            --skip-deploys
+          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_RAILTAIL_SERVICE" --yes

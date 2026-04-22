@@ -49,6 +49,7 @@
     "present:mcp": "npx tsx services/present-mcp/src/server.ts",
     "codex:broker": "npx tsx services/codex-broker/src/run.ts",
     "widget:codex": "npx tsx services/widget-codex/src/run.ts",
+    "railtail": "npx tsx services/railtail/src/run.ts",
     "codex:manifest": "npx tsx services/codex-adapter/src/print-manifest.ts",
     "bench:canvas": "npx tsx scripts/canvas-benchmark.ts",
     "bench:canvas:enrich": "npx tsx scripts/canvas-benchmark-enrich.ts",
