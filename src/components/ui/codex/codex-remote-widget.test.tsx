@@ -357,6 +357,127 @@ describe('CodexRemoteWidget', () => {
     });
   });
 
+  it('recovers a stale reset workspace binding before sending a native turn', async () => {
+    const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+    (global.fetch as jest.Mock).mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        fetchCalls.push({ url, init });
+
+        if (url === '/api/widget-codex/servers') {
+          return {
+            ok: true,
+            json: async () => buildServersPayload(),
+          } as Response;
+        }
+        if (url === '/api/reset/workspaces/ws_stale/state') {
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({ error: 'Workspace session not found' }),
+          } as Response;
+        }
+        if (url === '/api/reset/workspaces' && init?.method === 'POST') {
+          return {
+            ok: true,
+            json: async () => ({
+              workspace: {
+                id: 'ws_recovered',
+                title: 'Widget wcws_recover',
+                workspacePath: '/srv/codex/repos/PRESENT',
+              },
+            }),
+          } as Response;
+        }
+        if (url === '/api/reset/workspaces') {
+          return {
+            ok: true,
+            json: async () => ({ workspaces: [] }),
+          } as Response;
+        }
+        if (url === '/api/reset/executors/register') {
+          return {
+            ok: true,
+            json: async () => ({
+              executorSession: {
+                id: 'exec_recovered',
+              },
+            }),
+          } as Response;
+        }
+        if (url === '/api/reset/turns' && init?.method === 'POST') {
+          return {
+            ok: true,
+            json: async () => ({
+              taskRun: {
+                id: 'task_recovered',
+                status: 'queued',
+                summary: 'can you see this message?',
+                createdAt: '2026-04-22T22:00:00.000Z',
+                updatedAt: '2026-04-22T22:00:00.000Z',
+                startedAt: null,
+                completedAt: null,
+                error: null,
+                result: null,
+                metadata: {},
+              },
+            }),
+          } as Response;
+        }
+        if (url === '/api/reset/workspaces/ws_recovered/state') {
+          return {
+            ok: true,
+            json: async () => ({ tasks: [] }),
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({}),
+        } as Response;
+      },
+    );
+
+    render(
+      <CodexRemoteWidget
+        title="Remote Codex"
+        state={{
+          title: 'Remote Codex',
+          frameUrl: 'https://present-codex-broker-production.up.railway.app/sessions/cxs/proxy/token/',
+          widgetSessionId: 'wcws_recover',
+          workspaceSessionId: 'ws_stale',
+          executorSessionId: 'exec_stale',
+          connectionId: 'wccx_recover',
+          remoteSessionId: 'cxs_recover',
+          serverId: 'wcsrv_1',
+          remoteWorkspaceId: 'present',
+          remoteWorkspacePath: '/srv/codex/repos/PRESENT',
+          status: 'ready',
+          authState: 'authenticated',
+        }}
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        'Ask Remote Codex to inspect, edit, review, or run something in the selected remote workspace.',
+      ),
+      { target: { value: 'can you see this message?' } },
+    );
+    fireEvent.click(screen.getByText('Send Turn'));
+
+    await waitFor(() => {
+      const turnRequest = fetchCalls.find((call) => call.url === '/api/reset/turns');
+      expect(turnRequest).toBeTruthy();
+      expect(JSON.parse(String(turnRequest?.init?.body))).toEqual(
+        expect.objectContaining({
+          workspaceSessionId: 'ws_recovered',
+          executorSessionId: 'exec_recovered',
+          prompt: 'can you see this message?',
+        }),
+      );
+    });
+  });
+
   it('starts auth inline for a login-required server', async () => {
     (global.fetch as jest.Mock).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);

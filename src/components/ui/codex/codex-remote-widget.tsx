@@ -293,6 +293,14 @@ function getWidgetCodexErrorMessage(error: unknown, fallback: string) {
   return getErrorMessage(error, fallback);
 }
 
+function isWorkspaceSessionNotFoundError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return (
+    (error as HttpError).status === 404 &&
+    /workspace session not found/i.test(error.message)
+  );
+}
+
 function buildInitialState(
   persistedState: PersistedWidgetState | undefined,
   rest: CodexRemoteWidgetProps,
@@ -844,6 +852,22 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
   const ensureWorkspaceBinding = useCallback(
     async (connection: WidgetCodexConnection) => {
       let workspaceSessionId = state.workspaceSessionId;
+      if (workspaceSessionId) {
+        try {
+          await requestJson<{ tasks: ResetTaskRun[] }>(
+            `/api/reset/workspaces/${encodeURIComponent(workspaceSessionId)}/state`,
+          );
+        } catch (error) {
+          if (!isWorkspaceSessionNotFoundError(error)) throw error;
+          workspaceSessionId = undefined;
+          await persistState({
+            ...state,
+            workspaceSessionId: undefined,
+            executorSessionId: undefined,
+            lastError: undefined,
+          });
+        }
+      }
       if (!workspaceSessionId) {
         const existing = await requestJson<{ workspaces: ResetWorkspaceSession[] }>(
           '/api/reset/workspaces',
@@ -863,6 +887,7 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
               body: JSON.stringify({
                 title: `Widget ${state.widgetSessionId ?? createWidgetSessionId()}`,
                 ownerUserId: 'widget-codex',
+                workspacePath: connection.remoteWorkspacePath || undefined,
               }),
             },
           );
@@ -1262,12 +1287,23 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
     if (!state.workspaceSessionId) return;
     void loadWorkspaceConversation(state.workspaceSessionId).catch((error) => {
       if (!mountedRef.current) return;
+      if (isWorkspaceSessionNotFoundError(error)) {
+        void persistState({
+          ...stateRef.current,
+          workspaceSessionId: undefined,
+          executorSessionId: undefined,
+          lastError: undefined,
+        });
+        setMessages([]);
+        setActiveTaskRunId(null);
+        return;
+      }
       setState((previous) => ({
         ...previous,
         lastError: getErrorMessage(error, 'Failed to load widget Codex conversation.'),
       }));
     });
-  }, [loadWorkspaceConversation, state.workspaceSessionId]);
+  }, [loadWorkspaceConversation, persistState, state.workspaceSessionId]);
 
   useEffect(() => {
     if (
