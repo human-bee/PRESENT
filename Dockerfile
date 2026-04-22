@@ -2,6 +2,11 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 
+# Tailscale is used only by SERVICE_TYPE=railtail. Keeping the binaries in the
+# shared image lets Railway run the bridge as another repo service.
+COPY --from=docker.io/tailscale/tailscale:stable /usr/local/bin/tailscale /usr/local/bin/tailscale
+COPY --from=docker.io/tailscale/tailscale:stable /usr/local/bin/tailscaled /usr/local/bin/tailscaled
+
 # Ensure TLS trust store exists for LiveKit Cloud HTTPS calls.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/*

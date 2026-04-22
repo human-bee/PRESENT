@@ -25,6 +25,10 @@ case "$SERVICE_TYPE" in
     echo "Starting Widget Codex Service..."
     exec npm run widget:codex
     ;;
+  railtail|tailnet-bridge)
+    echo "Starting Railtail Bridge..."
+    exec npm run railtail
+    ;;
   web|present|app)
     echo "Starting Web App..."
     if [ ! -d ".next" ]; then
@@ -35,7 +39,7 @@ case "$SERVICE_TYPE" in
     ;;
   *)
     echo "Error: unsupported SERVICE_TYPE value: ${SERVICE_TYPE:-<unset>}" >&2
-    echo "Expected one of: sync, agent, conductor, realtime, codex-broker, broker, widget-codex, codex-widget, web, present, app" >&2
+    echo "Expected one of: sync, agent, conductor, realtime, codex-broker, broker, widget-codex, codex-widget, railtail, tailnet-bridge, web, present, app" >&2
     exit 1
     ;;
 esac
