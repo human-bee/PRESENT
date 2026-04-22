@@ -742,4 +742,26 @@ describe('CodexRemoteWidget', () => {
       await screen.findByText(/Cannot resolve SSH host bens-macbook-pro\.tailb3d6e9\.ts\.net/),
     ).toBeTruthy();
   });
+
+  it('normalizes raw persisted backend error JSON before rendering it', async () => {
+    render(
+      <CodexRemoteWidget
+        title="Remote Codex"
+        state={{
+          title: 'Remote Codex',
+          serverId: 'wcsrv_1',
+          remoteWorkspaceId: 'present',
+          remoteWorkspacePath: '/Users/bsteinher/PRESENT',
+          status: 'error',
+          authState: 'authenticated',
+          lastError: '{"error":"getaddrinfo ENOTFOUND bens-macbook-pro.tailb3d6e9.ts.net"}',
+        }}
+      />,
+    );
+
+    expect(
+      await screen.findByText(/Cannot resolve SSH host bens-macbook-pro\.tailb3d6e9\.ts\.net/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/^\{"error":/)).toBeNull();
+  });
 });
