@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import net from 'node:net';
 import { once } from 'node:events';
+import crypto from 'node:crypto';
 import { Client } from 'ssh2';
 
 export type CodexBrokerSshTunnelConfig = {
@@ -22,8 +23,16 @@ export type CodexBrokerSshTunnel = {
   close: () => Promise<void>;
 };
 
-const normalizeSha256Fingerprint = (value: string | null | undefined) =>
-  value?.trim().replace(/^SHA256:/i, '').trim() || '';
+export const normalizeSha256Fingerprint = (value: string | null | undefined) =>
+  value?.trim().replace(/^SHA256:/i, '').replace(/=+$/, '').trim() || '';
+
+export const sha256FingerprintForHostKey = (hostKey: Buffer | string) => {
+  const digest = crypto
+    .createHash('sha256')
+    .update(typeof hostKey === 'string' ? Buffer.from(hostKey, 'binary') : hostKey)
+    .digest('base64');
+  return normalizeSha256Fingerprint(digest);
+};
 
 export async function createCodexBrokerSshTunnel(
   config: CodexBrokerSshTunnelConfig,
@@ -49,14 +58,13 @@ export async function createCodexBrokerSshTunnel(
     privateKey,
     passphrase: config.passphrase ?? undefined,
     agent: config.agentSocketPath ?? undefined,
-    hostHash: 'sha256',
-    hostVerifier: (hashedKey) => {
+    hostVerifier: (hostKey) => {
       if (!expectedFingerprint) {
         throw new Error(
           'CODEX_BROKER_SSH_HOST_KEY_SHA256 is required when CODEX_BROKER_DIRECT_TARGET_URL is not configured.',
         );
       }
-      return normalizeSha256Fingerprint(hashedKey) === expectedFingerprint;
+      return sha256FingerprintForHostKey(hostKey) === expectedFingerprint;
     },
   });
 
