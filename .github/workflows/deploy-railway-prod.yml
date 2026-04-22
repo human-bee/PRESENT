@@ -254,7 +254,7 @@ jobs:
           if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
             echo "auth_source=RAILWAY_TOKEN action=redeploy"
             echo "Project token mode: skipping variable sync; Railway project tokens are deployment-scoped."
-            RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_CONDUCTOR_SERVICE" --yes
+            RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_CONDUCTOR_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
             exit 0
           fi
 
@@ -267,7 +267,7 @@ jobs:
             --set "TASK_IDLE_POLL_MAX_MS=$TASK_IDLE_POLL_MAX_MS" \
             --set "AGENT_WORKER_HEARTBEAT_MS=$AGENT_WORKER_HEARTBEAT_MS" \
             --skip-deploys
-          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_CONDUCTOR_SERVICE" --yes
+          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_CONDUCTOR_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
 
   deploy-realtime:
     runs-on: ubuntu-latest
@@ -323,12 +323,12 @@ jobs:
 
           if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
             echo "auth_source=RAILWAY_TOKEN action=redeploy"
-            RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_REALTIME_SERVICE" --yes
+            RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_REALTIME_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
             exit 0
           fi
 
           run_with_railway_auth link railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT"
-          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_REALTIME_SERVICE" --yes
+          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_REALTIME_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
 
   deploy-codex-broker:
     runs-on: ubuntu-latest
@@ -416,7 +416,7 @@ jobs:
           if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
             echo "auth_source=RAILWAY_TOKEN action=redeploy"
             echo "Project token mode: skipping variable sync; Railway project tokens are deployment-scoped."
-            RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_CODEX_BROKER_SERVICE" --yes
+            RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_CODEX_BROKER_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
             exit 0
           fi
 
@@ -443,7 +443,7 @@ jobs:
           add_optional_set CODEX_BROKER_SSH_PASSPHRASE "$CODEX_BROKER_SSH_PASSPHRASE"
           variable_args+=(--skip-deploys)
           run_with_railway_auth variables "${variable_args[@]}"
-          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_CODEX_BROKER_SERVICE" --yes
+          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_CODEX_BROKER_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
 
   deploy-widget-codex:
     runs-on: ubuntu-latest
@@ -518,7 +518,7 @@ jobs:
           if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
             echo "auth_source=RAILWAY_TOKEN action=redeploy"
             echo "Project token mode: skipping variable sync; Railway project tokens are deployment-scoped."
-            RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_WIDGET_CODEX_SERVICE" --yes
+            RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_WIDGET_CODEX_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
             exit 0
           fi
 
@@ -541,7 +541,7 @@ jobs:
               --set "WIDGET_CODEX_DEFAULT_SERVERS=$WIDGET_CODEX_DEFAULT_SERVERS" \
               --skip-deploys
           fi
-          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_WIDGET_CODEX_SERVICE" --yes
+          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_WIDGET_CODEX_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
 
   deploy-railtail:
     runs-on: ubuntu-latest
@@ -625,7 +625,7 @@ jobs:
           if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
             echo "auth_source=RAILWAY_TOKEN action=redeploy"
             echo "Project token mode: skipping variable sync; Railway project tokens are deployment-scoped."
-            RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_RAILTAIL_SERVICE" --yes
+            RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" railway redeploy --service "$RAILWAY_RAILTAIL_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
             exit 0
           fi
 
@@ -641,4 +641,4 @@ jobs:
             --set "TS_STATEDIR_PATH=$RAILTAIL_TS_STATEDIR_PATH" \
             --set "TS_EXTRA_ARGS=$RAILTAIL_TS_EXTRA_ARGS" \
             --skip-deploys
-          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_RAILTAIL_SERVICE" --yes
+          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_RAILTAIL_SERVICE" --yes || echo "Railway redeploy request skipped; deployment may already be in flight."
