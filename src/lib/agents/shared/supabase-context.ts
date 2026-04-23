@@ -3,6 +3,10 @@ import { config } from 'dotenv';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
+import {
+  parseContextDocuments,
+  type ContextDocument,
+} from '@/lib/context-documents';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
 import {
@@ -1287,15 +1291,6 @@ export async function getTranscriptWindow(room: string, windowMs: number) {
 // Context Documents (user-uploaded markdown/text for steward context)
 // =============================================================================
 
-export type ContextDocument = {
-  id: string;
-  title: string;
-  content: string;
-  type: 'markdown' | 'text';
-  timestamp: number;
-  source: 'file' | 'paste';
-};
-
 /**
  * Retrieves user-uploaded context documents for a room/session.
  * These documents are injected into steward prompts alongside the transcript.
@@ -1324,8 +1319,7 @@ export async function getContextDocuments(room: string): Promise<ContextDocument
       return [];
     }
 
-    const docs = Array.isArray(data.context_documents) ? data.context_documents : [];
-    return docs as ContextDocument[];
+    return parseContextDocuments(data.context_documents);
   } catch (err) {
     warnFallback('getContextDocuments', err);
     return [];
