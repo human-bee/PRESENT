@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  listUserModelKeyStatus,
+  MODEL_KEY_PROVIDERS,
+} from '@/lib/agents/shared/user-model-keys';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
-import { listUserModelKeyStatus } from '@/lib/agents/shared/user-model-keys';
 
 export const runtime = 'nodejs';
 
 type ProviderLinkState = 'linked_supported' | 'linked_unsupported' | 'api_key_configured' | 'missing';
-
-const PROVIDERS = ['openai', 'anthropic', 'google', 'together', 'cerebras', 'fal', 'xai'] as const;
 
 export async function GET(req: NextRequest) {
   const userId = await resolveRequestUserId(req);
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
   try {
     const keyStatuses = await listUserModelKeyStatus(userId);
     const byProvider = new Map(keyStatuses.map((entry) => [entry.provider, entry]));
-    const links = PROVIDERS.map((provider) => {
+    const links = MODEL_KEY_PROVIDERS.map((provider) => {
       const keyStatus = byProvider.get(provider);
       const state: ProviderLinkState = keyStatus?.configured ? 'api_key_configured' : 'missing';
       return {
