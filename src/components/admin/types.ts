@@ -1,30 +1,10 @@
-export type AgentProvider =
-  | 'openai'
-  | 'anthropic'
-  | 'google'
-  | 'cerebras'
-  | 'together'
-  | 'fal'
-  | 'xai'
-  | 'debug'
-  | 'unknown';
+import type {
+  AgentProvider,
+  AgentProviderPath,
+  AgentProviderSource,
+} from '@/lib/agents/admin/provider-contract';
 
-export type AgentProviderSource =
-  | 'explicit'
-  | 'model_inferred'
-  | 'runtime_selected'
-  | 'task_params'
-  | 'payload'
-  | 'unknown';
-
-export type AgentProviderPath =
-  | 'primary'
-  | 'fallback'
-  | 'fast'
-  | 'slow'
-  | 'shadow'
-  | 'teacher'
-  | 'unknown';
+export type { AgentProvider, AgentProviderPath, AgentProviderSource };
 
 export type AgentProviderSummary = {
   provider: AgentProvider;
