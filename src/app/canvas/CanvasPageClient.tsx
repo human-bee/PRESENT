@@ -24,7 +24,7 @@ import { ToolDispatcher } from '@/components/tool-dispatcher';
 import { SystemRegistrySync } from '@/components/ui/diagnostics/system-registry-sync';
 import { initializeMCPBridge } from '@/lib/mcp-bridge';
 import { AgentCapabilitiesBridge } from '@/components/ui/integrations/agent-capabilities-bridge';
-import { LiveKitStateBridge } from '@/lib/livekit/livekit-state-bridge';
+import { attachLiveKitStateBridge } from '@/lib/livekit/livekit-state-bridge';
 import LiveKitDebugConsole from '@/components/LiveKitDebugConsole';
 import { RealtimeSyncHealth } from '@/components/ui/diagnostics/realtime-sync-health';
 import {
@@ -600,14 +600,7 @@ export function CanvasPageClient() {
   useEffect(() => {
     if (!room) return;
     try {
-      // Avoid double-start in dev/StrictMode by using a per-room guard
-      const key = `present:state-bridge:${room.name || 'default'}`;
-      const w = window as any;
-      if (typeof window !== 'undefined' && w[key]) return;
-      if (typeof window !== 'undefined') w[key] = true;
-
-      const bridge = new LiveKitStateBridge(room);
-      bridge.start();
+      return attachLiveKitStateBridge(room);
     } catch { }
   }, [room]);
 
@@ -694,11 +687,8 @@ export function CanvasPageClient() {
 
   // If not authenticated, don't render the canvas
   if (!user && !bypassAuth) {
-    console.log('[CanvasPageClient] Not authenticated and bypassAuth is false. Returning null.');
     return null;
   }
-
-  console.log('[CanvasPageClient] Rendering main UI', { user: user?.id, roomName });
 
   return (
     <div
