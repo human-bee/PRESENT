@@ -35,6 +35,12 @@ export function listTraceEvents(traceId?: string) {
   return traces.sort((left, right) => right.emittedAt.localeCompare(left.emittedAt));
 }
 
+export function listWorkspaceTraceEvents(workspaceSessionId: string) {
+  return readResetCollection('traces')
+    .filter((event) => event.workspaceSessionId === workspaceSessionId)
+    .sort((left, right) => right.emittedAt.localeCompare(left.emittedAt));
+}
+
 export function searchTraceEvents(query: string) {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return listTraceEvents();
