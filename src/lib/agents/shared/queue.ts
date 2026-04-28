@@ -135,6 +135,10 @@ const shouldUseLocalScopeDirectClaim = (args: {
   return true;
 };
 
+const recordTaskTraceAsync = (input: Parameters<typeof recordTaskTraceFromParams>[0]) => {
+  void recordTaskTraceFromParams(input);
+};
+
 export class AgentTaskQueue {
   private readonly supabase: SupabaseClient;
 
@@ -300,7 +304,7 @@ export class AgentTaskQueue {
         requestId: resolvedRequestId,
         params,
       });
-      void recordTaskTraceFromParams({
+      recordTaskTraceAsync({
         stage: 'deduped',
         status: existingForDedup.status,
         traceId: correlation.traceId,
@@ -473,7 +477,7 @@ export class AgentTaskQueue {
       throw new Error(`TRACE_ID_NOT_PERSISTED:${task}`);
     }
     if (data?.id) {
-      void recordTaskTraceFromParams({
+      recordTaskTraceAsync({
         stage: 'queued',
         status: localScopeDirectClaim ? 'running' : 'queued',
         taskId: data.id,
@@ -506,7 +510,7 @@ export class AgentTaskQueue {
 
     if (error) throw error;
     for (const task of (data as AgentTask[] | null) ?? []) {
-      void recordTaskTraceFromParams({
+      recordTaskTraceAsync({
         stage: 'claimed',
         status: 'running',
         taskId: task.id,
@@ -604,7 +608,7 @@ export class AgentTaskQueue {
     }
 
     for (const task of claimed) {
-      void recordTaskTraceFromParams({
+      recordTaskTraceAsync({
         stage: 'claimed',
         status: 'running',
         taskId: task.id,
