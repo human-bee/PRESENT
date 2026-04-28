@@ -538,50 +538,79 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function buildMessagesFromTasks(tasks: ResetTaskRun[]) {
-  return tasks
+function buildMessagesFromSortedTasks(tasks: ResetTaskRun[]) {
+  return tasks.flatMap<RemoteCodexMessage>((task) => {
+    const prompt =
+      typeof task.metadata.prompt === 'string' && task.metadata.prompt.trim().length > 0
+        ? task.metadata.prompt.trim()
+        : task.summary;
+    const entries: RemoteCodexMessage[] = [
+      {
+        id: `${task.id}:user`,
+        role: 'user',
+        text: prompt,
+        status: task.status,
+        timestamp: task.createdAt,
+      },
+    ];
+
+    const result = isRecord(task.result) ? task.result : null;
+    const finalResponse =
+      result && typeof result.finalResponse === 'string' && result.finalResponse.trim().length > 0
+        ? result.finalResponse.trim()
+        : null;
+    if (finalResponse) {
+      entries.push({
+        id: `${task.id}:assistant`,
+        role: 'assistant',
+        text: finalResponse,
+        status: task.status,
+        timestamp: task.completedAt ?? task.updatedAt,
+      });
+    } else if (task.status === 'failed' && task.error) {
+      entries.push({
+        id: `${task.id}:error`,
+        role: 'system',
+        text: task.error,
+        status: task.status,
+        timestamp: task.updatedAt,
+      });
+    }
+
+    return entries;
+  });
+}
+
+export function deriveRemoteCodexConversationState(
+  tasks: ResetTaskRun[],
+  fallbackThreadId?: string | null,
+) {
+  let latestTask: ResetTaskRun | undefined;
+  for (const task of tasks) {
+    // Preserve the kernel payload's existing updatedAt tie order for thread/spinner state.
+    if (!latestTask || task.updatedAt.localeCompare(latestTask.updatedAt) > 0) {
+      latestTask = task;
+    }
+  }
+  const sortedTasks = tasks
     .slice()
-    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-    .flatMap<RemoteCodexMessage>((task) => {
-      const prompt =
-        typeof task.metadata.prompt === 'string' && task.metadata.prompt.trim().length > 0
-          ? task.metadata.prompt.trim()
-          : task.summary;
-      const entries: RemoteCodexMessage[] = [
-        {
-          id: `${task.id}:user`,
-          role: 'user',
-          text: prompt,
-          status: task.status,
-          timestamp: task.createdAt,
-        },
-      ];
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 
-      const result = isRecord(task.result) ? task.result : null;
-      const finalResponse =
-        result && typeof result.finalResponse === 'string' && result.finalResponse.trim().length > 0
-          ? result.finalResponse.trim()
-          : null;
-      if (finalResponse) {
-        entries.push({
-          id: `${task.id}:assistant`,
-          role: 'assistant',
-          text: finalResponse,
-          status: task.status,
-          timestamp: task.completedAt ?? task.updatedAt,
-        });
-      } else if (task.status === 'failed' && task.error) {
-        entries.push({
-          id: `${task.id}:error`,
-          role: 'system',
-          text: task.error,
-          status: task.status,
-          timestamp: task.updatedAt,
-        });
-      }
+  const result = latestTask && isRecord(latestTask.result) ? latestTask.result : null;
+  const nextThreadId =
+    result && typeof result.codexThreadId === 'string' && result.codexThreadId.trim().length > 0
+      ? result.codexThreadId.trim()
+      : typeof latestTask?.metadata.codexThreadId === 'string' &&
+          latestTask.metadata.codexThreadId.trim().length > 0
+        ? latestTask.metadata.codexThreadId.trim()
+        : fallbackThreadId;
 
-      return entries;
-    });
+  return {
+    messages: buildMessagesFromSortedTasks(sortedTasks),
+    nextThreadId: nextThreadId ?? undefined,
+    activeTaskRunId:
+      latestTask?.status === 'running' || latestTask?.status === 'queued' ? latestTask.id : null,
+  };
 }
 
 export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
@@ -822,29 +851,16 @@ export function CodexRemoteWidget(props: CanvasCodexRemoteWidgetProps) {
       const snapshot = await requestJson<{ tasks: ResetTaskRun[] }>(
         `/api/reset/workspaces/${encodeURIComponent(workspaceSessionId)}/state`,
       );
-      setMessages(buildMessagesFromTasks(snapshot.tasks));
-      const latestTask = snapshot.tasks
-        .slice()
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-      const result = latestTask && isRecord(latestTask.result) ? latestTask.result : null;
-      const nextThreadId =
-        result && typeof result.codexThreadId === 'string' && result.codexThreadId.trim().length > 0
-          ? result.codexThreadId.trim()
-          : typeof latestTask?.metadata.codexThreadId === 'string' &&
-              latestTask.metadata.codexThreadId.trim().length > 0
-            ? latestTask.metadata.codexThreadId.trim()
-            : state.activeThreadId;
+      const conversation = deriveRemoteCodexConversationState(snapshot.tasks, state.activeThreadId);
+      setMessages(conversation.messages);
+      const nextThreadId = conversation.nextThreadId;
       if (nextThreadId !== state.activeThreadId) {
         await persistState({
           ...state,
           activeThreadId: nextThreadId ?? undefined,
         });
       }
-      if (latestTask?.status === 'running' || latestTask?.status === 'queued') {
-        setActiveTaskRunId(latestTask.id);
-      } else {
-        setActiveTaskRunId(null);
-      }
+      setActiveTaskRunId(conversation.activeTaskRunId);
     },
     [persistState, state],
   );

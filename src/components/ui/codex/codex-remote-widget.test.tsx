@@ -1,5 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { CodexRemoteWidget, deriveWidgetCodexWsUrl } from './codex-remote-widget';
+import {
+  CodexRemoteWidget,
+  deriveRemoteCodexConversationState,
+  deriveWidgetCodexWsUrl,
+} from './codex-remote-widget';
 
 const componentRegistryUpdateMock = jest.fn().mockResolvedValue(undefined);
 const useComponentRegistrationMock = jest.fn();
@@ -80,6 +84,141 @@ describe('CodexRemoteWidget', () => {
     expect(deriveWidgetCodexWsUrl('/ws', 'https://app.present.best/canvas')).toBe(
       'wss://app.present.best/ws',
     );
+  });
+
+  it('derives remote conversation state with one chronological task sort', () => {
+    const sortSpy = jest.spyOn(Array.prototype, 'sort');
+    const conversation = deriveRemoteCodexConversationState(
+      [
+        {
+          id: 'task_late_created',
+          status: 'succeeded',
+          summary: 'late created',
+          createdAt: '2026-04-22T10:10:00.000Z',
+          updatedAt: '2026-04-22T10:11:00.000Z',
+          startedAt: '2026-04-22T10:10:05.000Z',
+          completedAt: '2026-04-22T10:11:00.000Z',
+          error: null,
+          result: { finalResponse: 'done' },
+          metadata: {},
+        },
+        {
+          id: 'task_latest_update',
+          status: 'queued',
+          summary: 'older created',
+          createdAt: '2026-04-22T10:00:00.000Z',
+          updatedAt: '2026-04-22T10:20:00.000Z',
+          startedAt: null,
+          completedAt: null,
+          error: null,
+          result: { codexThreadId: 'thread_from_result' },
+          metadata: { prompt: 'run queued turn', codexThreadId: 'thread_from_metadata' },
+        },
+      ],
+      'thread_fallback',
+    );
+    const sortCalls = sortSpy.mock.calls.length;
+    sortSpy.mockRestore();
+
+    expect(sortCalls).toBe(1);
+    expect(conversation.messages.map((message) => message.id)).toEqual([
+      'task_latest_update:user',
+      'task_late_created:user',
+      'task_late_created:assistant',
+    ]);
+    expect(conversation.activeTaskRunId).toBe('task_latest_update');
+    expect(conversation.nextThreadId).toBe('thread_from_result');
+  });
+
+  it('preserves latest-task tie and fallback-thread semantics', () => {
+    const conversation = deriveRemoteCodexConversationState(
+      [
+        {
+          id: 'task_payload_first',
+          status: 'running',
+          summary: 'payload first',
+          createdAt: '2026-04-22T10:20:00.000Z',
+          updatedAt: '2026-04-22T10:30:00.000Z',
+          startedAt: '2026-04-22T10:20:05.000Z',
+          completedAt: null,
+          error: null,
+          result: {},
+          metadata: {},
+        },
+        {
+          id: 'task_payload_second',
+          status: 'succeeded',
+          summary: 'payload second',
+          createdAt: '2026-04-22T10:00:00.000Z',
+          updatedAt: '2026-04-22T10:30:00.000Z',
+          startedAt: '2026-04-22T10:00:05.000Z',
+          completedAt: '2026-04-22T10:30:00.000Z',
+          error: null,
+          result: { codexThreadId: 'thread_should_not_win' },
+          metadata: {},
+        },
+      ],
+      'thread_fallback',
+    );
+
+    expect(conversation.messages.map((message) => message.id)).toEqual([
+      'task_payload_second:user',
+      'task_payload_first:user',
+    ]);
+    expect(conversation.activeTaskRunId).toBe('task_payload_first');
+    expect(conversation.nextThreadId).toBe('thread_fallback');
+  });
+
+  it('derives prompt, response, and failure messages from task branches', () => {
+    const conversation = deriveRemoteCodexConversationState([
+      {
+        id: 'task_summary_fallback',
+        status: 'failed',
+        summary: 'summary fallback',
+        createdAt: '2026-04-22T10:00:00.000Z',
+        updatedAt: '2026-04-22T10:05:00.000Z',
+        startedAt: '2026-04-22T10:00:05.000Z',
+        completedAt: '2026-04-22T10:05:00.000Z',
+        error: 'executor failed',
+        result: null,
+        metadata: { prompt: '   ' },
+      },
+      {
+        id: 'task_trimmed_response',
+        status: 'succeeded',
+        summary: 'response task',
+        createdAt: '2026-04-22T10:10:00.000Z',
+        updatedAt: '2026-04-22T10:15:00.000Z',
+        startedAt: '2026-04-22T10:10:05.000Z',
+        completedAt: '2026-04-22T10:15:00.000Z',
+        error: null,
+        result: { finalResponse: '  trimmed response  ' },
+        metadata: { prompt: '  trimmed prompt  ' },
+      },
+    ]);
+
+    expect(conversation.messages).toEqual([
+      expect.objectContaining({
+        id: 'task_summary_fallback:user',
+        role: 'user',
+        text: 'summary fallback',
+      }),
+      expect.objectContaining({
+        id: 'task_summary_fallback:error',
+        role: 'system',
+        text: 'executor failed',
+      }),
+      expect.objectContaining({
+        id: 'task_trimmed_response:user',
+        role: 'user',
+        text: 'trimmed prompt',
+      }),
+      expect.objectContaining({
+        id: 'task_trimmed_response:assistant',
+        role: 'assistant',
+        text: 'trimmed response',
+      }),
+    ]);
   });
 
   it('keeps one websocket subscription alive across snapshot state updates', async () => {
