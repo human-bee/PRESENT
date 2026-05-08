@@ -3,16 +3,49 @@ import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_POST_AUTH_PATH, sanitizeInternalRedirectPath } from '@/lib/auth/redirects';
 
+const AUTH_SESSION_TIMEOUT_MS = 3500;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      reject(new Error('Timed out while checking auth session'));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    withTimeout(supabase.auth.getSession(), AUTH_SESSION_TIMEOUT_MS)
+      .then(({ data: { session } }) => {
+        if (!active) return;
+        setUser(session?.user ?? null);
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.warn('[auth] Initial session check failed:', error instanceof Error ? error.message : error);
+        setUser(null);
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+      });
 
     // Listen for auth changes
     const {
@@ -22,7 +55,10 @@ export function useAuth() {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signInWithGoogle = async (next: string = DEFAULT_POST_AUTH_PATH) => {

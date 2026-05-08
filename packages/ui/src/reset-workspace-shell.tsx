@@ -322,6 +322,36 @@ export function ResetWorkspaceShell({
   const formatCommand = (command: AgentInteropPack['commands'][keyof AgentInteropPack['commands']]) =>
     [command.command, ...command.args].join(' ');
 
+  const handleRoomTelemetryChange = useEffectEvent((telemetry: {
+    roomName: string;
+    connectionState: string;
+    participantCount: number;
+    agentStatus: string;
+    media: PresenceMember['media'];
+  }) => {
+    setRoomTelemetry((current) => {
+      if (
+        current.roomName === telemetry.roomName &&
+        current.connectionState === telemetry.connectionState &&
+        current.participantCount === telemetry.participantCount &&
+        current.agentStatus === telemetry.agentStatus &&
+        current.media.audio === telemetry.media.audio &&
+        current.media.video === telemetry.media.video &&
+        current.media.screen === telemetry.media.screen
+      ) {
+        return current;
+      }
+
+      return {
+        roomName: telemetry.roomName,
+        connectionState: telemetry.connectionState,
+        participantCount: telemetry.participantCount,
+        agentStatus: telemetry.agentStatus,
+        media: telemetry.media,
+      };
+    });
+  });
+
   useEffect(() => {
     const nextSelectedExecutorId = workspace.activeExecutorSessionId ?? executors[0]?.id ?? '';
     setSelectedExecutorSessionId((current) => (current === nextSelectedExecutorId ? current : nextSelectedExecutorId));
@@ -1112,15 +1142,7 @@ export function ResetWorkspaceShell({
             <ResetCollaborationSurface
               workspaceSessionId={workspace.id}
               operatorLabel={localPresenceLabel}
-              onTelemetryChange={(telemetry) => {
-                setRoomTelemetry({
-                  roomName: telemetry.roomName,
-                  connectionState: telemetry.connectionState,
-                  participantCount: telemetry.participantCount,
-                  agentStatus: telemetry.agentStatus,
-                  media: telemetry.media,
-                });
-              }}
+              onTelemetryChange={handleRoomTelemetryChange}
             />
           </div>
           <CodexRemoteWidget

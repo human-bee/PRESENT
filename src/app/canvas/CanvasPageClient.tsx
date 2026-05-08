@@ -97,10 +97,18 @@ export function CanvasPageClient() {
         const error = res?.error;
         if (error) {
           setDemoError(error.message || 'Failed to start demo session');
+          setDemoNameDraft(storedName);
+          try {
+            window.localStorage.removeItem('present:display_name');
+          } catch { }
           setDemoAuthAttempted(false);
         }
       } catch (err: any) {
         setDemoError(err?.message || 'Failed to start demo session');
+        setDemoNameDraft(storedName);
+        try {
+          window.localStorage.removeItem('present:display_name');
+        } catch { }
         setDemoAuthAttempted(false);
       }
     })();
@@ -639,10 +647,16 @@ export function CanvasPageClient() {
         const error = res?.error;
         if (error) {
           setDemoError(error.message || 'Failed to start demo session');
+          try {
+            window.localStorage.removeItem('present:display_name');
+          } catch { }
           setDemoAuthAttempted(false);
         }
       } catch (err: any) {
         setDemoError(err?.message || 'Failed to start demo session');
+        try {
+          window.localStorage.removeItem('present:display_name');
+        } catch { }
         setDemoAuthAttempted(false);
       }
     };
