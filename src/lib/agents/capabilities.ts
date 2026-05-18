@@ -1,4 +1,7 @@
+import type { CapabilityProfile, WidgetTier } from './capability-contract';
 import { getWidgetLifecycleMetadata, type WidgetGroup } from './widget-lifecycle-manifest';
+
+export type { CapabilityProfile, WidgetTier } from './capability-contract';
 
 // Accept either browser or node LiveKit Room by using a minimal interface
 export interface RoomLike {
@@ -8,8 +11,6 @@ export interface RoomLike {
     publishData: (data: Uint8Array, options?: { reliable?: boolean; topic?: string }) => unknown;
   } | null;
 }
-
-export type CapabilityProfile = 'full' | 'lean_adaptive';
 export type CapabilityGroup =
   | 'visual'
   | 'widget-lifecycle'
@@ -18,7 +19,6 @@ export type CapabilityGroup =
   | 'mcp'
   | 'canvas'
   | 'utility';
-export type WidgetTier = 'tier1' | 'tier2';
 export type LifecycleOp =
   | 'create'
   | 'resolve'
