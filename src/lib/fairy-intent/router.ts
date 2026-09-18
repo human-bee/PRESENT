@@ -12,6 +12,8 @@ import {
   recordToolIoEvent,
 } from '@/lib/agents/shared/replay-telemetry';
 import type { FairyIntent } from './intent';
+import { tryJevCanvasRoute, type JevRouteAttempt } from './jev-router';
+import { recordJevRouterAttempt } from './jev-router-telemetry';
 import {
   buildFairyRouterToolingSnapshot,
   FairyRouteDecisionSchema,
@@ -102,6 +104,38 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       message: intent.message,
     };
   }
+
+  const jevStartedAt = Date.now();
+  let jevAttempt: JevRouteAttempt;
+  try {
+    jevAttempt = await tryJevCanvasRoute(intent);
+  } catch {
+    jevAttempt = {
+      outcome: 'skipped',
+      reason: 'unexpected_error',
+      durationMs: Date.now() - jevStartedAt,
+      model: 'jev-latest',
+    };
+  }
+
+  if (jevAttempt.outcome === 'accepted') {
+    const jevRoute = FairyRouteDecisionSchema.safeParse({
+      kind: 'canvas',
+      confidence: jevAttempt.confidence,
+      message: intent.message,
+      ...(intent.contextProfile ? { contextProfile: intent.contextProfile } : {}),
+    });
+    if (jevRoute.success) {
+      recordJevRouterAttempt(intent, jevAttempt, nextFairyReplaySequence());
+      return jevRoute.data;
+    }
+    jevAttempt = {
+      ...jevAttempt,
+      outcome: 'skipped',
+      reason: 'accepted_route_schema_invalid',
+    };
+  }
+  recordJevRouterAttempt(intent, jevAttempt, nextFairyReplaySequence());
 
   const client = getCerebrasClient();
   const contextBits: string[] = [];
