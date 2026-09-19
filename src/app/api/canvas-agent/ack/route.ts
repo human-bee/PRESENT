@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
       intentId,
       requestId,
     });
-    await recordAgentTraceEvent({
+    // Keep realtime ack ingestion independent from the trace ledger.
+    void recordAgentTraceEvent({
       stage: 'ack_received',
       status: 'ok',
       traceId,

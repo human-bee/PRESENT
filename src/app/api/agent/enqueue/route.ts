@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const payload = queueTaskEnvelopeSchema.parse(body);
-    await recordTaskTraceFromParams({
+    // Trace persistence is best-effort; queue admission must not wait on the ledger.
+    void recordTaskTraceFromParams({
       stage: 'api_received',
       status: 'ok',
       task: payload.task,

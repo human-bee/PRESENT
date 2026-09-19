@@ -1,9 +1,14 @@
 import type { JsonObject } from '@/lib/utils/json-schema';
 
 const createClientMock = jest.fn();
+const recordTaskTraceFromParamsMock = jest.fn();
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: (...args: unknown[]) => createClientMock(...args),
+}));
+
+jest.mock('@/lib/agents/shared/trace-events', () => ({
+  recordTaskTraceFromParams: (...args: unknown[]) => recordTaskTraceFromParamsMock(...args),
 }));
 
 type QueryStub = {
@@ -70,10 +75,13 @@ describe('AgentTaskQueue enqueue dedupe behavior', () => {
   beforeEach(() => {
     jest.resetModules();
     createClientMock.mockReset();
+    recordTaskTraceFromParamsMock.mockReset();
+    recordTaskTraceFromParamsMock.mockResolvedValue(undefined);
   });
 
   test('returns existing queued task on requestId dedupe pre-check and does not insert', async () => {
     const harness = createHarness();
+    recordTaskTraceFromParamsMock.mockReturnValueOnce(new Promise(() => {}));
     const existingTask = {
       id: 'task-existing',
       room: 'room-1',
@@ -109,6 +117,58 @@ describe('AgentTaskQueue enqueue dedupe behavior', () => {
     expect(harness.queries).toHaveLength(1);
     expect(harness.queries[0]?.insert).not.toHaveBeenCalled();
     expect(harness.queries[0]?.in).toHaveBeenCalledWith('status', ['queued', 'running']);
+    expect(recordTaskTraceFromParamsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stage: 'deduped',
+        taskId: 'task-existing',
+      }),
+    );
+  });
+
+  test('returns inserted task without waiting for queued trace storage', async () => {
+    const harness = createHarness();
+    recordTaskTraceFromParamsMock.mockReturnValueOnce(new Promise(() => {}));
+    harness.maybeSingleQueue.push({ data: null, error: null });
+    harness.singleQueue.push({
+      data: {
+        id: 'task-inserted',
+        room: 'room-1',
+        task: 'fairy.intent',
+        params: {} as JsonObject,
+        trace_id: null,
+        status: 'queued',
+        priority: 0,
+        run_at: null,
+        attempt: 0,
+        error: null,
+        request_id: 'req-inserted',
+        dedupe_key: null,
+        resource_keys: ['room:room-1'],
+        lease_token: null,
+        lease_expires_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        result: null,
+      },
+      error: null,
+    });
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    const result = await queue.enqueueTask({
+      room: 'room-1',
+      task: 'fairy.intent',
+      params: { room: 'room-1', message: 'draw a bunny' },
+      requestId: 'req-inserted',
+    });
+
+    expect(result?.id).toBe('task-inserted');
+    expect(recordTaskTraceFromParamsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stage: 'queued',
+        taskId: 'task-inserted',
+      }),
+    );
   });
 
   test('on 23505 conflict returns existing task after fallback lookup', async () => {

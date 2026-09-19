@@ -99,4 +99,50 @@ describe('trace events compatibility writes', () => {
     expect(insertMock.mock.calls[0]?.[0]).toHaveProperty('sampled', true);
     expect(insertMock.mock.calls[1]?.[0]).not.toHaveProperty('sampled');
   });
+
+  it('resolves and logs when trace inserts fail', async () => {
+    const insertMock = jest.fn().mockResolvedValue({
+      error: {
+        code: 'PGRST500',
+        message: 'trace ledger unavailable',
+      },
+    });
+    createClientMock.mockReturnValue({
+      from: jest.fn(() => ({ insert: insertMock })),
+    });
+
+    const { recordAgentTraceEvent, recordTaskTraceFromParams } = await import('./trace-events');
+    await expect(
+      recordAgentTraceEvent({
+        stage: 'ack_received',
+        task: 'canvas.agent_prompt',
+        room: 'canvas-room-3',
+        requestId: 'req-4',
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      recordTaskTraceFromParams({
+        stage: 'queued',
+        task: 'canvas.agent_prompt',
+        room: 'canvas-room-3',
+        params: { requestId: 'req-5' },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(insertMock).toHaveBeenCalledTimes(2);
+    expect(loggerWarnMock).toHaveBeenCalledWith(
+      'trace write failed',
+      expect.objectContaining({
+        error: 'trace ledger unavailable',
+        stage: 'ack_received',
+      }),
+    );
+    expect(loggerWarnMock).toHaveBeenCalledWith(
+      'trace write failed',
+      expect.objectContaining({
+        error: 'trace ledger unavailable',
+        stage: 'queued',
+      }),
+    );
+  });
 });
