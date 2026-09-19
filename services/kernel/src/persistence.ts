@@ -533,9 +533,15 @@ export async function ensureResetKernelHydrated(input: { force?: boolean } = {})
     const mutableState = nextState as Record<ResetCollectionKey, unknown>;
     const localCollections = localState as Record<ResetCollectionKey, unknown>;
 
-    for (const key of Object.keys(resetCollectionTables) as ResetCollectionKey[]) {
-      const hydratedValue = (await loadCollectionFromSupabase(key)) ?? localCollections[key];
-      mutableState[key] = hydratedValue;
+    const hydratedCollections = await Promise.all(
+      (Object.keys(resetCollectionTables) as ResetCollectionKey[]).map(async (key) => ({
+        key,
+        value: (await loadCollectionFromSupabase(key)) ?? localCollections[key],
+      })),
+    );
+
+    for (const { key, value } of hydratedCollections) {
+      mutableState[key] = value;
     }
 
     const parsed = resetKernelStateSchema.parse(nextState);

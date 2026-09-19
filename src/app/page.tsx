@@ -5,13 +5,12 @@ import {
   buildRuntimeManifest,
   createArtifact,
   ensureResetKernelHydrated,
-  getWorkspaceSession,
   listExecutorSessions,
   listApprovalRequests,
   listArtifacts,
   listPresenceMembers,
   listTaskRuns,
-  listTraceEvents,
+  listWorkspaceTraceEvents,
   listWorkspaceSessions,
   openWorkspaceSession,
   resolveKernelModelProfiles,
@@ -53,7 +52,9 @@ export default async function Home({
   const existingWorkspaces = listWorkspaceSessions();
 
   const workspace =
-    (requestedWorkspaceSessionId ? getWorkspaceSession(requestedWorkspaceSessionId) : null) ??
+    (requestedWorkspaceSessionId
+      ? (existingWorkspaces.find((session) => session.id === requestedWorkspaceSessionId) ?? null)
+      : null) ??
     existingWorkspaces[0] ??
     openWorkspaceSession({
       workspacePath: process.cwd(),
@@ -63,6 +64,9 @@ export default async function Home({
         shell: 'root',
       },
     });
+  const initialWorkspaces = existingWorkspaces.some((session) => session.id === workspace.id)
+    ? existingWorkspaces
+    : [workspace, ...existingWorkspaces];
 
   const artifacts = listArtifacts(workspace.id);
   if (!artifacts.some((artifact) => artifact.kind === 'widget_bundle')) {
@@ -85,14 +89,14 @@ export default async function Home({
       initialManifest={manifest}
       initialAgentPack={buildAgentInteropPack(workspace)}
       initialWorkspace={workspace}
-      initialWorkspaces={listWorkspaceSessions().slice(0, 6)}
+      initialWorkspaces={initialWorkspaces.slice(0, 6)}
       initialExecutors={listExecutorSessions(workspace.id)}
       initialTasks={listTaskRuns(workspace.id)}
       initialArtifacts={listArtifacts(workspace.id)}
       initialApprovals={listApprovalRequests(workspace.id)}
       initialPresence={listPresenceMembers(workspace.id)}
       initialModelProfiles={modelProfiles}
-      initialTraceEvents={listTraceEvents()}
+      initialTraceEvents={listWorkspaceTraceEvents(workspace.id)}
     />
   );
 }

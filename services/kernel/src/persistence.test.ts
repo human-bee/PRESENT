@@ -6,6 +6,9 @@ import type { KernelEvent, ModelProfile, WorkspaceSession } from '@present/contr
 type SupabaseRow = Record<string, unknown>;
 
 const supabaseTables: Record<string, SupabaseRow[]> = {};
+let supabaseSelectDelayMs = 0;
+let activeSupabaseSelects = 0;
+let maxConcurrentSupabaseSelects = 0;
 
 const resetSupabaseTables = () => {
   Object.keys(supabaseTables).forEach((key) => {
@@ -18,6 +21,12 @@ jest.mock('@supabase/supabase-js', () => ({
     from(table: string) {
       return {
         async select(columns = '*') {
+          activeSupabaseSelects += 1;
+          maxConcurrentSupabaseSelects = Math.max(maxConcurrentSupabaseSelects, activeSupabaseSelects);
+          if (supabaseSelectDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, supabaseSelectDelayMs));
+          }
+          activeSupabaseSelects -= 1;
           const data = [...(supabaseTables[table] ?? [])];
           if (columns === 'id') {
             return { data: data.map((row) => ({ id: row.id })), error: null };
@@ -70,12 +79,18 @@ describe('reset persistence', () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
     resetSupabaseTables();
+    supabaseSelectDelayMs = 0;
+    activeSupabaseSelects = 0;
+    maxConcurrentSupabaseSelects = 0;
     resetKernelStateForTests();
   });
 
   afterEach(() => {
     resetKernelStateForTests();
     resetSupabaseTables();
+    supabaseSelectDelayMs = 0;
+    activeSupabaseSelects = 0;
+    maxConcurrentSupabaseSelects = 0;
     delete process.env.PRESENT_RESET_STATE_PATH;
     delete process.env.PRESENT_RESET_SUPABASE_CACHE_TTL_MS;
     delete process.env.VERCEL;
@@ -234,6 +249,29 @@ describe('reset persistence', () => {
 
     await ensureResetKernelHydrated();
     expect(readResetCollection('workspaces').map((workspace) => workspace.id)).toEqual(['ws_new']);
+  });
+
+  it('hydrates reset collections with concurrent Supabase reads', async () => {
+    supabaseSelectDelayMs = 15;
+    supabaseTables.workspace_sessions = [
+      {
+        id: 'ws_parallel',
+        workspace_path: '/tmp/parallel',
+        branch: 'codex/reset',
+        title: 'Parallel',
+        state: 'active',
+        owner_user_id: null,
+        active_executor_session_id: null,
+        metadata: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+
+    await ensureResetKernelHydrated();
+
+    expect(maxConcurrentSupabaseSelects).toBeGreaterThan(1);
+    expect(readResetCollection('workspaces').map((workspace) => workspace.id)).toEqual(['ws_parallel']);
   });
 
   it('preserves model profile timestamps when mirroring to Supabase', async () => {

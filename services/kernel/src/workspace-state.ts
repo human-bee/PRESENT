@@ -1,38 +1,60 @@
-import type { ModelProfile } from '@present/contracts';
+import type {
+  ApprovalRequest,
+  Artifact,
+  ExecutorSession,
+  KernelEvent,
+  ModelProfile,
+  PresenceMember,
+  TaskRun,
+  WorkspaceSession,
+} from '@present/contracts';
 import { buildRuntimeManifest } from './runtime-manifest';
-import { listApprovalRequests } from './approvals';
-import { listArtifacts } from './artifacts';
-import { listExecutorSessions } from './executor-sessions';
 import { resolveKernelModelProfiles } from './model-profiles';
-import { listPresenceMembers } from './presence';
-import { listTaskRuns } from './tasks';
-import { listTraceEvents } from './traces';
-import { getWorkspaceSession } from './workspace-sessions';
+import { readResetKernelState } from './persistence';
 
 export type WorkspaceStateSnapshot = {
-  workspace: ReturnType<typeof getWorkspaceSession>;
-  executors: ReturnType<typeof listExecutorSessions>;
-  tasks: ReturnType<typeof listTaskRuns>;
-  artifacts: ReturnType<typeof listArtifacts>;
-  approvals: ReturnType<typeof listApprovalRequests>;
-  presence: ReturnType<typeof listPresenceMembers>;
-  traces: ReturnType<typeof listTraceEvents>;
+  workspace: WorkspaceSession;
+  executors: ExecutorSession[];
+  tasks: TaskRun[];
+  artifacts: Artifact[];
+  approvals: ApprovalRequest[];
+  presence: PresenceMember[];
+  traces: KernelEvent[];
   modelProfiles: ModelProfile[];
   manifest: ReturnType<typeof buildRuntimeManifest>;
 };
 
+const byUpdatedAtDesc = <T extends { updatedAt: string }>(left: T, right: T) =>
+  right.updatedAt.localeCompare(left.updatedAt);
+
+const byEmittedAtDesc = (left: KernelEvent, right: KernelEvent) =>
+  right.emittedAt.localeCompare(left.emittedAt);
+
 export async function getWorkspaceStateSnapshot(workspaceSessionId: string): Promise<WorkspaceStateSnapshot | null> {
-  const workspace = getWorkspaceSession(workspaceSessionId);
+  const state = readResetKernelState();
+  const workspace = state.workspaces.find((session) => session.id === workspaceSessionId) ?? null;
   if (!workspace) return null;
 
   return {
     workspace,
-    executors: listExecutorSessions(workspaceSessionId),
-    tasks: listTaskRuns(workspaceSessionId),
-    artifacts: listArtifacts(workspaceSessionId),
-    approvals: listApprovalRequests(workspaceSessionId),
-    presence: listPresenceMembers(workspaceSessionId),
-    traces: listTraceEvents().filter((event) => event.workspaceSessionId === workspaceSessionId),
+    executors: state.executors
+      .filter((session) => session.workspaceSessionId === workspaceSessionId)
+      .sort(byUpdatedAtDesc),
+    tasks: state.tasks
+      .filter((task) => task.workspaceSessionId === workspaceSessionId)
+      .sort(byUpdatedAtDesc),
+    artifacts: state.artifacts
+      .filter((artifact) => artifact.workspaceSessionId === workspaceSessionId)
+      .sort(byUpdatedAtDesc),
+    approvals: state.approvals
+      .filter((approval) => approval.workspaceSessionId === workspaceSessionId)
+      .sort(byUpdatedAtDesc),
+    presence: state.presence
+      .filter((member) => member.workspaceSessionId === workspaceSessionId)
+      .sort(byUpdatedAtDesc),
+    traces: state.traces
+      .filter((event) => event.workspaceSessionId === workspaceSessionId)
+      .sort(byEmittedAtDesc),
     modelProfiles: await resolveKernelModelProfiles(),
     manifest: buildRuntimeManifest(),
   };
