@@ -5,7 +5,6 @@ import {
     HTMLContainer,
     Rectangle2d,
     TLBaseShape,
-    getDefaultColorTheme,
     T,
     type RecordProps,
 } from '@tldraw/tldraw'
@@ -29,8 +28,8 @@ export class InfographicShapeUtil extends BaseBoxShapeUtil<InfographicShape> {
 
     override getDefaultProps(): InfographicShape['props'] {
         return {
-            w: 400,
-            h: 600,
+            w: 460,
+            h: 820,
         }
     }
 
