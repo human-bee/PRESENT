@@ -1,30 +1,13 @@
+import {
+  AGENT_PROVIDER_PATH_VALUES,
+  AGENT_PROVIDER_SOURCE_VALUES,
+  AGENT_PROVIDER_VALUES,
+  type AgentProvider,
+  type AgentProviderPath,
+  type AgentProviderSource,
+} from './provider-contract';
+
 type JsonRecord = Record<string, unknown>;
-
-export type AgentProvider =
-  | 'openai'
-  | 'anthropic'
-  | 'google'
-  | 'cerebras'
-  | 'together'
-  | 'debug'
-  | 'unknown';
-
-export type AgentProviderSource =
-  | 'explicit'
-  | 'model_inferred'
-  | 'runtime_selected'
-  | 'task_params'
-  | 'payload'
-  | 'unknown';
-
-export type AgentProviderPath =
-  | 'primary'
-  | 'fallback'
-  | 'fast'
-  | 'slow'
-  | 'shadow'
-  | 'teacher'
-  | 'unknown';
 
 export type AgentProviderParity = {
   provider: AgentProvider;
@@ -56,36 +39,14 @@ type ProviderLinkContext = {
   taskId?: string | null;
 };
 
-const PROVIDER_VALUES: AgentProvider[] = [
-  'openai',
-  'anthropic',
-  'google',
-  'cerebras',
-  'together',
-  'debug',
-  'unknown',
-];
+type ProviderLinkTemplateProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'cerebras'
+  | 'google'
+  | 'together';
 
-const PROVIDER_SOURCE_VALUES: AgentProviderSource[] = [
-  'explicit',
-  'model_inferred',
-  'runtime_selected',
-  'task_params',
-  'payload',
-  'unknown',
-];
-
-const PROVIDER_PATH_VALUES: AgentProviderPath[] = [
-  'primary',
-  'fallback',
-  'fast',
-  'slow',
-  'shadow',
-  'teacher',
-  'unknown',
-];
-
-const PROVIDER_LINK_TEMPLATE_ENV: Record<Exclude<AgentProvider, 'debug' | 'unknown'>, string> = {
+const PROVIDER_LINK_TEMPLATE_ENV: Record<ProviderLinkTemplateProvider, string> = {
   openai: 'AGENT_ADMIN_PROVIDER_LINK_TEMPLATE_OPENAI',
   anthropic: 'AGENT_ADMIN_PROVIDER_LINK_TEMPLATE_ANTHROPIC',
   cerebras: 'AGENT_ADMIN_PROVIDER_LINK_TEMPLATE_CEREBRAS',
@@ -117,7 +78,7 @@ const readNestedRecord = (record: JsonRecord | null, key: string): JsonRecord | 
 const normalizeProviderInternal = (value: unknown): AgentProvider | null => {
   const normalized = normalizeString(value)?.toLowerCase();
   if (!normalized) return null;
-  if (PROVIDER_VALUES.includes(normalized as AgentProvider)) {
+  if (AGENT_PROVIDER_VALUES.includes(normalized as AgentProvider)) {
     return normalized as AgentProvider;
   }
   if (normalized === 'openai.responses' || normalized === 'openai.chat.completions') return 'openai';
@@ -126,6 +87,23 @@ const normalizeProviderInternal = (value: unknown): AgentProvider | null => {
     return 'google';
   }
   if (normalized.includes('cerebras')) return 'cerebras';
+  if (
+    normalized === 'fal' ||
+    normalized.startsWith('fal:') ||
+    normalized.startsWith('fal-ai/') ||
+    normalized.includes('fal-ai/')
+  ) {
+    return 'fal';
+  }
+  if (
+    normalized === 'xai' ||
+    normalized === 'x.ai' ||
+    normalized.startsWith('xai:') ||
+    normalized.startsWith('x.ai/') ||
+    normalized.startsWith('grok')
+  ) {
+    return 'xai';
+  }
   if (normalized.includes('together')) return 'together';
   if (normalized.includes('debug') || normalized.includes('fake')) return 'debug';
   return null;
@@ -138,7 +116,7 @@ export const normalizeProvider = (value: unknown): AgentProvider => {
 export const normalizeProviderSource = (value: unknown): AgentProviderSource => {
   const normalized = normalizeString(value)?.toLowerCase();
   if (!normalized) return 'unknown';
-  if (PROVIDER_SOURCE_VALUES.includes(normalized as AgentProviderSource)) {
+  if (AGENT_PROVIDER_SOURCE_VALUES.includes(normalized as AgentProviderSource)) {
     return normalized as AgentProviderSource;
   }
   return 'unknown';
@@ -147,7 +125,7 @@ export const normalizeProviderSource = (value: unknown): AgentProviderSource => 
 export const normalizeProviderPath = (value: unknown): AgentProviderPath => {
   const normalized = normalizeString(value)?.toLowerCase();
   if (!normalized) return 'unknown';
-  if (PROVIDER_PATH_VALUES.includes(normalized as AgentProviderPath)) {
+  if (AGENT_PROVIDER_PATH_VALUES.includes(normalized as AgentProviderPath)) {
     return normalized as AgentProviderPath;
   }
   return 'unknown';
@@ -169,6 +147,22 @@ export const inferProviderFromModel = (value: unknown): AgentProvider | null => 
   }
   if (withoutPrefix.startsWith('claude')) return 'anthropic';
   if (withoutPrefix.startsWith('gemini')) return 'google';
+  if (
+    normalized.startsWith('fal:') ||
+    normalized.startsWith('fal-ai/') ||
+    withoutPrefix.startsWith('fal:') ||
+    withoutPrefix.startsWith('fal-ai/')
+  ) {
+    return 'fal';
+  }
+  if (
+    normalized.startsWith('xai:') ||
+    normalized.startsWith('x.ai/') ||
+    normalized.startsWith('grok') ||
+    withoutPrefix.startsWith('grok')
+  ) {
+    return 'xai';
+  }
   if (withoutPrefix.includes('flux') || withoutPrefix.includes('black-forest-labs/')) return 'together';
   if (withoutPrefix.startsWith('debug/') || withoutPrefix === 'fake') return 'debug';
   return normalizeProviderInternal(normalized);
@@ -302,8 +296,14 @@ const interpolateTemplate = (template: string, context: ProviderLinkContext): st
   }, template);
 };
 
+const isProviderLinkTemplateProvider = (
+  provider: AgentProvider,
+): provider is ProviderLinkTemplateProvider => {
+  return provider in PROVIDER_LINK_TEMPLATE_ENV;
+};
+
 const readProviderLinkTemplate = (provider: AgentProvider): string | null => {
-  if (provider === 'debug' || provider === 'unknown') return null;
+  if (!isProviderLinkTemplateProvider(provider)) return null;
   const envKey = PROVIDER_LINK_TEMPLATE_ENV[provider];
   const value = normalizeString(process.env[envKey]);
   if (!value) return null;
