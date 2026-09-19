@@ -1,6 +1,6 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
-import { ResearchResult } from './research-panel';
+import type { ResearchResult } from './research-panel';
 import { cn } from '@/lib/utils';
 import {
   ExternalLink,

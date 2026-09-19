@@ -989,9 +989,7 @@ export const MessageThreadCollapsible = React.forwardRef<
   React.useEffect(() => {
     const hasAgent = storeTranscripts.some((t) => t.speaker === 'voice-agent');
     if (hasAgent) {
-      try {
-        setAgentPresent(true);
-      } catch {}
+      setAgentPresent(true);
     }
   }, [storeTranscripts, setAgentPresent]);
 

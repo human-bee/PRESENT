@@ -7,9 +7,8 @@ import {
   loadCacheFromStorage,
   saveCacheToStorage,
   hashApiKey,
-  normalizeTeams,
-  normalizeIssues,
-} from './index';
+} from './cache';
+import { normalizeTeams, normalizeIssues } from './normalizers';
 import type { LinearBoardData, LoadEvent, LinearStatus } from './types';
 
 interface UseLinearDataEnricherOptions {
@@ -145,7 +144,6 @@ export function useLinearDataEnricher({ apiKey, teamId, pushEvent }: UseLinearDa
     },
   }), [apiKey, teamId, pushEvent]);
 }
-
 
 
 

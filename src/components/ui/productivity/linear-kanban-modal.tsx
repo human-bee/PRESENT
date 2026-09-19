@@ -31,6 +31,8 @@ export function IssueDetailModal({
   onAssigneeChange,
   onAddComment,
 }: IssueDetailModalProps) {
+  const description = issue.description?.trim();
+
   return (
     <div
       className="absolute inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
@@ -77,16 +79,11 @@ export function IssueDetailModal({
               <div>
                 <h3 className="text-sm font-semibold text-primary mb-2">Description</h3>
                 <div className="text-secondary text-sm leading-relaxed">
-                  <p>
-                    This is a placeholder description for the issue. In a real integration,
-                    this would be fetched from the Linear API. It supports <strong>markdown</strong>
-                    and other rich text features.
-                  </p>
-                  <ul className="list-disc ml-4 mt-2 space-y-1">
-                    <li>Check acceptance criteria</li>
-                    <li>Verify with design</li>
-                    <li>Update documentation</li>
-                  </ul>
+                  {description ? (
+                    <p className="whitespace-pre-wrap">{description}</p>
+                  ) : (
+                    <p>No description.</p>
+                  )}
                 </div>
               </div>
 
@@ -218,7 +215,6 @@ export function IssueDetailModal({
     </div>
   );
 }
-
 
 
 

@@ -752,9 +752,7 @@ function logMetrics(
   }
   onMetricEvent?.(payload);
   if (cfg.debug) {
-    try {
-      console.log('[CanvasAgent:Metrics]', JSON.stringify(payload));
-    } catch {}
+    console.log('[CanvasAgent:Metrics]', JSON.stringify(payload));
   }
 }
 

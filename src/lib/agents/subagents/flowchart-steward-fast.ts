@@ -1,9 +1,7 @@
-import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
+import { getCerebrasClient, isFastStewardReady } from '../fast-steward-config';
 import { getFlowchartDoc, getTranscriptWindow, commitFlowchartDoc, getContextDocuments, formatContextDocuments } from '../shared/supabase-context';
 import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
 import { resolveFastStewardModel } from '@/lib/agents/control-plane/fast-model';
-
-const getFlowchartFastModel = () => getModelForSteward('FLOWCHART_STEWARD_FAST_MODEL');
 
 export const flowchartStewardFastReady = isFastStewardReady();
 
@@ -99,7 +97,7 @@ export async function runFlowchartStewardFast(params: {
     stewardEnvVar: 'FLOWCHART_STEWARD_FAST_MODEL',
     room,
     task: 'flowchart.fast',
-  }).catch(() => ({ model: getFlowchartFastModel() }));
+  });
   const FLOWCHART_FAST_TRACE = flowchartFastTrace(CEREBRAS_MODEL);
   const overallStart = Date.now();
 
@@ -227,7 +225,7 @@ export async function runFlowchartInstruction(params: {
     stewardEnvVar: 'FLOWCHART_STEWARD_FAST_MODEL',
     room,
     task: 'flowchart.fast',
-  }).catch(() => ({ model: getFlowchartFastModel() }));
+  });
   const FLOWCHART_FAST_TRACE = flowchartFastTrace(CEREBRAS_MODEL);
 
   if (!isFastStewardReady()) {

@@ -196,7 +196,7 @@ export async function runDebateScorecardStewardFast(params: {
             stewardEnvVar: 'DEBATE_STEWARD_FAST_MODEL',
             room,
             task: 'scorecard.fast',
-          }).catch(() => ({ model: getModelForSteward('DEBATE_STEWARD_FAST_MODEL') }))
+          })
         ).model;
   const debateFastTrace = buildDebateFastTrace(resolvedDebateModel);
   const cerebrasModel = resolvedDebateModel;

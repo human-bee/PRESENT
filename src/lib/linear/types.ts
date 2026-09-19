@@ -47,6 +47,7 @@ export interface LinearIssue {
   id: string;
   identifier: string;
   title: string;
+  description?: string;
   status?: string;
   statusId?: string;
   updatedAt: string;
@@ -132,6 +133,7 @@ export const linearKanbanSchema = z.object({
         id: z.string(),
         identifier: z.string(),
         title: z.string(),
+        description: z.string().optional(),
         status: z.string(),
         updatedAt: z.string(),
         priority: z.object({ value: z.number(), name: z.string() }).optional(),
@@ -154,8 +156,6 @@ export interface KanbanColumn {
   title: string;
   key: string;
 }
-
-
 
 
 
