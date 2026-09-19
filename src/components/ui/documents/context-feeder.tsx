@@ -1,5 +1,9 @@
 'use client';
 
+import {
+    contextDocumentSchema,
+    type ContextDocument,
+} from '@/lib/context-documents';
 import { cn } from '@/lib/utils';
 import { useComponentRegistration } from '@/lib/component-registry';
 import { z } from 'zod';
@@ -16,19 +20,6 @@ import {
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 
-// =============================================================================
-// Schema
-// =============================================================================
-
-export const contextDocumentSchema = z.object({
-    id: z.string(),
-    title: z.string(),
-    content: z.string(),
-    type: z.enum(['markdown', 'text']),
-    timestamp: z.number(),
-    source: z.enum(['file', 'paste']),
-});
-
 export const contextFeederSchema = z.object({
     documents: z.array(contextDocumentSchema).optional().describe('Array of context documents'),
     allowMarkdown: z.boolean().optional().describe('Allow markdown file uploads'),
@@ -36,7 +27,6 @@ export const contextFeederSchema = z.object({
     title: z.string().optional().describe('Title for the widget'),
 });
 
-export type ContextDocument = z.infer<typeof contextDocumentSchema>;
 export type ContextFeederProps = z.infer<typeof contextFeederSchema>;
 
 type ContextFeederHostProps = ContextFeederProps &

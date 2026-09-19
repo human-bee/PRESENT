@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { parseContextDocuments } from '@/lib/context-documents';
 
 let cachedSupabase: ReturnType<typeof createClient> | null = null;
 
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      contextDocuments: data?.context_documents || [],
+      contextDocuments: parseContextDocuments(data?.context_documents),
     });
   } catch (err) {
     console.error('[ContextAPI] GET exception:', err);
@@ -85,6 +86,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'contextDocuments must be an array' }, { status: 400 });
     }
 
+    const parsedDocuments = parseContextDocuments(contextDocuments);
+    if (parsedDocuments.length !== contextDocuments.length) {
+      return NextResponse.json({ error: 'contextDocuments contains invalid entries' }, { status: 400 });
+    }
+
     // Check if session exists
     const { data: existing } = await supabase
       .from('sessions')
@@ -98,7 +104,7 @@ export async function POST(request: NextRequest) {
       const result = await supabase
         .from('sessions')
         .update({
-          context_documents: contextDocuments,
+          context_documents: parsedDocuments,
           updated_at: new Date().toISOString(),
         })
         .eq('room_name', sessionId);
@@ -107,7 +113,7 @@ export async function POST(request: NextRequest) {
       // Insert new session
       const result = await supabase.from('sessions').insert({
         room_name: sessionId,
-        context_documents: contextDocuments,
+        context_documents: parsedDocuments,
         updated_at: new Date().toISOString(),
       });
       error = result.error;
