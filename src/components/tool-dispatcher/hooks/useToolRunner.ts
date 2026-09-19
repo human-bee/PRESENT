@@ -7,6 +7,7 @@ import { useToolRegistry } from './useToolRegistry';
 import { useToolQueue } from './useToolQueue';
 import type { ToolCall, ToolParameters, ToolRunResult } from '../utils/toolTypes';
 import { TOOL_STEWARD_DELAY_MS, TOOL_STEWARD_WINDOW_MS } from '../utils/constants';
+import { normalizeExaFallbackResult } from '../utils/resultNormalizers';
 import type { ToolEventsApi } from './useToolEvents';
 import { ComponentRegistry } from '@/lib/component-registry';
 import { applyEnvelope } from '@/components/tool-dispatcher/handlers/tldraw-actions';
@@ -710,19 +711,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         }
       }
 
-      const resultRecord = toRecord(result);
-      if ((!resultRecord || resultRecord.status === 'IGNORED') && toolName === 'exa') {
-        const q = String(params.query || '').trim();
-        result = {
-          status: 'STUB',
-          results: [
-            {
-              title: `Research stub for: ${q}`,
-              snippet: 'MCP not wired. Configure MCP servers in /mcp-config to enable real results.',
-            },
-          ],
-        };
-      }
+      result = normalizeExaFallbackResult({ toolName, result, params, mcpError });
 
       try {
         logger.debug('mcp result', {
@@ -738,7 +727,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           observedResult?.results ?? observedResult?.items ?? observedResult?.documents ?? [];
         const list = Array.isArray(listRaw) ? listRaw : [];
         const resultCount = Array.isArray(list) ? list.length : undefined;
-        const eventType = mcpError ? 'mcp_error' : 'mcp_result';
+        const observedError =
+          mcpError ??
+          (typeof observedResult?.message === 'string' && observedResult?.status === 'ERROR'
+            ? observedResult.message
+            : undefined);
+        const eventType = observedError ? 'mcp_error' : 'mcp_result';
         logJourneyEvent({
           eventType,
           source: 'dispatcher',
@@ -747,7 +741,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           payload: {
             status: observedResult?.status ?? null,
             resultCount,
-            error: mcpError,
+            error: observedError,
           },
         });
       } catch {}
@@ -756,6 +750,9 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         try {
           const queryText = String(params.query || '').trim();
           const exaResult = toRecord(result);
+          if (exaResult?.status === 'ERROR') {
+            return toToolRunResult(result);
+          }
           const itemsRaw = exaResult?.results ?? exaResult?.items ?? exaResult?.documents ?? [];
           const items = Array.isArray(itemsRaw) ? itemsRaw : [];
           const sourcesText = Array.isArray(items)

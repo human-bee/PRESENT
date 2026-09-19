@@ -44,3 +44,33 @@ export function getMermaidLastNode(text: string): string | undefined {
   const last = matches[matches.length - 1];
   return last?.[2]?.replace(/;$/, '') || undefined;
 }
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+export function normalizeExaFallbackResult(args: {
+  toolName: string;
+  result: unknown;
+  params: Record<string, unknown>;
+  mcpError?: string;
+}): unknown {
+  const { toolName, result, params, mcpError } = args;
+  if (toolName !== 'exa') return result;
+
+  const resultRecord = toRecord(result);
+  if (resultRecord && resultRecord.status !== 'IGNORED') return result;
+
+  const queryText = typeof params.query === 'string' ? params.query.trim() : '';
+  const querySuffix = queryText ? ` for "${queryText}"` : '';
+
+  return {
+    status: 'ERROR',
+    message:
+      mcpError ??
+      `Exa MCP is unavailable${querySuffix}. Configure MCP servers in /mcp-config to enable real research results.`,
+    error: mcpError ?? 'Exa MCP unavailable',
+    results: [],
+  };
+}
