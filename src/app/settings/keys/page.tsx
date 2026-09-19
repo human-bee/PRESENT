@@ -3,22 +3,25 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ModelKeyProvider } from '@/lib/agents/shared/user-model-keys';
+import {
+  buildProviderStateMap,
+  MODEL_KEY_PROVIDER_CONFIGS,
+} from '@/lib/model-key-provider-config';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import { buildAuthPageHref, getCurrentPathWithSearchAndHash } from '@/lib/auth/redirects';
 import { getBooleanFlag } from '@/lib/feature-flags';
 
-type ProviderId = 'openai' | 'anthropic' | 'google' | 'together' | 'cerebras' | 'fal' | 'xai';
-
 type ProviderStatus = {
-  provider: ProviderId;
+  provider: ModelKeyProvider;
   configured: boolean;
   last4?: string;
   updatedAt?: string;
 };
 
 type ProviderLinkState = {
-  provider: ProviderId;
+  provider: ModelKeyProvider;
   state: 'linked_supported' | 'linked_unsupported' | 'api_key_configured' | 'missing';
   linked: boolean;
   apiKeyConfigured: boolean;
@@ -36,100 +39,24 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 const formatProviderLinkState = (state: ProviderLinkState['state']): string =>
   state.replaceAll('_', ' ');
 
-const PROVIDERS: Array<{
-  id: ProviderId;
-  label: string;
-  required: boolean;
-  helpUrl: string;
-  note: string;
-}> = [
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    required: true,
-    helpUrl: 'https://platform.openai.com/api-keys',
-    note: 'Required for voice + most stewards.',
-  },
-  {
-    id: 'anthropic',
-    label: 'Anthropic',
-    required: false,
-    helpUrl: 'https://console.anthropic.com/settings/keys',
-    note: 'Optional (Claude models).',
-  },
-  {
-    id: 'google',
-    label: 'Google (Gemini)',
-    required: false,
-    helpUrl: 'https://aistudio.google.com/app/apikey',
-    note: 'Optional (Gemini image model / AI Studio).',
-  },
-  {
-    id: 'together',
-    label: 'Together AI',
-    required: false,
-    helpUrl: 'https://api.together.ai/settings/api-keys',
-    note: 'Optional legacy provider for older routing paths. Not used by the current image widget.',
-  },
-  {
-    id: 'fal',
-    label: 'fal',
-    required: false,
-    helpUrl: 'https://fal.ai/dashboard/keys',
-    note: 'Optional (FLUX.2 Flash image generation).',
-  },
-  {
-    id: 'xai',
-    label: 'xAI',
-    required: false,
-    helpUrl: 'https://console.x.ai/',
-    note: 'Optional (Grok image generation).',
-  },
-  {
-    id: 'cerebras',
-    label: 'Cerebras',
-    required: false,
-    helpUrl: 'https://cloud.cerebras.ai/',
-    note: 'Optional (FAST stewards + router).',
-  },
-];
-
 export default function ModelKeysPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
 
   const [statuses, setStatuses] = useState<ProviderStatus[] | null>(null);
-  const [drafts, setDrafts] = useState<Record<ProviderId, string>>({
-    openai: '',
-    anthropic: '',
-    google: '',
-    together: '',
-    cerebras: '',
-    fal: '',
-    xai: '',
-  });
-  const [busy, setBusy] = useState<Record<ProviderId, boolean>>({
-    openai: false,
-    anthropic: false,
-    google: false,
-    together: false,
-    cerebras: false,
-    fal: false,
-    xai: false,
-  });
+  const [drafts, setDrafts] = useState<Record<ModelKeyProvider, string>>(() =>
+    buildProviderStateMap(() => ''),
+  );
+  const [busy, setBusy] = useState<Record<ModelKeyProvider, boolean>>(() =>
+    buildProviderStateMap(() => false),
+  );
   const [error, setError] = useState<string | null>(null);
-  const [providerLinks, setProviderLinks] = useState<Record<ProviderId, ProviderLinkState | undefined>>({
-    openai: undefined,
-    anthropic: undefined,
-    google: undefined,
-    together: undefined,
-    cerebras: undefined,
-    fal: undefined,
-    xai: undefined,
-  });
+  const [providerLinks, setProviderLinks] = useState<
+    Record<ModelKeyProvider, ProviderLinkState | undefined>
+  >(() => buildProviderStateMap(() => undefined));
 
   const statusByProvider = useMemo(() => {
-    const map = new Map<ProviderId, ProviderStatus>();
+    const map = new Map<ModelKeyProvider, ProviderStatus>();
     (statuses || []).forEach((s) => map.set(s.provider, s));
     return map;
   }, [statuses]);
@@ -159,15 +86,7 @@ export default function ModelKeysPage() {
         if (linksRes.ok) {
           const linksJson = await linksRes.json();
           const links = Array.isArray(linksJson?.links) ? (linksJson.links as ProviderLinkState[]) : [];
-          const linkMap: Record<ProviderId, ProviderLinkState | undefined> = {
-            openai: undefined,
-            anthropic: undefined,
-            google: undefined,
-            together: undefined,
-            cerebras: undefined,
-            fal: undefined,
-            xai: undefined,
-          };
+          const linkMap = buildProviderStateMap<ProviderLinkState | undefined>(() => undefined);
           for (const link of links) {
             if (link?.provider && link.provider in linkMap) {
               linkMap[link.provider] = link;
@@ -190,12 +109,12 @@ export default function ModelKeysPage() {
     void refresh();
   }, [user, refresh]);
 
-  const setDraft = useCallback((provider: ProviderId, value: string) => {
+  const setDraft = useCallback((provider: ModelKeyProvider, value: string) => {
     setDrafts((prev) => ({ ...prev, [provider]: value }));
   }, []);
 
   const save = useCallback(
-    async (provider: ProviderId) => {
+    async (provider: ModelKeyProvider) => {
       const apiKey = drafts[provider].trim();
       if (!apiKey) return;
       setError(null);
@@ -222,7 +141,7 @@ export default function ModelKeysPage() {
   );
 
   const clear = useCallback(
-    async (provider: ProviderId) => {
+    async (provider: ModelKeyProvider) => {
       setError(null);
       setBusy((prev) => ({ ...prev, [provider]: true }));
       try {
@@ -301,7 +220,7 @@ export default function ModelKeysPage() {
 
         <div className="mt-6 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
           <div className="divide-y divide-slate-200">
-            {PROVIDERS.map((p) => {
+            {MODEL_KEY_PROVIDER_CONFIGS.map((p) => {
               const status = statusByProvider.get(p.id);
               const configured = status?.configured === true;
               const last4 = status?.last4 ? `••••${status.last4}` : '';
