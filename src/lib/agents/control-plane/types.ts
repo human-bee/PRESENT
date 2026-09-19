@@ -4,7 +4,13 @@ export type ModelProvider = (typeof MODEL_PROVIDERS)[number];
 export const KNOB_SCOPES = ['global', 'room', 'user', 'task'] as const;
 export type KnobScope = (typeof KNOB_SCOPES)[number];
 
-export type ApplyMode = 'live' | 'next_session' | 'restart_required';
+export const APPLY_MODE_VALUES = ['live', 'next_session', 'restart_required'] as const;
+export type ApplyMode = (typeof APPLY_MODE_VALUES)[number];
+export type ResolvedFieldScope = KnobScope | 'env' | 'request';
+
+export const isApplyMode = (value: unknown): value is ApplyMode => {
+  return typeof value === 'string' && APPLY_MODE_VALUES.includes(value as ApplyMode);
+};
 
 export type CanvasKnobPatch = {
   preset?: 'creative' | 'precise';
@@ -106,7 +112,7 @@ export type ResolvedModelControl = {
   fieldSources: Record<
     string,
     {
-      scope: KnobScope | 'env' | 'request';
+      scope: ResolvedFieldScope;
       scopeId: string;
       profileId?: string;
       version?: number;

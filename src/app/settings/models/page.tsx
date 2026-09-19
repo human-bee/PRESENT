@@ -12,7 +12,7 @@ import { GuidedControlsPanel } from './_components/guided-controls-panel';
 import { SharedKeyUnlockPanel } from './_components/shared-key-unlock-panel';
 import { StatusSummary } from './_components/status-summary';
 import { buildPatchFromGuided, GUIDED_SECTIONS, seedGuidedValues } from './_lib/guided-config';
-import type { ModelControlStatusResponse } from './_lib/types';
+import type { AdminScopeType, ModelControlStatusResponse } from './_lib/types';
 
 const pretty = (value: unknown) => JSON.stringify(value, null, 2);
 
@@ -42,7 +42,7 @@ export default function ModelControlsPage() {
     }),
   );
 
-  const [adminScopeType, setAdminScopeType] = useState<'global' | 'room' | 'user' | 'task'>('global');
+  const [adminScopeType, setAdminScopeType] = useState<AdminScopeType>('global');
   const [adminScopeId, setAdminScopeId] = useState('global');
   const [adminTaskPrefix, setAdminTaskPrefix] = useState('');
   const [adminPriority, setAdminPriority] = useState('100');
