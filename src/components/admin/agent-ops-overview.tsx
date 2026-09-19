@@ -1,5 +1,9 @@
 'use client';
 
+import {
+  AGENT_PROVIDER_LABELS,
+  sortAgentProviderEntries,
+} from './provider-presentation';
 import type { AgentOverviewResponse } from './types';
 
 const QUEUE_STATUS_LABELS: Record<string, string> = {
@@ -8,18 +12,6 @@ const QUEUE_STATUS_LABELS: Record<string, string> = {
   failed: 'Failed Tasks',
   succeeded: 'Succeeded Tasks',
   canceled: 'Canceled Tasks',
-};
-
-const PROVIDER_LABELS: Record<string, string> = {
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  google: 'Google',
-  cerebras: 'Cerebras',
-  together: 'Together',
-  fal: 'fal',
-  xai: 'xAI',
-  debug: 'Debug',
-  unknown: 'Unknown',
 };
 
 const formatDuration = (durationMs: number | null | undefined): string => {
@@ -49,14 +41,10 @@ export function AgentOpsOverview({ overview }: { overview: AgentOverviewResponse
     const order = ['queued', 'running', 'failed', 'succeeded', 'canceled'];
     return order.indexOf(left) - order.indexOf(right);
   });
-  const providerMixEntries = Object.entries(overview.providerMix || {}).sort(([left], [right]) => {
-    const order = ['openai', 'anthropic', 'google', 'cerebras', 'together', 'fal', 'xai', 'debug', 'unknown'];
-    return order.indexOf(left) - order.indexOf(right);
-  });
-  const providerFailureEntries = Object.entries(overview.providerFailures || {}).sort(([left], [right]) => {
-    const order = ['openai', 'anthropic', 'google', 'cerebras', 'together', 'fal', 'xai', 'debug', 'unknown'];
-    return order.indexOf(left) - order.indexOf(right);
-  });
+  const providerMixEntries = sortAgentProviderEntries(Object.entries(overview.providerMix || {}));
+  const providerFailureEntries = sortAgentProviderEntries(
+    Object.entries(overview.providerFailures || {}),
+  );
 
   return (
     <section className="rounded border border-[#cbd5e1] bg-[#ffffff] p-4">
@@ -91,7 +79,9 @@ export function AgentOpsOverview({ overview }: { overview: AgentOverviewResponse
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
               {providerMixEntries.map(([provider, count]) => (
                 <div key={`mix-${provider}`} className="rounded border border-[#dbe3ed] bg-white px-2 py-1">
-                  <span className="text-[#334155]">{PROVIDER_LABELS[provider] ?? provider}</span>
+                  <span className="text-[#334155]">
+                    {AGENT_PROVIDER_LABELS[provider as keyof typeof AGENT_PROVIDER_LABELS] ?? provider}
+                  </span>
                   <span className="ml-2 font-semibold text-[#111827]">{count}</span>
                 </div>
               ))}
@@ -102,7 +92,9 @@ export function AgentOpsOverview({ overview }: { overview: AgentOverviewResponse
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
               {providerFailureEntries.map(([provider, count]) => (
                 <div key={`failure-${provider}`} className="rounded border border-[#dbe3ed] bg-white px-2 py-1">
-                  <span className="text-[#334155]">{PROVIDER_LABELS[provider] ?? provider}</span>
+                  <span className="text-[#334155]">
+                    {AGENT_PROVIDER_LABELS[provider as keyof typeof AGENT_PROVIDER_LABELS] ?? provider}
+                  </span>
                   <span className="ml-2 font-semibold text-[#111827]">{count}</span>
                 </div>
               ))}

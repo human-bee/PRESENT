@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AgentOpsOverview } from '@/components/admin/agent-ops-overview';
 import { AgentQueueTable } from '@/components/admin/agent-queue-table';
+import { AGENT_PROVIDER_FILTER_OPTIONS } from '@/components/admin/provider-presentation';
 import { AgentTraceTimeline } from '@/components/admin/agent-trace-timeline';
 import { AgentVoiceSessionTable } from '@/components/admin/agent-voice-session-table';
 import { AgentWorkerHealth } from '@/components/admin/agent-worker-health';
@@ -27,17 +28,6 @@ import type {
 
 const LIST_POLL_MS = 15_000;
 const TRACE_CONTEXT_PAGE_LIMIT = 200;
-const PROVIDER_FILTER_OPTIONS: Array<{ value: AgentProvider; label: string }> = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'google', label: 'Google' },
-  { value: 'cerebras', label: 'Cerebras' },
-  { value: 'together', label: 'Together' },
-  { value: 'fal', label: 'fal' },
-  { value: 'xai', label: 'xAI' },
-  { value: 'debug', label: 'Debug' },
-  { value: 'unknown', label: 'Unknown' },
-];
 const PROVIDER_PATH_FILTER_OPTIONS: Array<{ value: AgentProviderPath; label: string }> = [
   { value: 'primary', label: 'Primary' },
   { value: 'fallback', label: 'Fallback' },
@@ -595,7 +585,7 @@ export default function AgentAdminPage() {
                 className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
               >
                 <option value="">All providers</option>
-                {PROVIDER_FILTER_OPTIONS.map((option) => (
+                {AGENT_PROVIDER_FILTER_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
