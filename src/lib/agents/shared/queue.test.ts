@@ -23,18 +23,21 @@ type QueryStub = {
   maybeSingle: jest.Mock;
 };
 
+type QueryResult = { data: any; error: any };
+type MaybeSingleEntry = QueryResult | ((query: QueryStub) => Promise<QueryResult> | QueryResult);
+
 type QueryHarness = {
   queries: QueryStub[];
-  listQueue: Array<{ data: any; error: any }>;
-  maybeSingleQueue: Array<{ data: any; error: any }>;
-  singleQueue: Array<{ data: any; error: any }>;
+  listQueue: QueryResult[];
+  maybeSingleQueue: MaybeSingleEntry[];
+  singleQueue: QueryResult[];
 };
 
 const createHarness = (): QueryHarness => {
   const queries: QueryStub[] = [];
-  const listQueue: Array<{ data: any; error: any }> = [];
-  const maybeSingleQueue: Array<{ data: any; error: any }> = [];
-  const singleQueue: Array<{ data: any; error: any }> = [];
+  const listQueue: QueryResult[] = [];
+  const maybeSingleQueue: MaybeSingleEntry[] = [];
+  const singleQueue: QueryResult[] = [];
   createClientMock.mockImplementation(() => {
     const supabase = {
       from: jest.fn(() => {
@@ -54,7 +57,13 @@ const createHarness = (): QueryHarness => {
         query.update = jest.fn(() => query);
         query.insert = jest.fn(() => query);
         query.single = jest.fn(async () => singleQueue.shift() ?? { data: null, error: null });
-        query.maybeSingle = jest.fn(async () => maybeSingleQueue.shift() ?? { data: null, error: null });
+        query.maybeSingle = jest.fn(async () => {
+          const next = maybeSingleQueue.shift();
+          if (typeof next === 'function') {
+            return next(query);
+          }
+          return next ?? { data: null, error: null };
+        });
         queries.push(query);
         return query;
       }),
@@ -453,5 +462,137 @@ describe('AgentTaskQueue enqueue dedupe behavior', () => {
     expect(staleLeasedQuery?.or.mock.invocationCallOrder[0]).toBeLessThan(
       staleLeasedQuery?.limit.mock.invocationCallOrder[0],
     );
+  });
+
+  test('claimLocalScopeTasks refills claim slots when early candidates race away', async () => {
+    const harness = createHarness();
+    const makeTask = (id: string, priority: number, createdAt: string) => ({
+      id,
+      room: 'room-local',
+      task: 'fairy.intent',
+      params: {} as JsonObject,
+      trace_id: null,
+      status: 'running',
+      priority,
+      run_at: null,
+      attempt: 0,
+      error: null,
+      request_id: id,
+      dedupe_key: null,
+      resource_keys: ['room:room-local', 'runtime-scope:local', 'queue-mode:local-scope-direct-claim'],
+      lease_token: null,
+      lease_expires_at: null,
+      created_at: createdAt,
+      updated_at: createdAt,
+      result: null,
+    });
+    const raced = makeTask('task-raced', 10, '2026-02-19T11:00:00.000Z');
+    const firstClaimed = makeTask('task-first-claimed', 9, '2026-02-19T11:01:00.000Z');
+    const refillClaimed = makeTask('task-refill-claimed', 8, '2026-02-19T11:02:00.000Z');
+    harness.listQueue.push({ data: [refillClaimed, firstClaimed, raced], error: null });
+    harness.listQueue.push({ data: [], error: null });
+    harness.maybeSingleQueue.push(
+      { data: null, error: null },
+      { data: firstClaimed, error: null },
+      { data: refillClaimed, error: null },
+    );
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    const result = await queue.claimLocalScopeTasks({ runtimeScope: 'local', limit: 2 });
+
+    expect(result.tasks.map((task) => task.id)).toEqual(['task-first-claimed', 'task-refill-claimed']);
+    expect(harness.queries).toHaveLength(5);
+  });
+
+  test('claimLocalScopeTasks starts a full available-capacity window before any claim resolves', async () => {
+    const harness = createHarness();
+    const makeTask = (id: string) => ({
+      id,
+      room: 'room-local',
+      task: 'fairy.intent',
+      params: {} as JsonObject,
+      trace_id: null,
+      status: 'running',
+      priority: 1,
+      run_at: null,
+      attempt: 0,
+      error: null,
+      request_id: id,
+      dedupe_key: null,
+      resource_keys: ['room:room-local', 'runtime-scope:local', 'queue-mode:local-scope-direct-claim'],
+      lease_token: null,
+      lease_expires_at: null,
+      created_at: '2026-02-19T11:00:00.000Z',
+      updated_at: '2026-02-19T11:00:00.000Z',
+      result: null,
+    });
+    const tasks = [makeTask('task-1'), makeTask('task-2'), makeTask('task-3')];
+    harness.listQueue.push({ data: tasks, error: null });
+    harness.listQueue.push({ data: [], error: null });
+    let resolveClaims: (() => void) | null = null;
+    const allClaimsStarted = new Promise<void>((resolve) => {
+      resolveClaims = resolve;
+    });
+    const startedIds: string[] = [];
+    harness.maybeSingleQueue.push(
+      ...tasks.map((task) => async () => {
+        startedIds.push(task.id);
+        if (startedIds.length === tasks.length) {
+          resolveClaims?.();
+        }
+        await allClaimsStarted;
+        return { data: task, error: null };
+      }),
+    );
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    const result = await queue.claimLocalScopeTasks({ runtimeScope: 'local', limit: 3 });
+
+    expect(result.tasks.map((task) => task.id)).toEqual(['task-1', 'task-2', 'task-3']);
+    expect(startedIds).toEqual(['task-1', 'task-2', 'task-3']);
+  });
+
+  test('claimLocalScopeTasks returns successful sibling claims when one batch claim fails', async () => {
+    const harness = createHarness();
+    const makeTask = (id: string) => ({
+      id,
+      room: 'room-local',
+      task: 'fairy.intent',
+      params: {} as JsonObject,
+      trace_id: null,
+      status: 'running',
+      priority: 1,
+      run_at: null,
+      attempt: 0,
+      error: null,
+      request_id: id,
+      dedupe_key: null,
+      resource_keys: ['room:room-local', 'runtime-scope:local', 'queue-mode:local-scope-direct-claim'],
+      lease_token: null,
+      lease_expires_at: null,
+      created_at: '2026-02-19T11:00:00.000Z',
+      updated_at: '2026-02-19T11:00:00.000Z',
+      result: null,
+    });
+    const firstClaimed = makeTask('task-first-claimed');
+    const failed = makeTask('task-failed');
+    const secondClaimed = makeTask('task-second-claimed');
+    harness.listQueue.push({ data: [firstClaimed, failed, secondClaimed], error: null });
+    harness.listQueue.push({ data: [], error: null });
+    harness.maybeSingleQueue.push(
+      { data: firstClaimed, error: null },
+      async () => {
+        throw new Error('transient claim failure');
+      },
+      { data: secondClaimed, error: null },
+    );
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    const result = await queue.claimLocalScopeTasks({ runtimeScope: 'local', limit: 3 });
+
+    expect(result.tasks.map((task) => task.id)).toEqual(['task-first-claimed', 'task-second-claimed']);
   });
 });

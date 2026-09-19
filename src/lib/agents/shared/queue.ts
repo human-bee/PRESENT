@@ -580,9 +580,7 @@ export class AgentTaskQueue {
       return runAtMs <= nowMs;
     });
 
-    const claimed: AgentTask[] = [];
-    for (const candidate of claimableCandidates) {
-      if (claimed.length >= limit) break;
+    const claimCandidate = async (candidate: AgentTask): Promise<AgentTask | null> => {
       let updateQuery = this.supabase
         .from('agent_tasks')
         .update({
@@ -599,8 +597,28 @@ export class AgentTaskQueue {
       }
       const { data: updated, error: updateError } = await updateQuery.select('*').maybeSingle();
       if (updateError) throw updateError;
-      if (!updated) continue;
-      claimed.push(updated as AgentTask);
+      return updated ? (updated as AgentTask) : null;
+    };
+
+    const claimed: AgentTask[] = [];
+    for (let index = 0; index < claimableCandidates.length && claimed.length < limit;) {
+      const batchSize = Math.min(limit - claimed.length, claimableCandidates.length - index);
+      const batch = claimableCandidates.slice(index, index + batchSize);
+      index += batchSize;
+      const batchResults = await Promise.allSettled(batch.map(claimCandidate));
+      let batchClaimedCount = 0;
+      let batchError: unknown;
+      for (const result of batchResults) {
+        if (result.status === 'rejected') {
+          batchError ??= result.reason;
+          continue;
+        }
+        if (result.value && claimed.length < limit) {
+          claimed.push(result.value);
+          batchClaimedCount += 1;
+        }
+      }
+      if (batchError && batchClaimedCount === 0) throw batchError;
     }
 
     for (const task of claimed) {
