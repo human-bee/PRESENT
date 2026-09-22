@@ -118,7 +118,7 @@ export async function executeVoiceTool(raw: unknown, signal?: AbortSignal, depen
   }
   if (name === 'ask_canvas') {
     const value = parse(toolSchemas.ask_canvas);
-    return fulfillRoomRequest({ roomId, actor, ...placement, position: input.data.position ?? { x: 0, y: 0 }, selection: input.data.selection, canvasImage: input.data.canvasImage, canvasImageCaption: input.data.canvasImageCaption, provider: input.data.provider ?? 'luna', reasoning: input.data.reasoning, fast: input.data.fast, decisions: input.data.decisions, prompt: value.prompt }, signal);
+    return fulfillRoomRequest({ roomId, actor, requestId, ...placement, position: input.data.position ?? { x: 0, y: 0 }, selection: input.data.selection, canvasImage: input.data.canvasImage, canvasImageCaption: input.data.canvasImageCaption, provider: input.data.provider ?? 'luna', reasoning: input.data.reasoning, fast: input.data.fast, decisions: input.data.decisions, prompt: value.prompt }, signal);
   }
   if (name === 'native_controls') return { nativeControl: parse(nativeControlSchema) };
   if (name === 'read_canvas' || name === 'apply_canvas') {

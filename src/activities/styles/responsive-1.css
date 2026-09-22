@@ -1,0 +1,151 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Rules are scoped to separate activity components. */
+@container (max-width: 750px) {
+.activity-header {
+  padding: 18px
+}
+.activity-title-row h1 {
+  font-size: 26px
+}
+.activity-header-actions {
+  font-size: 10px
+}
+.activity-canvas-button {
+  font-size: 10px; padding: 6px
+}
+.activity-tabs {
+  padding: 0 18px
+}
+.activity-tabs > div {
+  gap: 14px
+}
+.activity-tabs button {
+  font-size: 10px
+}
+.activity-enrichment {
+  display: none
+}
+.activity-body {
+  padding: 18px
+}
+.activity-arena {
+  gap: 12px; grid-template-columns: repeat(var(--side-count), minmax(215px, 1fr))
+}
+.activity-side > header {
+  flex-wrap: wrap
+}
+.activity-side > header input.side-name {
+  max-width: calc(100% - 32px); font-size: 24px
+}
+.activity-conversation > header {
+  display: block
+}
+.activity-conversation > header p {
+  margin-top: 8px
+}
+.activity-arena-caption p {
+  display: none
+}
+.visual-search {
+  flex-wrap: wrap
+}
+.activity-header-actions .activity-live-dot {
+  display: none
+}
+.activity-config {
+  padding: 14px
+}
+.activity-header-actions {
+  align-items: end; flex-direction: column; gap: 6px
+}
+
+}
+@media (max-width: 700px) {
+.activity-switcher {
+  top: 67px; left: 16px
+}
+.activity-menu {
+  top: 108px; left: 10px; right: 10px; max-height: 65vh; padding: 20px
+}
+.activity-template-grid {
+  grid-template-columns: repeat(2, 1fr)
+}
+.activity-template-grid button {
+  min-height: 148px; padding: 14px
+}
+.activity-focus {
+  left: 8px; right: 8px; top: 111px; bottom: 155px
+}
+.activity-menu h2 {
+  font-size: 27px
+}
+.conversation-form {
+  gap: 6px; padding: 7px
+}
+.conversation-form > span {
+  display: none
+}
+.conversation-form > button {
+  padding: 9px 8px; font-size: 10px
+}
+.activity-title-row h1 {
+  font-size: 23px
+}
+.activity-header {
+  gap: 8px; padding: 15px
+}
+.activity-tabs > div {
+  gap: 12px
+}
+.activity-tabs {
+  padding: 0 15px
+}
+.activity-body {
+  padding: 14px
+}
+.activity-inline-form {
+  grid-template-columns: 1fr 1fr
+}
+.activity-inline-form > button {
+  grid-column: span 2
+}
+.activity-unattributed h3 small {
+  display: block; margin: 7px 0
+}
+.chart-row {
+  grid-template-columns: 70px 1fr 45px
+}
+
+}
+@container (max-width: 650px) {
+.meeting-work-grid {
+  grid-template-columns: 1fr
+}
+.meeting-intro {
+  display: block
+}
+.meeting-intro h2 {
+  font-size: 24px
+}
+.meeting-members {
+  grid-template-columns: 1fr 1fr
+}
+.member-card {
+  padding: 14px
+}
+.meeting-connector {
+  gap: 10px
+}
+
+}
+@container (max-width: 420px) {
+.meeting-members {
+  grid-template-columns: 1fr
+}
+.meeting-work-grid {
+  gap: 12px
+}
+.meeting-members .member-fields {
+  font-size: 11px
+}
+
+}

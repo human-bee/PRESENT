@@ -1,3 +1,4 @@
+import { describeCommand } from './command-receipt';
 import type { WorkExecutionState } from '../../shared/work-execution';
 import { AgentError } from './contract';
 import { record, type WireMessage } from './codex-wire';
@@ -19,7 +20,7 @@ export async function runWorkspaceTurn(wire: WorkspaceWire, input: WorkspaceRunI
   void completion.catch(() => {});
   const receipt = (item: Record<string, unknown>) => {
     if (item.type !== 'commandExecution' || typeof item.id !== 'string' || typeof item.command !== 'string' || !['completed', 'failed', 'declined'].includes(String(item.status))) return;
-    const command = { id: item.id.slice(0, 100), command: item.command.replaceAll(cwd, '.').replace(/[\p{Cc}\p{Cf}]/gu, ' ').slice(0, 300), status: item.status as 'completed' | 'failed' | 'declined', exitCode: typeof item.exitCode === 'number' && Number.isInteger(item.exitCode) ? item.exitCode : null };
+    const command = { id: item.id.slice(0, 100), ...describeCommand(item.command, cwd), status: item.status as 'completed' | 'failed' | 'declined', exitCode: typeof item.exitCode === 'number' && Number.isInteger(item.exitCode) ? item.exitCode : null };
     save({ commands: [...state.commands.filter(previous => previous.id !== command.id), command].slice(-12) });
   };
   const finish = (turn: Record<string, unknown>) => {

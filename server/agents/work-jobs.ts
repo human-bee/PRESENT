@@ -1,3 +1,4 @@
+import { dataPath } from '../data-path';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -34,7 +35,7 @@ export class WorkJobs {
   private now: () => number;
   private persist: (path: string, content: string) => void;
   constructor(options: Options = {}) {
-    this.directory = options.directory ?? join(process.cwd(), '.data', 'work-jobs');
+    this.directory = options.directory ?? dataPath('work-jobs');
     this.store = options.store ?? { getRoom, getCanvasRecords, applyOperation, transactCanvas };
     this.now = options.now ?? Date.now; this.persist = options.persist ?? atomicWrite;
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });

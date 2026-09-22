@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-const baseURL = process.env.PRESENT_E2E_URL ?? 'http://127.0.0.1:4318';
+const baseURL = process.env.PRESENT_E2E_URL ?? 'http://127.0.0.1:4320';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -20,7 +20,7 @@ export default defineConfig({
   },
   webServer: {
     command: 'npm run dev',
-    env: { PRESENT_PORT: new URL(baseURL).port },
+    env: { PRESENT_PORT: new URL(baseURL).port, PRESENT_DATA_DIRECTORY: process.env.PRESENT_DATA_DIRECTORY ?? `${process.cwd()}/.data/e2e` },
     url: `${baseURL}/api/health`,
     reuseExistingServer: true,
     timeout: 30_000,

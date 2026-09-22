@@ -1,3 +1,4 @@
+import {dataPath} from '../data-path';
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -14,7 +15,7 @@ const imageResponseSchema = z.object({ data: z.array(z.object({ b64_json: z.stri
 type ImageResult = { objectId: string; src: string; model: string; width: number; height: number; generatedAt: number; elapsedMs: number };
 type Dependencies = { getRoom: typeof getRoom; getCanvasRecords: typeof getCanvasRecords; applyOperation: typeof applyOperation; fetch: typeof fetch; apiKey: () => string | undefined; now: () => number; assetDirectory: string; mediaDirectory: string };
 type ReferenceImage = { objectId: string; src: string; sha256: string; name: string; mimeType: string; bytes: Buffer };
-const defaults: Dependencies = { getRoom, getCanvasRecords, applyOperation, fetch: (...args) => fetch(...args), apiKey: () => process.env.OPENAI_API_KEY, now: Date.now, assetDirectory: join(process.cwd(), '.data', 'assets'), mediaDirectory: join(process.cwd(), 'public', 'media') };
+const defaults: Dependencies = { getRoom, getCanvasRecords, applyOperation, fetch: (...args) => fetch(...args), apiKey: () => process.env.OPENAI_API_KEY, now: Date.now, assetDirectory: dataPath('assets'), mediaDirectory: join(process.cwd(), 'public', 'media') };
 
 function loadReference(objectId: string, room: ReturnType<typeof getRoom>, dependencies: Dependencies): ReferenceImage {
   const object = room.objects.find(value => value.id === objectId);

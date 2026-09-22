@@ -1,0 +1,4 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Rules are scoped to separate activity components. */
+.activity-focus ~ .native-canvas {
+  visibility: hidden
+}

@@ -24,6 +24,8 @@ import { Settings } from './settings';
 import { VoiceControl } from './voice-control';
 import { RoomMemory } from './room-memory';
 import { fitCanvas, focusResult } from './tldraw/focus';
+import { ActivityController } from './activities/activity-stage';
+import { savePendingGeneration, loadPendingGeneration, forgetPendingGeneration, type PendingGeneration } from './requests/pending-generation';
 
 export function App() {
   const [roomId] = useState(getRoomId);
@@ -43,6 +45,13 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
   const [lastGeneration, setLastGeneration] = useState('');
+  const [pendingGeneration, setPendingGeneration] = useState<PendingGeneration | null>(null);
+  useEffect(() => {
+    if (!room.selfId) return;
+    const saved = loadPendingGeneration(roomId, room.selfId);
+    setPendingGeneration(saved);
+    if (saved) setPrompt(saved.prompt);
+  }, [roomId, room.selfId]);
   const input = useRef<HTMLInputElement>(null);
   const [capabilities, setCapabilities] = useState<Record<string, unknown>>({});
   useEffect(() => { fetch('/api/agents').then(r => r.json()).then(setCapabilities).catch(() => {}); }, []);
@@ -76,12 +85,18 @@ export function App() {
     setBusy(true); setPrompt(''); setPanel(null);
     try {
       const view = room.editor?.getViewportPageBounds();
+      const saved = pendingGeneration?.prompt === text ? pendingGeneration : savePendingGeneration({ ...generationOptions, roomId, pageId: room.editor?.getCurrentPageId(), viewport: view && { x: view.x, y: view.y, w: view.w, h: view.h }, prompt: text, provider, position: position(), selection: room.selected, actor: room.selfId });
+      setPendingGeneration(saved);
       let nativeCatalog: unknown;
       for (let attempt = 0; attempt < 2; attempt++) {
-        const response = await fetch('/api/agents/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...generationOptions, nativeCatalog, roomId, pageId: room.editor?.getCurrentPageId(), viewport: view && { x: view.x, y: view.y, w: view.w, h: view.h }, prompt: text, provider, position: position(), selection: room.selected, actor: room.selfId }) });
+        const response = await fetch('/api/agents/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...saved.payload, nativeCatalog, requestId: `${saved.requestId}:${attempt}` }) });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'The agent could not finish that. Try again.');
         if (result.nativeControl) {
+          if (result.replayed && result.nativeControl.command !== 'discover') {
+            setToast('The earlier editor action was already returned. Check the canvas before repeating it.');
+            break;
+          }
           const outcome = await controlNativeCanvas(room.editor, result.nativeControl);
           if (result.nativeControl.command === 'discover') {
             if (attempt === 1) throw new Error('Native tools were discovered, but the agent did not select an action.');
@@ -90,9 +105,10 @@ export function App() {
         }
         const ids = result.objectIds ?? (result.objectId ? [result.objectId] : []);
         if (room.editor && ids.length) void focusResult(room.editor, ids.map(shapeIdForObject), result.kind !== 'scene');
-        setLastGeneration(`${result.providerName || agentNames[result.provider as AgentProvider]} · ${(result.elapsedMs / 1000).toFixed(1)}s`);
+        setLastGeneration(result.replayed ? 'Recovered the previous result' : `${result.providerName || agentNames[result.provider as AgentProvider]} · ${(result.elapsedMs / 1000).toFixed(1)}s`);
         break;
       }
+      forgetPendingGeneration(roomId, room.selfId); setPendingGeneration(null);
     } catch (error) { setToast(error instanceof Error ? error.message : 'Something went wrong.'); setPrompt(text); }
     finally { setBusy(false); }
   }
@@ -116,6 +132,7 @@ export function App() {
   });
   const toggle = (next: typeof panel) => setPanel(panel === next ? null : next);
   return <>
+    <ActivityController editor={room.editor} roomId={roomId} selfId={room.selfId} name={name} connected={room.connected}/>
     <CanvasMediaProvider media={media}><Canvas sync={room.sync} roomId={roomId} selfId={room.selfId} onMount={room.setEditor} act={room.act} onError={setToast}>
       {!room.room.objects.length && <div className="welcome overlay"><div className="welcome-eyebrow"><span className="little-sun"/> A SHARED SPACE. AN OPEN POSSIBILITY.</div><h1>A room for<br/><em>anything.</em></h1><p>Come as you are. Bring your people.<br/>Let the room become what you need.</p><div className="invitations"><button type="button" onClick={() => add('note')}><Icon name="note" size={15}/> Leave a thought</button><button type="button" onClick={() => generate('Create a beautiful shared interactive constellation where each participant can name a star, with connections between them.')} disabled={busy || !room.connected}><Icon name="spark" size={15}/> Make something together</button></div><span className="empty-footnote">A meeting. A game. A thought that becomes something.</span></div>}
     </Canvas></CanvasMediaProvider>
@@ -128,6 +145,7 @@ export function App() {
         <span className="composer-orbit" aria-hidden="true"/><input ref={input} aria-label="Ask the room" value={prompt} onChange={event => setPrompt(event.target.value)} placeholder={selected ? 'Change this, or imagine something new…' : 'What do you want to make room for?'} autoComplete="off" maxLength={3000}/><button className="send" type="submit" aria-label="Create with agent" disabled={!prompt.trim() || busy || !room.connected}><Icon name="arrow" size={18}/></button>
       </form>
       {(busy || lastGeneration) && <div className={`agent-progress${busy ? ' working' : ''}`} aria-live="polite"><span className="mini-orbit"/>{busy ? 'Making room for your idea…' : lastGeneration}</div>}
+      {!busy && pendingGeneration && <div className="agent-progress request-recovery" role="status"><span>An unfinished request is saved.</span><button type="button" onClick={() => void generate(pendingGeneration.prompt)}>Recover result</button><button type="button" onClick={() => { forgetPendingGeneration(roomId, room.selfId); setPendingGeneration(null); }}>Dismiss</button></div>}
       <nav className="dock" aria-label="Room controls"><DockButton icon="plus" label="Add to room" onClick={() => toggle('add')} active={panel === 'add'}/><span className="dock-divider"/><DockButton icon="mic" label={media.mic ? 'Turn microphone off' : 'Turn microphone on'} onClick={() => void media.toggleMic()} active={media.mic}/><DockButton icon="camera" label={media.camera ? 'Turn camera off' : 'Turn camera on'} onClick={() => void media.toggleCamera()} active={media.camera}/><DockButton icon="screen" label={media.screen ? 'Stop screen sharing' : 'Share screen'} onClick={() => void media.toggleScreen()} active={media.screen}/><span className="dock-divider"/><VoiceControl provider={provider} generationOptions={generationOptions} canvasContext={canvasContext} roomId={roomId} selfId={room.selfId} position={position} audioStreams={media.participants.filter(p => !p.isLocal).flatMap(p => [p.stream, p.screenStream].filter((s): s is MediaStream => Boolean(s)))}/><DockButton icon="history" label="Room memory" onClick={() => toggle('history')} active={panel === 'history'}/><DockButton icon="settings" label="Room settings" onClick={() => toggle('settings')} active={panel === 'settings'}/></nav>
     </div>
     <div className="canvas-navigation overlay"><button type="button" aria-label="Zoom out" onClick={() => setViewport({ ...viewport, zoom: Math.max(.2, viewport.zoom - .1) })}>−</button><span>{Math.round(viewport.zoom * 100)}%</span><button type="button" aria-label="Zoom in" onClick={() => setViewport({ ...viewport, zoom: Math.min(2.5, viewport.zoom + .1) })}>+</button><button type="button" aria-label="Fit everything" title="Fit everything" onClick={() => focus()}><Icon name="fit" size={16}/></button></div>

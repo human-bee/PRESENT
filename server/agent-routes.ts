@@ -11,6 +11,7 @@ import { createVoiceSession } from './agents/voice-session';
 import { executeVoiceTool } from './agents/voice-tools';
 import { voiceOwnership } from './agents/voice-ownership';
 import { RoomError } from './room-store';
+import { activityEngine } from './activities/engine';
 
 const requests = new Set<AbortController>();
 const voiceTranscriptRequestSchema = z.object({ roomId: z.string(), sessionId: z.string(), actor: z.string(), arguments: transcriptEntrySchema.omit({ at: true, source: true }) });
@@ -45,7 +46,7 @@ export async function handleAgentRequest(req: IncomingMessage, res: ServerRespon
         const roomId = url.searchParams.get('roomId') ?? '';
         const sessionId = url.searchParams.get('sessionId') ?? '';
         const actor = url.searchParams.get('actor') ?? '';
-        voiceOwnership.begin(roomId, actor, sessionId);
+        voiceOwnership.begin(roomId, actor, sessionId, url.searchParams.get('capture') === 'personal' ? 'personal' : 'shared', url.searchParams.get('name') ?? 'Participant');
         const timeout = setTimeout(() => controller.abort(), 30000);
         try {
           const answer = await createVoiceSession(raw, url, controller.signal);
@@ -65,7 +66,11 @@ export async function handleAgentRequest(req: IncomingMessage, res: ServerRespon
           const result = voiceTranscriptRequestSchema.safeParse(input);
           if (!result.success) throw new AgentError('Invalid final transcript.', 400);
           const parsed = result.data;
-          reply(res, 200, await voiceOwnership.runTool({ ...parsed, name: 'save_transcript', callId: `caption_${createHash('sha256').update(parsed.arguments.id).digest('hex')}` }, async () => appendTranscript(parsed.roomId, parsed.actor, parsed.sessionId, parsed.arguments)));
+          reply(res, 200, await voiceOwnership.runTool({ ...parsed, name: 'save_transcript', callId: `caption_${createHash('sha256').update(parsed.arguments.id).digest('hex')}` }, async () => {
+            const saved = appendTranscript(parsed.roomId, parsed.actor, parsed.sessionId, parsed.arguments);
+            activityEngine.ingestVoice(parsed.roomId, parsed.sessionId, parsed.arguments, voiceOwnership.provenance(parsed.roomId, parsed.sessionId));
+            return saved;
+          }));
         } else reply(res, 200, await (url.pathname === '/api/agents/contribute' ? contribute(input, controller.signal) : url.pathname === '/api/agents/generate' ? fulfillRoomRequest(input, controller.signal) : voiceOwnership.runTool(input, () => executeVoiceTool(input, controller.signal))));
       }
     }

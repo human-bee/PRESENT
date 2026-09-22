@@ -9,7 +9,7 @@ const toolSchema = identity.extend({
 });
 export type OwnedVoiceTool = z.infer<typeof toolSchema>;
 type Owner = {
-  actor: string; sessionId: string; expiresAt: number; active: boolean;
+  actor: string; capture: 'personal' | 'shared'; name: string; roomId: string; sessionId: string; expiresAt: number; active: boolean;
   calls: Map<string, { fingerprint: string; result: Promise<unknown> }>;
 };
 type Options = { now?: () => number; ttlMs?: number; maxRooms?: number; maxCalls?: number };
@@ -31,16 +31,18 @@ export class VoiceOwnership {
   private owner(roomId: string, sessionId: string): Owner {
     if (!identity.safeParse({ roomId, sessionId }).success) throw new AgentError('Invalid voice session identity.', 400);
     this.prune();
-    const owner = this.rooms.get(roomId);
+    const owner = this.rooms.get(`${roomId}:${sessionId}`);
     if (!owner || owner.sessionId !== sessionId) throw new AgentError('This voice listener is no longer active. Start voice to reconnect.', 410);
     return owner;
   }
-  begin(roomId: string, actor: string, sessionId: string): void {
+  begin(roomId: string, actor: string, sessionId: string, capture: 'personal' | 'shared' = 'shared', name = 'Participant'): void {
     if (!identity.extend({ actor: z.string().min(1).max(100) }).safeParse({ roomId, actor, sessionId }).success) throw new AgentError('Invalid voice session identity.', 400);
     this.prune();
-    if (this.rooms.has(roomId)) throw new AgentError('Someone in this room is already listening for PRESENT. Stop that listener before starting another.', 409);
+    const listeners = [...this.rooms.values()].filter(owner => owner.roomId === roomId);
+    if (listeners.some(owner => capture === 'shared' || owner.capture === 'shared' || owner.actor === actor)) throw new AgentError('A conflicting listener is active. Shared microphones cannot overlap personal listeners, and each person has one personal listener.', 409);
+    if (listeners.length >= 24) throw new AgentError('This room has reached its personal listener limit.', 429);
     if (this.rooms.size >= this.maxRooms) throw new AgentError('This server has reached its voice listener limit.', 503);
-    this.rooms.set(roomId, { actor, sessionId, active: false, expiresAt: this.now() + this.ttlMs, calls: new Map() });
+    this.rooms.set(`${roomId}:${sessionId}`, { actor, roomId, capture, name: name.slice(0, 80), sessionId, active: false, expiresAt: this.now() + this.ttlMs, calls: new Map() });
   }
   activate(roomId: string, sessionId: string): void {
     const owner = this.owner(roomId, sessionId); owner.active = true; owner.expiresAt = this.now() + this.ttlMs;
@@ -53,8 +55,9 @@ export class VoiceOwnership {
   stop(roomId: string, sessionId: string): void {
     if (!identity.safeParse({ roomId, sessionId }).success) throw new AgentError('Invalid voice session identity.', 400);
     this.prune();
-    if (this.rooms.get(roomId)?.sessionId === sessionId) this.rooms.delete(roomId);
+    this.rooms.delete(`${roomId}:${sessionId}`);
   }
+  provenance(roomId: string, sessionId: string) { const owner = this.owner(roomId, sessionId); return { actor: owner.actor, name: owner.name, capture: owner.capture }; }
   runTool<T>(raw: unknown, execute: () => Promise<T>): Promise<T> {
     const parsed = toolSchema.safeParse(raw);
     if (!parsed.success) throw new AgentError('A valid voice session and Realtime call ID are required.', 400);

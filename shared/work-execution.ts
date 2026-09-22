@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 const commandReceiptSchema = z.object({
-  id: z.string().min(1).max(100), command: z.string().max(300),
+  id: z.string().min(1).max(100), command: z.string().max(300), truncated: z.boolean().optional(), commandSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   status: z.enum(['completed', 'failed', 'declined']), exitCode: z.number().int().nullable(),
 }).strict();
 const workspaceFileSchema = z.object({

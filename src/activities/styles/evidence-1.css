@@ -1,0 +1,176 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Rules are scoped to separate activity components. */
+.claim-card {
+  border: 1px solid #e0e1d4; border-radius: 8px; background: #fffefa; padding: 12px
+}
+.claim-meta {
+  display: flex; justify-content: space-between; gap: 8px; font-size: 9px; color: #88917f
+}
+.claim-meta strong {
+  font-weight: 500; border: 1px solid #dde3d5; border-radius: 20px; padding: 0 6px; color: #68805e
+}
+.claim-disputed .claim-meta strong {
+  color: #9a603f; border-color: #dfbba6
+}
+.claim-withdrawn .claim-proposition {
+  text-decoration: line-through; opacity: 0.65
+}
+.claim-proposition {
+  font:
+		17px / 1.4 Georgia,
+		serif; margin: 10px 0 8px; overflow-wrap: anywhere
+}
+.claim-speaker {
+  font-size: 10px; color: #7a8771
+}
+.claim-card > footer {
+  display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px
+}
+.claim-card > footer button,
+.conversation-entry footer button {
+  border: 0; background: none; padding: 0; font-size: 10px; color: #41644b; text-underline-offset: 3px; text-decoration: underline
+}
+.claim-error {
+  color: #a04931; font-size: 11px
+}
+.claim-correction,
+.activity-inline-form,
+.activity-chart-form {
+  display: grid; gap: 10px; margin-top: 12px; background: #f3f4eb; border-radius: 7px; padding: 12px
+}
+.claim-correction > button,
+.activity-inline-form > button,
+.activity-chart-form > button,
+.activity-config > button {
+  background: #355743; color: #fafff4; border: 0; border-radius: 6px; padding: 8px
+}
+.claim-correction small,
+.activity-chart-form small {
+  font-size: 10px; color: #7b826f
+}
+.claim-history {
+  font-size: 10px; color: #768568; margin-top: 12px
+}
+.claim-history summary {
+  cursor: pointer
+}
+.claim-history p small {
+  display: block; color: #8f9684
+}
+.evidence-space > header h2 {
+  font:
+		28px Georgia,
+		serif; margin: 0 0 8px
+}
+.evidence-space > header p {
+  font-size: 12px; color: #7b896e
+}
+.visual-search {
+  display: flex; gap: 12px; align-items: end; padding: 20px 0
+}
+.visual-search label:first-child {
+  flex: 1
+}
+.visual-search button,
+.activity-data > button {
+  padding: 10px 16px; background: #345741; color: #f5ffe9; border: 0; border-radius: 6px; font-size: 12px
+}
+.evidence-comparisons {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 24px
+}
+.evidence-comparisons > section > h3 {
+  border-bottom: 1px solid #d7decb; padding: 10px 0; font:
+		22px Georgia,
+		serif
+}
+.activity-visuals section {
+  padding: 0 14px 10px
+}
+.activity-visuals h4 {
+  font-size: 13px; margin: 8px 0
+}
+.activity-visuals figure {
+  margin: 10px 0
+}
+.activity-visuals img {
+  width: 100%; max-height: 230px; object-fit: contain; background: #e8eade; border-radius: 8px
+}
+.activity-visuals figcaption {
+  font-size: 10px; padding: 6px 0; line-height: 1.5
+}
+.activity-visuals small {
+  display: block; color: #869278; font-size: 9px; max-height: 48px; overflow: auto
+}
+.activity-visuals p {
+  font-size: 11px; color: #839477
+}
+.evidence-claim {
+  padding: 12px 0
+}
+.evidence-claim h4 {
+  font:
+		19px Georgia,
+		serif; margin: 8px 0
+}
+.claim-evidence {
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid #d8dfcd; font-size: 11px
+}
+.evidence-boundary {
+  color: #648058; font-size: 10px
+}
+.evidence-text {
+  white-space: pre-wrap; line-height: 1.8; overflow-wrap: anywhere
+}
+.evidence-text sup {
+  font-size: 9px; padding: 0 3px
+}
+.claim-evidence ul {
+  padding-left: 16px; font-size: 10px
+}
+.claim-evidence li {
+  margin: 6px 0
+}
+.claim-evidence small {
+  font-size: 9px; color: #8c997d
+}
+.activity-data {
+  padding: 24px 0
+}
+.activity-data h3 {
+  font:
+		24px Georgia,
+		serif; margin: 0
+}
+.activity-data > p {
+  color: #7e8d6f; font-size: 12px
+}
+.activity-chart {
+  padding: 18px; border: 1px solid #d4dfc8; background: #fffef8; border-radius: 10px; margin: 18px 0
+}
+.activity-chart figcaption {
+  font-size: 12px; margin-bottom: 20px
+}
+.chart-row {
+  display: grid; grid-template-columns: 110px 1fr 60px; gap: 12px; align-items: center; margin: 12px 0; font-size: 11px
+}
+.chart-row > div {
+  height: 20px; background: #edf0e5; border-radius: 3px; overflow: hidden
+}
+.chart-row i {
+  display: block; background: #9dbba0; height: 100%
+}
+.activity-chart > a {
+  font-size: 11px
+}
+.activity-chart > small {
+  display: block; font-size: 9px; color: #8c9a7e; margin-top: 10px
+}
+.evidence-text p {
+  margin: 9px 0
+}
+.evidence-text ul,
+.evidence-text ol {
+  margin: 9px 0; padding-left: 20px
+}
+.evidence-text strong {
+  font-weight: 650
+}

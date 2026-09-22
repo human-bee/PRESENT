@@ -1,0 +1,180 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Rules are scoped to separate activity components. */
+.activity-switcher {
+  position: fixed; top: 78px; left: 80px; display: flex; gap: 8px; z-index: 55
+}
+.activity-switcher button {
+  border: 1px solid #d5dccd; border-radius: 20px; background: #fffef8; color: #485342; padding: 9px 15px; font-size: 12px; cursor: pointer
+}
+.activity-switcher .activity-reopen {
+  background: #2d443c; color: #fbf8ee; border-color: #2d443c
+}
+.activity-menu {
+  position: fixed; left: 80px; top: 124px; max-width: 650px; max-height: 70vh; overflow: auto; padding: 28px; background: #fffdf5; border: 1px solid #dbdfd3; border-radius: 18px; box-shadow: 0 22px 90px #24332424; z-index: 70; color: #2f3c35
+}
+.activity-menu h2 {
+  font:
+		34px / 1.15 Georgia,
+		serif; margin: 10px 0 24px
+}
+.activity-template-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px
+}
+.activity-template-grid button {
+  display: flex; align-items: flex-start; flex-direction: column; gap: 12px; padding: 20px 16px; background: #f4f3e9; border: 1px solid #e3e4d9; border-radius: 12px; text-align: left; cursor: pointer; color: inherit; min-height: 170px
+}
+.activity-template-grid button:hover {
+  border-color: #9bac94; background: #ebeee2
+}
+.activity-template-grid button > span {
+  font-size: 30px
+}
+.activity-template-grid strong {
+  font-size: 17px
+}
+.activity-template-grid small {
+  font-size: 12px; line-height: 1.55; color: #667263
+}
+.activity-existing {
+  display: grid; gap: 6px; margin-top: 22px
+}
+.activity-existing button {
+  padding: 10px; text-align: left; background: none; border: 0; border-top: 1px solid #dfe3d6; color: #3b503d; cursor: pointer
+}
+.activity-focus {
+  position: fixed; top: 120px; left: 80px; right: 90px; bottom: 150px; border-radius: 18px; box-shadow: 0 12px 70px #1f342438; z-index: 50; overflow: hidden; outline: none
+}
+.room-activity {
+  height: 100%; width: 100%; display: flex; flex-direction: column; overflow: hidden; background: #f5f1e6; color: #283d35; font:
+		14px / 1.5 system-ui,
+		sans-serif; container-type: inline-size
+}
+.room-activity * {
+  box-sizing: border-box
+}
+.room-activity button,
+.room-activity input,
+.room-activity select,
+.room-activity textarea {
+  font: inherit
+}
+.room-activity button {
+  cursor: pointer
+}
+.room-activity button:disabled {
+  opacity: 0.55; cursor: wait
+}
+.room-activity button:focus-visible,
+.room-activity input:focus-visible,
+.room-activity select:focus-visible,
+.room-activity textarea:focus-visible {
+  outline: 2px solid #526ee2; outline-offset: 3px
+}
+.room-activity a {
+  color: #275849; text-underline-offset: 3px; overflow-wrap: anywhere
+}
+.activity-eyebrow {
+  font-size: 10px; font-weight: 650; letter-spacing: 0.15em; color: #7a877c
+}
+.activity-header {
+  display: flex; justify-content: space-between; align-items: center; padding: 22px 30px 18px; background: #f9f6ed; gap: 18px; flex-shrink: 0
+}
+.activity-title-row {
+  display: flex; gap: 14px; align-items: center
+}
+.activity-title-row h1 {
+  font:
+		32px / 1.12 Georgia,
+		serif; margin: 8px 0 0; letter-spacing: -0.8px
+}
+.activity-icon-button {
+  border: 1px solid #d9ddcf; border-radius: 50%; background: none; color: #51654f; min-width: 28px; height: 28px
+}
+.activity-header-actions {
+  display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 11px; color: #5d725f
+}
+.activity-live-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #83a06d; box-shadow: 0 0 0 4px #83a06d14
+}
+.activity-canvas-button {
+  margin-left: 12px; border: 1px solid #d9ddcf; border-radius: 6px; background: transparent; padding: 7px 10px; color: #586c57
+}
+.activity-enrichment {
+  font-size: 10px; color: #6d7d65
+}
+.activity-body {
+  flex: 1; overflow: auto; padding: 26px 30px 32px; min-height: 0; overscroll-behavior: contain
+}
+.room-activity label {
+  display: grid; gap: 4px; font-size: 11px; color: #53694f
+}
+.room-activity input,
+.room-activity textarea,
+.room-activity select {
+  max-width: 100%; min-width: 0; border: 1px solid #d4dbcb; border-radius: 5px; padding: 8px; background: #fffef9; color: #30452f
+}
+.room-activity textarea {
+  resize: vertical
+}
+.activity-unattributed {
+  margin: 16px 0 26px
+}
+.activity-unattributed h3 {
+  font:
+		18px Georgia,
+		serif
+}
+.activity-unattributed h3 small {
+  font:
+		11px system-ui,
+		sans-serif; color: #84907a; margin-left: 12px
+}
+.activity-unattributed > div {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px
+}
+.activity-config {
+  display: flex; gap: 18px; align-items: center; flex-wrap: wrap; background: #e9eddf; padding: 16px 30px
+}
+.activity-config label:has([type="checkbox"]) {
+  display: flex; align-items: center; gap: 5px
+}
+.activity-config small {
+  font-size: 10px; color: #758267
+}
+.activity-error {
+  padding: 10px 24px; border-top: 1px solid #e5beb0; background: #fff1e8; color: #8e4c34; font-size: 12px
+}
+.activity-memory h2 {
+  font:
+		28px Georgia,
+		serif
+}
+.activity-memory > p {
+  color: #809171; font-size: 12px
+}
+.activity-memory article {
+  display: flex; gap: 20px; border-bottom: 1px solid #dce2d1; padding: 16px 0; font-size: 12px
+}
+.activity-memory time {
+  font-size: 10px; color: #8d9a7e; white-space: nowrap
+}
+.activity-memory strong {
+  font-size: 11px
+}
+.activity-memory article p {
+  margin: 4px 0
+}
+.activity-inline-form {
+  grid-template-columns: 1fr 1fr auto
+}
+.activity-inline-form button {
+  align-self: end
+}
+.room-activity-standup .activity-header {
+  border-top: 4px solid #8fc9af
+}
+.room-activity-planning .activity-header {
+  border-top: 4px solid #c7b0ed
+}
+.room-activity-retro .activity-header {
+  border-top: 4px solid #edc785
+}

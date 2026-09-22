@@ -1,0 +1,64 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Rules are scoped to separate activity components. */
+.activity-conversation {
+  border-top: 1px solid #d7dccd; padding-top: 20px
+}
+.activity-conversation > header {
+  display: flex; align-items: center; justify-content: space-between; gap: 15px
+}
+.activity-conversation h2 {
+  font:
+		22px Georgia,
+		serif; margin: 0
+}
+.activity-conversation h2 span {
+  font:
+		11px system-ui,
+		sans-serif; color: #93a184; margin-left: 8px
+}
+.activity-conversation > header > p {
+  font-size: 10px; color: #86937c; margin: 0
+}
+.conversation-feed {
+  max-height: 310px; overflow: auto; padding: 8px 0 14px
+}
+.conversation-empty {
+  padding: 22px 0; font:
+		15px Georgia,
+		serif; color: #94997f
+}
+.conversation-entry {
+  padding: 12px 4px; border-bottom: 1px solid #e1e3d4
+}
+.conversation-entry > div:first-child {
+  display: flex; align-items: center; gap: 10px
+}
+.conversation-entry strong {
+  font-size: 11px
+}
+.conversation-entry small {
+  font-size: 9px; color: #919b83
+}
+.conversation-entry > p {
+  font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0
+}
+.conversation-entry footer {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap
+}
+.conversation-entry footer > span {
+  font-size: 9px; color: #929b83; margin-right: auto
+}
+.conversation-form {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid #d6deca; border-radius: 10px; background: #fffef7
+}
+.conversation-form > span {
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #e8eddc; flex-shrink: 0; color: #6d815e; font-size: 12px
+}
+.conversation-form textarea {
+  flex: 1; border: 0; resize: none; font-size: 13px; background: transparent; padding: 5px; min-width: 80px
+}
+.conversation-form > button {
+  background: #345741; color: #f8ffed; border: 0; border-radius: 7px; padding: 10px 15px; font-size: 11px; white-space: nowrap
+}
+.conversation-footnote {
+  display: block; font-size: 9px; color: #939d83; margin-top: 8px
+}

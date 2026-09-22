@@ -79,7 +79,7 @@ test('command receipts require correlated execution events and never come from a
   const observed = fixture({ commands: true }), claimed = fixture({ output: JSON.stringify({ title: 'Claim', format: 'markdown', body: 'I ran npm test successfully and deployed the website.' }) });
   try {
     const result = await observed.execute();
-    assert.deepEqual(result.execution.commands, [{ id: 'command-one', command: 'node --check source.js', status: 'completed', exitCode: 0 }]);
+    assert.deepEqual(result.execution.commands, [{ id: 'command-one', command: 'node --check source.js', status: 'completed', exitCode: 0, truncated: false, commandSha256: '3f53574beeab69d5ba5fbf278d0e68e3bed2ced6e7b1145b55bbdb6ec32a0acc' }]);
     assert.deepEqual((await claimed.execute()).execution.commands, []); assert.equal(observed.latest.phase, 'completed');
   } finally { observed.close(); claimed.close(); }
 });

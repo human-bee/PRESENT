@@ -12,6 +12,7 @@ import { shapeIdForObject } from '../../shared/tldraw-adapter';
 import { SharedCaptions } from './captions';
 import { fitCanvas } from '../tldraw/focus';
 import { McpApp } from './mcp-app';
+import { ActivityWidget } from '../activities/activity-stage';
 import './widgets.css';
 
 type Props = { object: RoomObject; patch: (value: ObjectPatch, requestId?: string) => unknown; participantId: string; increment: (key: string, by: number, requestId?: string) => unknown; receipts?: string[]; onInteract?: () => void };
@@ -69,6 +70,7 @@ function Image({ object }: Props) {
 export function WidgetContent(props: Props) {
   const runtime = useWidgetRuntime();
   const editor = useEditor();
+  if (props.object.data.capability === 'activity-stage') return <ActivityWidget activityId={String(props.object.data.activityId)}/>;
   if (props.object.data.capability === 'participant' || props.object.data.capability === 'screen-share') return <CanvasMediaView object={props.object}/>;
   if (props.object.data.capability === 'youtube') return <YouTubeVideo object={props.object} roomId={runtime.roomId}/>;
   if (props.object.data.capability === 'captions') return <SharedCaptions/>;

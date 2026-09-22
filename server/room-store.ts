@@ -1,3 +1,4 @@
+import { dataPath } from './data-path';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -30,8 +31,8 @@ export class RoomStore {
   private debounceMs: number;
   private maxRooms: number;
   constructor(options: Options = {}) {
-    this.directory = options.directory ?? join(process.cwd(), '.data', 'tldraw');
-    this.legacyDirectory = options.legacyDirectory ?? (options.directory ? join(options.directory, 'legacy') : join(process.cwd(), '.data', 'rooms'));
+    this.directory = options.directory ?? dataPath('tldraw');
+    this.legacyDirectory = options.legacyDirectory ?? (options.directory ? join(options.directory, 'legacy') : dataPath('rooms'));
     this.now = options.now ?? Date.now;
     this.debounceMs = options.debounceMs ?? 150;
     this.maxRooms = options.maxRooms ?? 1000;

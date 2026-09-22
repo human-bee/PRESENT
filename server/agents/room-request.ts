@@ -59,7 +59,7 @@ export function seedCapability(intent: Extract<RoomIntent, { kind: 'capability' 
 export async function runRoomRequest(raw: unknown, signal?: AbortSignal) {
   const parsed = requestSchema.safeParse(raw);
   if (!parsed.success) throw new AgentError('A valid request and room are required.', 400);
-  const input = parsed.data, requestId = randomUUID();
+  const input = parsed.data, requestId = input.requestId ?? randomUUID();
   if (inFlight.size >= 2 || inFlight.has(input.roomId)) throw new AgentError('An agent is already working here. Try again when it finishes.', 429);
   const before = getRoom(input.roomId);
   const activeScenes = readScenes(getCanvasRecords(input.roomId)).filter(s => !input.pageId || s.pageId === input.pageId);

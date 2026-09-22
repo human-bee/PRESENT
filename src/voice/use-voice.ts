@@ -9,7 +9,7 @@ import type { CanvasContextProvider } from '../../shared/canvas-commands';
 import { createCanvasContextSender, readCanvasView } from './canvas-context';
 import { createRealtimeEvents, voiceError, type VoiceEvent, type VoiceMode, type VoiceStatus, type VoiceTranscript } from './realtime-events';
 export type { VoiceMode, VoiceStatus, VoiceTranscript } from './realtime-events';
-export type VoiceOptions = { provider?: AgentProvider; generationOptions?: GenerationOptions; selfId: string; viewport?: { x: number; y: number }; audioStreams?: MediaStream[]; mode?: VoiceMode; canvasContext?: CanvasContextProvider };
+export type VoiceOptions = { provider?: AgentProvider; generationOptions?: GenerationOptions; selfId: string; viewport?: { x: number; y: number }; audioStreams?: MediaStream[]; mode?: VoiceMode; capture?: 'personal' | 'shared'; name?: string; canvasContext?: CanvasContextProvider };
 type Session = {
   id: string; roomId: string; requested: boolean; established: boolean; heartbeat?: ReturnType<typeof setInterval>;
   abort: AbortController; pc?: RTCPeerConnection; stream?: MediaStream; input?: AudioInput;
@@ -18,7 +18,7 @@ type Session = {
   captionWrites: Promise<unknown>; closed?: () => void; flushCaptions?: () => void;
 };
 
-export function useVoice(roomId: string, { selfId, viewport, audioStreams = [], mode = 'ambient', canvasContext, provider = 'luna', generationOptions = {} }: VoiceOptions) {
+export function useVoice(roomId: string, { selfId, viewport, audioStreams = [], mode = 'ambient', capture = 'personal', name = 'Participant', canvasContext, provider = 'luna', generationOptions = {} }: VoiceOptions) {
   const [status, setStatus] = useState<VoiceStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<VoiceTranscript[]>([]);
@@ -29,7 +29,7 @@ export function useVoice(roomId: string, { selfId, viewport, audioStreams = [], 
   const streamsRef = useRef(audioStreams); streamsRef.current = audioStreams;
   const modeRef = useRef(mode); modeRef.current = mode;
   const contextRef = useRef(canvasContext); contextRef.current = canvasContext;
-  useEffect(() => { active.current?.input?.update(audioStreams); }, [audioStreams]);
+  useEffect(() => { active.current?.input?.update(capture === 'shared' ? audioStreams : []); }, [audioStreams, capture]);
   useEffect(() => {
     const session = active.current;
     if (session?.audio) {
@@ -76,7 +76,7 @@ export function useVoice(roomId: string, { selfId, viewport, audioStreams = [], 
     const leave = () => dispose();
     window.addEventListener('pagehide', leave);
     return () => { window.removeEventListener('pagehide', leave); mounted.current = false; dispose(); };
-  }, [roomId, selfId, dispose]);
+  }, [roomId, selfId, capture, name, dispose]);
 
   const start = useCallback(async () => {
     if (active.current || !mounted.current) return;
@@ -156,7 +156,7 @@ export function useVoice(roomId: string, { selfId, viewport, audioStreams = [], 
         if (!audio.muted) void audio.play().catch(() => { if (current()) setError('Your browser paused voice playback. Allow audio for this page, then reconnect.'); });
       };
       for (const track of stream.getAudioTracks()) track.onended = () => fail(new Error('Microphone access ended. Start voice to reconnect.'));
-      session.input = createAudioInput(stream); session.input.update(streamsRef.current);
+      session.input = createAudioInput(stream); session.input.update(capture === 'shared' ? streamsRef.current : []);
       await session.input.ready;
       if (!current()) return;
       for (const track of session.input.stream.getAudioTracks()) pc.addTrack(track, session.input.stream);
@@ -188,7 +188,7 @@ export function useVoice(roomId: string, { selfId, viewport, audioStreams = [], 
       if (!current()) return;
       await pc.setLocalDescription(offer);
       if (!current()) return;
-      const query = new URLSearchParams({ roomId, actor: selfId, sessionId: session.id, mode: modeRef.current });
+      const query = new URLSearchParams({ roomId, actor: selfId, sessionId: session.id, capture, name, mode: modeRef.current });
       if (viewportRef.current) query.set('viewport', JSON.stringify(viewportRef.current));
       const ownershipKey = `present:voice-session:${roomId}`;
       const previousSession = sessionStorage.getItem(ownershipKey);
@@ -226,7 +226,7 @@ export function useVoice(roomId: string, { selfId, viewport, audioStreams = [], 
         }).catch(fail);
       }, 20000);
     } catch (cause) { fail(cause); }
-  }, [roomId, selfId, dispose]);
+  }, [roomId, selfId, capture, name, dispose]);
 
   return { status, error, start, stop, transcript, mode };
 }

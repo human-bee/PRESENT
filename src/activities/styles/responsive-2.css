@@ -1,0 +1,58 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Rules are scoped to separate activity components. */
+@container (max-width: 700px) {
+.audience-columns {
+  grid-template-columns: 1fr
+}
+.audience-intro {
+  display: block
+}
+.audience-intro h2 {
+  font-size: 25px
+}
+.audience-onair {
+  padding: 22px
+}
+.audience-onair h3 {
+  font-size: 25px
+}
+.queue-actions button {
+  font-size: 10px
+}
+.audience-onair > button {
+  margin: 15px 0 0
+}
+.audience-queue-card {
+  gap: 9px; padding: 12px
+}
+.audience-queue-card p {
+  font-size: 16px
+}
+
+}
+@media (max-width: 700px) {
+.activity-focus .activity-header {
+  display: block; position: relative; padding-top: 18px
+}
+.activity-focus .activity-header-actions {
+  position: absolute; right: 12px; top: 10px; font-size: 0
+}
+.activity-focus .activity-canvas-button {
+  font-size: 9px; margin: 0; padding: 4px 6px
+}
+.activity-focus .activity-title-row {
+  margin-top: 16px; gap: 8px
+}
+.activity-focus .activity-title-row h1 {
+  font-size: 23px; line-height: 1.15
+}
+.activity-focus .activity-tabs > div {
+  gap: 13px
+}
+.activity-focus .activity-tabs button {
+  font-size: 9px
+}
+.activity-focus .activity-body {
+  padding: 16px
+}
+
+}

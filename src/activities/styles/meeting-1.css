@@ -1,0 +1,126 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Rules are scoped to separate activity components. */
+.meeting-intro {
+  display: flex; justify-content: space-between; align-items: center; gap: 14px
+}
+.meeting-intro h2 {
+  font:
+		28px Georgia,
+		serif; margin: 0
+}
+.meeting-intro p {
+  font-size: 12px; color: #7a896f
+}
+.meeting-floor button {
+  padding: 8px 12px; border: 1px solid #c7d5ba; background: #e9efdf; color: #385a3b; border-radius: 6px; font-size: 11px
+}
+.meeting-members {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 20px 0
+}
+.meeting-connector {
+  display: flex; gap: 18px; flex-wrap: wrap; align-items: center; background: #e7edde; padding: 15px 18px; border-radius: 10px; margin: 20px 0
+}
+.meeting-connector > div {
+  flex: 1; min-width: 220px
+}
+.meeting-connector strong {
+  font-size: 12px
+}
+.meeting-connector p {
+  font-size: 11px; color: #748467; margin: 5px 0
+}
+.meeting-connector > a {
+  font-size: 11px
+}
+.meeting-connector details {
+  flex-basis: 100%; font-size: 10px
+}
+.meeting-connector summary {
+  cursor: pointer
+}
+.meeting-work-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 25px 0
+}
+.meeting-work-grid > section > header {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px
+}
+.meeting-work-grid h2 {
+  font:
+		22px Georgia,
+		serif
+}
+.blocker-card,
+.commitment-card {
+  padding: 16px; background: #fffef7; border: 1px solid #d6decb; border-radius: 10px; margin: 12px 0
+}
+.blocker-card > span,
+.commitment-card > div > span {
+  font-size: 10px; color: #9c7950
+}
+.blocker-resolved > span {
+  color: #60905a
+}
+.blocker-card h3,
+.commitment-card h3 {
+  font:
+		20px Georgia,
+		serif; margin: 8px 0
+}
+.blocker-card small,
+.commitment-card small {
+  font-size: 10px; color: #849477
+}
+.blocker-card > div,
+.commitment-actions {
+  display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px
+}
+.blocker-card blockquote {
+  font:
+		italic 15px / 1.5 Georgia,
+		serif; margin: 12px 0
+}
+.blocker-card blockquote small {
+  display: block; font:
+		10px system-ui,
+		sans-serif
+}
+.meeting-shorthand {
+  font-size: 10px; color: #819474; line-height: 1.6
+}
+.commitment-card > p {
+  font-size: 12px; white-space: pre-wrap
+}
+.commitment-card ul {
+  font-size: 11px; padding-left: 18px
+}
+.commitment-card > div:first-child {
+  display: flex; justify-content: space-between; gap: 10px
+}
+.commitment-actions > p {
+  font-size: 11px; color: #768669; width: 100%; margin: 0 0 8px
+}
+.meeting-empty {
+  padding: 25px 15px; border: 1px dashed #ccd8be; border-radius: 8px; font:
+		15px / 1.6 Georgia,
+		serif; color: #8c9a7c
+}
+.meeting-wide {
+  grid-column: 1 / -1
+}
+.meeting-wide label {
+  display: flex; align-items: center; gap: 8px
+}
+.meeting-execution {
+  padding-top: 12px; border-top: 1px solid #d2dec5; font-size: 11px; margin-top: 15px
+}
+.meeting-execution > code {
+  display: block; font-size: 10px; margin: 5px 0
+}
+.meeting-execution small {
+  display: block
+}
+.meeting-execution summary {
+  cursor: pointer; font-size: 10px; color: #6d805f; margin: 12px 0
+}
+.meeting-execution details code {
+  white-space: pre-wrap; overflow-wrap: anywhere
+}

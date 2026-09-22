@@ -1,4 +1,5 @@
 import type { GenerationOptions } from '../../shared/agent-models';
+import {dataPath} from '../data-path';
 import { join } from 'node:path';
 import { workArtifactSchema, workInstructions, workOutputSchema } from '../../shared/work';
 import { workExecutionStateSchema, type WorkExecution, type WorkExecutionState } from '../../shared/work-execution';
@@ -32,7 +33,7 @@ export function createRunWorkspaceWork(options: Options = {}): WorkspaceRunner {
     let state = workExecutionStateSchema.parse(input.state), output = '';
     if (active.has(state.workspaceId)) throw new AgentError('This work card already has a running workspace.', 409);
     if (signal.aborted) throw new AgentError('Local work was cancelled.', 408);
-    const base = options.directory ?? join(process.cwd(), '.data', 'workspaces');
+    const base = options.directory ?? dataPath('workspaces');
     const workspace = prepareWorkspace(base, state.workspaceId), continued = state.threadId !== null;
     const checkpoint = (next: WorkExecutionState) => { state = workExecutionStateSchema.parse(next); input.onCheckpoint(structuredClone(state)); };
     let wire: WorkspaceWire | undefined;

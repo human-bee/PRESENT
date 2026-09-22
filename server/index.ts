@@ -13,6 +13,8 @@ import { handleRoomRequest } from './room-routes.js';
 import { handleAssetRequest } from './asset-routes.js';
 import { handleEmbedRequest } from './embed-routes.js';
 import { handleWorkRequest } from './work-routes.js';
+import { handleActivityRequest } from './activity-routes.js';
+import { activityEngine } from './activities/engine.js';
 import { closeWorkJobs } from './agents/work-jobs.js';
 import { handleMcpRequest, handleMcpSandbox } from './mcp-routes.js';
 
@@ -46,6 +48,7 @@ const server = createServer(async (req, res) => {
     if (await handleAssetRequest(req, res)) return;
     if (handleEmbedRequest(req, res)) return;
     if (await handleWorkRequest(req, res)) return;
+    if (await handleActivityRequest(req, res)) return;
     if (await handleMcpRequest(req, res)) return;
     if (await handleAgentRequest(req, res)) return;
     if (await handleMediaRequest(req, res)) return;
@@ -77,6 +80,7 @@ async function shutdown() {
   if (closing) return;
   closing = true;
   cancelAgentRequests();
+  activityEngine.close();
   closeWorkJobs();
   closeScenes();
   clearInterval(sweep);

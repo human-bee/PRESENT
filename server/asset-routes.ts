@@ -1,3 +1,4 @@
+import { dataPath } from './data-path';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -48,7 +49,7 @@ function byteRange(header: string, size: number): { start: number; end: number }
 }
 
 export function createAssetHandler(options: Options = {}) {
-  const directory = options.directory ?? join(process.cwd(), '.data', 'assets');
+  const directory = options.directory ?? dataPath('assets');
   const maxBytes = options.maxBytes ?? MAX_BYTES;
   const maxStorageBytes = options.maxStorageBytes ?? 512 * 1024 * 1024;
   const maxFiles = options.maxFiles ?? 1000;

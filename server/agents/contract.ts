@@ -6,6 +6,7 @@ export { agentModels } from '../../shared/agent-models';
 
 export const generationRequestSchema = z.object({
   roomId: z.string().regex(/^[a-f0-9]{24,64}$/),
+  requestId: z.string().regex(/^[a-zA-Z0-9:_.-]{1,120}$/).optional(),
   pageId: pageIdSchema.optional(),
   canvasImageCaption: z.string().max(1500).optional(),
   canvasImage: z.string().max(1500000).regex(/^data:image\/(png|jpeg);base64,[a-zA-Z0-9+/=]+$/).optional(),
