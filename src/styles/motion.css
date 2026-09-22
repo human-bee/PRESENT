@@ -1,0 +1,28 @@
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .working .mini-orbit,
+  .thinking .composer-orbit {
+    animation: none;
+  }
+  button,
+  .composer,
+  .room-object,
+  .object-actions,
+  .person,
+  .widget-timer-track > div {
+    transition: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}

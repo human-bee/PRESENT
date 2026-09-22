@@ -1,0 +1,112 @@
+.popover {
+  position: fixed;
+  bottom: 155px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 340px;
+  max-width: calc(100vw - 36px);
+  max-height: calc(100dvh - 265px);
+  overflow: auto;
+  z-index: 30;
+  background: #fffef9f5;
+  border: 1px solid #dce2d2;
+  border-radius: 18px;
+  box-shadow: 0 16px 80px #28332c12;
+  backdrop-filter: blur(25px);
+  padding: 25px;
+}
+.popover-label {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: #9da58f;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 14px;
+}
+.popover-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.popover-heading button {
+  margin-top: -14px;
+  color: #8d987e;
+}
+.popover h2 {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 30px;
+  font-weight: 400;
+  letter-spacing: -0.3px;
+  margin: 4px 0 23px;
+}
+.add-menu {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  padding: 23px 17px;
+}
+.add-menu > .popover-label {
+  grid-column: 1 / -1;
+  padding-left: 10px;
+  margin-bottom: 8px;
+}
+.add-menu > button {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 13px 8px;
+  border-radius: 10px;
+  text-align: left;
+}
+.add-menu > button:hover {
+  background: #edf1e4;
+}
+.add-menu > button > svg {
+  color: #83976c;
+  flex-shrink: 0;
+}
+.add-menu > button span {
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.add-menu > form[aria-label="Add MCP App"] {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.add-menu > form[aria-label="Add MCP App"] :is(label, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+.add-menu > form[aria-label="Add MCP App"] :is(select, textarea) {
+  display: block;
+  width: 100%;
+}
+.add-menu :is(input, textarea, select):focus-visible,
+.add-menu .asset-upload:focus-within {
+  outline: 2px solid #718a43;
+  outline-offset: 3px;
+}
+.add-menu small {
+  display: block;
+  font-size: 9px;
+  color: #9aa48c;
+  margin-top: 4px;
+}
+.memory-panel p {
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf0e5;
+  margin: 0;
+}
+.memory-panel p small {
+  display: block;
+  color: #9aa38e;
+  font-size: 9px;
+  margin-top: 5px;
+}
+.add-menu { width: 460px; }
+.asset-upload { display:flex; gap:10px; align-items:center; font-size:12px; padding:13px 8px; cursor:pointer; color:#617750; }
+.asset-upload input { position:absolute; width:1px; height:1px; opacity:0; }
+.video-link-entry{display:flex;gap:8px;grid-column:1/-1;padding:9px 4px}.video-link-entry input{min-width:0;flex:1;border:1px solid var(--line);border-radius:8px;background:#fffef9;padding:9px;font-size:12px}.video-link-entry button{width:auto;padding:9px;font-size:12px}
+.memory-search{display:block;width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:12px;background:#fffef9}

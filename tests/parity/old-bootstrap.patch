@@ -1,0 +1,28 @@
+diff --git a/src/app/canvas/CanvasPageClient.tsx b/src/app/canvas/CanvasPageClient.tsx
+index 4f6d681..37f9ee2 100644
+--- a/src/app/canvas/CanvasPageClient.tsx
++++ b/src/app/canvas/CanvasPageClient.tsx
+@@ -54,6 +54,7 @@ import { canonicalizeLegacyCanvasHref } from '@/lib/legacy-canvas-route';
+ import { buildAuthPageHref, getCurrentPathWithSearchAndHash } from '@/lib/auth/redirects';
+ import { resolveCanvasRoomBootstrap } from './canvas-room-resolution';
+ import { CanvasWorkspaceShell } from '@/components/ui/workspace';
++import { RoomSurfaceProvider } from '@/components/ui/workspace/room-surface';
+ 
+ // Suppress development warnings for cleaner console
+ suppressDevelopmentWarnings();
+@@ -756,6 +757,7 @@ export function CanvasPageClient() {
+ 
+   const canvasBody = (
+     <RoomContext.Provider value={room}>
++      <RoomSurfaceProvider transcriptOpen={isTranscriptOpen}>
+       <RoomScopedProviders>
+         {enableMcp ? <LiveKitDebugConsole enabled={enableDebugConsole} /> : null}
+         <ToolDispatcher contextKey={contextKey} enableLogging={enableDispatcherLogs}>
+@@ -793,6 +795,7 @@ export function CanvasPageClient() {
+           </CanvasLiveKitContext.Provider>
+         </ToolDispatcher>
+       </RoomScopedProviders>
++      </RoomSurfaceProvider>
+     </RoomContext.Provider>
+   );
+ 

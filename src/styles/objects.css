@@ -1,0 +1,131 @@
+.room-object {
+  position: absolute;
+  border: 1px solid #dfe3d7;
+  border-radius: 13px;
+  background: var(--paper);
+  box-shadow:
+    0 3px 5px #2b3b2003,
+    0 10px 35px #2b3b2005;
+  display: flex;
+  flex-direction: column;
+  cursor: default;
+  transition:
+    box-shadow 0.2s,
+    border-color 0.2s;
+  overflow: visible;
+}
+.room-object:hover {
+  box-shadow: 0 5px 25px #2b3b200c;
+  border-color: #c9d4b8;
+}
+.room-object.selected {
+  border-color: #a5ba80;
+  box-shadow:
+    0 0 0 2px #d7ed9a40,
+    0 8px 30px #2b3b2007;
+}
+.object-handle {
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  cursor: grab;
+  user-select: none;
+  color: #939d86;
+  font-size: 10px;
+  letter-spacing: 0.1px;
+  touch-action: none;
+}
+.object-handle > span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.object-handle > svg {
+  opacity: 0;
+}
+:where(.room-object:hover) .object-handle > svg {
+  opacity: 0.6;
+}
+.object-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 0 0 12px 12px;
+}
+.object-actions {
+  position: absolute;
+  right: 0;
+  top: -34px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px;
+}
+.selected .object-actions,
+.room-object:focus-within .object-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.object-actions button {
+  width: 27px;
+  height: 25px;
+  border-radius: 5px;
+  color: #768468;
+}
+.object-actions button:hover {
+  background: #edf0e3;
+}
+.resize-handle {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 17px;
+  height: 17px;
+  cursor: nwse-resize;
+  opacity: 0;
+  touch-action: none;
+}
+.resize-handle:after {
+  content: "";
+  height: 7px;
+  width: 7px;
+  border-right: 1px solid #8aa064;
+  border-bottom: 1px solid #8aa064;
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+}
+.selected .resize-handle,
+.room-object:hover .resize-handle {
+  opacity: 1;
+}
+.peer-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+  pointer-events: none;
+  z-index: 8;
+}
+.peer-cursor span {
+  font-size: 10px;
+  color: white;
+  padding: 3px 6px;
+  border-radius: 4px;
+  margin-top: 15px;
+  white-space: nowrap;
+}

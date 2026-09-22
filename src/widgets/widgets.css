@@ -1,0 +1,22 @@
+.widget-content { width: 100%; height: 100%; min-width: 0; min-height: 0; margin: 0; padding: 0; border: 0; color: #28342a; }
+.widget-content button, .widget-content select, .widget-content textarea { font: inherit; }
+.widget-content .widget-note { display: block; width: 100%; height: 100%; resize: none; padding: 14px 22px 24px; border: 0; outline: 0; background: transparent; color: #28342a; font-family: Georgia, 'Times New Roman', serif; font-size: 24px; line-height: 1.45; }
+.widget-note::placeholder { color: #8a9284; }
+.widget-note:focus-visible { box-shadow: inset 0 -2px #c4d3b1; }
+.widget-sandbox { display: block; width: 100%; height: 100%; border: 0; background: #fffef9; }
+.widget-timer { height: 100%; padding: 16px 24px 24px; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+.widget-timer-time { font-size: clamp(42px, 5vw, 66px); font-variant-numeric: tabular-nums; font-weight: 350; line-height: 1; letter-spacing: -3px; }
+.widget-timer-track { width: 100%; height: 4px; border-radius: 3px; background: #ebeee5; overflow: hidden; }
+.widget-timer-track > div { height: 100%; background: #acc784; transition: width .2s linear; }
+.widget-timer-actions { display: flex; gap: 8px; align-items: center; }
+.widget-timer-actions button { border: 0; border-radius: 8px; padding: 9px 14px; cursor: pointer; }
+.widget-primary { background: #d9ef9c; color: #28342a; }
+.widget-quiet { background: transparent; color: #6e786a; }
+.widget-timer-actions select { min-width: 0; margin-left: auto; border: 0; background: transparent; color: #6e786a; font-size: 12px; }
+.widget-content button:focus-visible, .widget-content select:focus-visible { outline: 2px solid #7a9761; outline-offset: 3px; }
+.widget-ink { display: block; width: 100%; height: 100%; overflow: visible; }
+.widget-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+@media (prefers-reduced-motion: reduce) { .widget-timer-track > div { transition: none; } }
+.widget-external-link { position: absolute; left: 10px; right: 10px; bottom: 10px; border: 1px solid #b4c69d; background: #fffef9; border-radius: 10px; display: flex; justify-content: space-between; padding: 10px 12px; font-size: 12px; z-index: 4; }
+.widget-external-link a { color: #405632; }
+.shared-captions{height:100%;overflow:auto;padding:16px 20px}.shared-captions p{display:grid;gap:4px;font-size:14px;line-height:1.5}.shared-captions small,.shared-captions .caption-note{font-size:11px;color:#6e786a}

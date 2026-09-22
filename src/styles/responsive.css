@@ -1,0 +1,122 @@
+@media (max-width: 750px) {
+  .topbar {
+    padding: 0 20px;
+    height: 80px;
+    gap: 15px;
+  }
+  .brand {
+    font-size: 22px;
+  }
+  .brand img {
+    width: 25px;
+    height: 25px;
+  }
+  .room-title {
+    width: 130px;
+    font-size: 11px;
+  }
+  .room-status {
+    display: none;
+  }
+  .invite {
+    margin-left: auto;
+    padding: 8px 11px;
+    font-size: 11px;
+  }
+  .top-divider {
+    display: none;
+  }
+  .welcome {
+    width: 100%;
+    top: 41%;
+    padding: 0 20px;
+  }
+  .welcome h1 {
+    font-size: 90px;
+    letter-spacing: -3px;
+  }
+  .welcome-eyebrow {
+    font-size: 8px;
+    letter-spacing: 1.9px;
+  }
+  .welcome p {
+    font-size: 12px;
+  }
+  .invitations {
+    gap: 7px;
+  }
+  .invitations button {
+    font-size: 10px;
+    padding: 10px;
+  }
+  .empty-footnote {
+    font-size: 14px;
+    margin-top: 28px;
+  }
+  .bottom-area {
+    bottom: 23px;
+    gap: 10px;
+  }
+  .canvas-navigation {
+    bottom: 152px;
+    right: 14px;
+  }
+  .canvas-hint {
+    display: none;
+  }
+  .people {
+    right: 20px;
+    top: 90px;
+  }
+  .person.has-video {
+    width: 110px;
+    height: 82px;
+  }
+  .composer {
+    height: 57px;
+    border-radius: 17px;
+  }
+  .composer input {
+    font-size: 12px;
+  }
+  .popover {
+    bottom: 153px;
+    max-height: calc(100dvh - 250px);
+  }
+  .screen-tile {
+    right: 20px;
+    top: 203px;
+    width: 230px;
+  }
+  .toast {
+    top: 83px;
+  }
+}
+@media (max-height: 650px) {
+  .welcome h1 {
+    font-size: 76px;
+    margin: 20px 0 15px;
+  }
+  .welcome p {
+    line-height: 1.5;
+  }
+  .invitations {
+    margin-top: 18px;
+  }
+  .empty-footnote {
+    display: none;
+  }
+  .welcome {
+    top: 41%;
+  }
+  .topbar {
+    height: 70px;
+  }
+  .bottom-area {
+    bottom: 14px;
+    gap: 8px;
+  }
+  .people {
+    top: 77px;
+  }
+}

@@ -1,0 +1,72 @@
+.native-canvas { position: fixed; inset: 0; }
+.native-canvas .tl-theme__light {
+  --tl-color-background: #f6f5f0;
+  --tl-color-selected: #879d64;
+  --tl-color-selection-fill: #d7ed9a30;
+  --tl-color-selection-stroke: #a5ba80;
+  --tl-font-sans: "DM Sans", sans-serif;
+}
+.native-canvas .tl-canvas { background: #f6f5f0; }
+.tool-rail {
+  position: absolute; left: 24px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 3px; padding: 6px;
+  background: #fffef9e8; border: 1px solid #dfe3d7; border-radius: 18px;
+  box-shadow: 0 6px 28px #26372208; pointer-events: all; z-index: 300;
+}
+.tool-rail button { width: 32px; height: 31px; border-radius: 9px; color: #6e7f61; font-size: 21px; }
+.tool-rail button:hover, .tool-rail button[aria-pressed="true"] { background: #e6edda; color: #35482c; }
+.tool-rail button:disabled { opacity: .3; }
+.tool-divider { height: 1px; margin: 4px; background: #e1e5d8; }
+.canvas-styles {
+  position: absolute; top: 96px; left: 88px; padding: 8px 12px; border-radius: 20px;
+  background: #fffef9e8; border: 1px solid #e1e5d8; display: flex; gap: 8px;
+  align-items: center; z-index: 300; pointer-events: all;
+}
+.canvas-styles button { width: 15px; height: 15px; border-radius: 50%; }
+.canvas-styles select { border: 0; background: none; font-size: 11px; max-width: 75px; }
+.canvas-styles .text-action { width: auto; height: auto; font-size: 11px; border-radius: 8px; padding: 2px 4px; }
+.native-canvas > .welcome { pointer-events: none; }
+.native-canvas > .welcome button { pointer-events: auto; }
+@media (max-width: 650px) {
+  .tool-rail { left: 8px; padding: 4px; gap: 1px; }
+  .tool-rail button { width: 29px; height: 28px; }
+  .canvas-styles { top: 78px; left: 54px; gap: 6px; padding: 7px 9px; }
+}
+
+.canvas-ui-toggle { position: absolute; left: 24px; top: 66px; z-index: 500; display: flex; gap: 8px; background: #fffef9ed; border: 1px solid #dfe3d7; border-radius: 18px; padding: 6px 12px; pointer-events: auto; font-size: 12px; }
+.native-canvas[data-canvas-ui="full"] .tlui-layout { position: absolute; inset: 108px 0 155px; height: auto; }
+
+.native-canvas[data-canvas-ui="full"] .tlui-layout__top__right { padding-top: 64px; }
+
+/* PRESENT owns zoom navigation; hidden mode removes canvas chrome. */
+.native-canvas[data-canvas-ui="hidden"] ~ .canvas-navigation { display: none; }
+
+.native-canvas .tlui-navigation-panel { display: none; }
+
+/* Keep drawing separate from conversation; reveal secondary controls on demand. */
+.native-tool-dock { position: fixed; left: 20px; top: max(140px, calc(50% - 160px)); pointer-events: auto; }
+.canvas-menu { pointer-events: auto; position: fixed; left: 24px; top: 76px; }
+.canvas-menu > summary { list-style: none; cursor: pointer; color: #718064; padding: 8px; border-radius: 10px; }
+.canvas-menu > summary::-webkit-details-marker { display: none; }
+.canvas-menu[open] { background: #fffef9; border: 1px solid #dfe3d7; border-radius: 14px; box-shadow: 0 8px 24px #26372210; }
+.canvas-ui-toggle { left: 64px; top: 78px; border: 0; background: transparent; padding: 6px; font-size: 11px; }
+.tool-style-popover { position: fixed; z-index: 600; pointer-events: auto; background: #fffef9; border-radius: 14px; box-shadow: 0 8px 32px #26372220; padding-top: 24px; max-height: calc(100vh - 100px); overflow: auto; }
+.style-dismiss { position: absolute; top: 2px; right: 8px; padding: 2px 6px; color: #718064; }
+.native-canvas[data-canvas-ui="full"] .tlui-layout { inset: 0; }
+
+.tool-style-popover { padding-top: 0; }
+.style-palette-header { display: flex; align-items: center; padding: 4px 6px; color: #718064; }
+.style-palette-drag { flex: 1; display: flex; gap: 6px; align-items: center; padding: 4px; cursor: grab; touch-action: none; user-select: none; font-size: 11px; }
+.style-palette-drag:active { cursor: grabbing; }
+.style-pin { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; }
+.style-pin:hover, .style-pin[aria-pressed="true"] { background: #e6edda; color: #35482c; }
+
+.canvas-ui-toggle { align-items: center; gap: 7px; color: #718064; }
+.canvas-ui-toggle select { border: 0; border-radius: 6px; padding: 4px 6px; background: #fffef9; color: #35482c; font: inherit; cursor: pointer; }
+.canvas-ui-toggle select:focus-visible { outline: 2px solid #879d64; outline-offset: 2px; }
+
+.canvas-ui-toggle { left: 24px; top: 76px; padding: 0; background: transparent; border: 0; }
+.canvas-tools-button { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; color: #87917f; }
+.canvas-tools-button:hover, .canvas-tools-button[aria-pressed="true"] { background: #e9edde; color: #526447; }
+.canvas-tools-button:focus-visible { outline: 2px solid #879d64; outline-offset: 3px; }
+.canvas-menu { left: 60px; }

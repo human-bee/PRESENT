@@ -1,0 +1,64 @@
+.settings-panel label {
+  display: block;
+  font-size: 11px;
+  color: #748367;
+  margin: 18px 0 0;
+}
+.settings-panel input,
+.settings-panel select {
+  display: block;
+  background: #f6f7f0;
+  width: 100%;
+  border: 1px solid #e0e5d6;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 7px;
+  font-size: 12px;
+}
+.settings-note {
+  font-size: 11px;
+  line-height: 1.8;
+  color: #8b967e;
+  margin: 18px 0;
+}
+.connection-detail {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  color: #879379;
+  padding: 13px 0;
+  border-top: 1px solid #edf0e5;
+}
+.status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #b8bdaf;
+  flex-shrink: 0;
+}
+.status-dot.on {
+  background: #8aad5c;
+}
+.settings-actions {
+  display: flex;
+  gap: 6px;
+  margin: 12px 0 20px;
+}
+.settings-actions button {
+  font-size: 10px;
+  gap: 6px;
+  flex: 1;
+  padding: 9px 6px;
+  background: #f1f4e8;
+  border-radius: 7px;
+}
+.settings-actions button:hover {
+  background: var(--lime);
+}
+.settings-footnote {
+  font-size: 9px;
+  line-height: 1.7;
+  color: #a0aa92;
+  display: block;
+}

@@ -1,0 +1,82 @@
+.people {
+  position: fixed;
+  right: 37px;
+  top: 108px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 70vw;
+  z-index: 10;
+}
+.person {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid #f6f5f0;
+  box-shadow: 0 0 0 1px #dce2d3;
+  background: #e7ebdd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    width 0.3s,
+    height 0.3s,
+    border-radius 0.3s;
+  flex-shrink: 0;
+}
+.person-initial {
+  font-size: 12px;
+  color: var(--person-color, #738558);
+  font-weight: 600;
+}
+.person-name {
+  position: absolute;
+  bottom: -17px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: #929b85;
+  white-space: nowrap;
+}
+.person.has-video {
+  width: 170px;
+  height: 117px;
+  border-radius: 14px;
+  box-shadow: 0 3px 20px #2b3b200c;
+  background: #222c24;
+}
+.person video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+}
+.person.speaking {
+  box-shadow: 0 0 0 2px #93b758;
+}
+.screen-tile {
+  position: fixed;
+  right: 37px;
+  top: 265px;
+  width: 300px;
+  aspect-ratio: 16 / 9;
+  background: #242c25;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 30px #22331118;
+}
+.screen-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.screen-tile span {
+  position: absolute;
+  bottom: 8px;
+  left: 10px;
+  color: #f6f5f0;
+  font-size: 10px;
+}
+
+.people-visibility { font-size: 11px; color: #73806b; border-radius: 12px; padding: 4px 8px; background: #fffef9cc; }

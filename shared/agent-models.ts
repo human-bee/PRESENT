@@ -1,0 +1,10 @@
+import { z } from 'zod';
+export const agentModels = { spark: 'gpt-5.3-codex-spark', luna: 'gpt-5.6-luna', terra: 'gpt-5.6-terra', codex: 'gpt-6-astra', cerebras: 'qwen-3.8-27b' } as const;
+export const agentNames = { spark: 'Spark', luna: 'Luna', terra: 'Terra', codex: 'Astra', cerebras: 'Qwen 3.8 · Cerebras' };
+export const providerSchema = z.enum(['luna', 'terra', 'codex', 'cerebras', 'spark']);
+export type AgentProvider = z.infer<typeof providerSchema>;
+export type CodexProvider = Exclude<AgentProvider, 'cerebras'>;
+export const reasoningSchema = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+export const generationOptionsSchema = z.object({ reasoning: reasoningSchema.optional(), fast: z.boolean().optional(), decisions: z.enum(['jev', 'off']).optional() });
+export type GenerationOptions = z.infer<typeof generationOptionsSchema>;
+export type ProviderAvailability = { id: AgentProvider; name: string; model: string; configured: boolean; reasoning: string[]; fast: boolean; fastDescription?: string; reason?: string };

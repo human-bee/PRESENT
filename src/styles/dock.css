@@ -1,0 +1,67 @@
+.dock {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+  isolation: isolate;
+  border-radius: 40px;
+  padding: 3px 8px;
+}
+.dock::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: #f6f5f0a8;
+  border-radius: inherit;
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+.dock-button {
+  height: 33px;
+  width: 35px;
+  border-radius: 50%;
+  color: #87917c;
+}
+.dock-button:hover {
+  background: #e9ecdf;
+  color: #405435;
+}
+.dock-button.active {
+  color: #485d31;
+  background: #e2eccb;
+}
+.dock-divider {
+  width: 1px;
+  height: 13px;
+  background: #dfe3d5;
+  margin: 0 5px;
+}
+.agent-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #7b896a;
+  letter-spacing: 0.2px;
+  background: #f6f5f0cc;
+  padding: 4px 9px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+}
+.agent-progress > span:last-child {
+  color: #a1a895;
+}
+.mini-orbit {
+  display: inline-block;
+  border-radius: 50%;
+  border: 1px solid #8ba264;
+  width: 8px;
+  height: 8px;
+}
+.working .mini-orbit {
+  animation: breathe 1.6s infinite;
+}
+.thinking .composer-orbit {
+  animation: breathe 2s infinite;
+}

@@ -1,0 +1,75 @@
+.welcome {
+  position: absolute;
+  left: 50%;
+  top: 43%;
+  transform: translate(-50%, -50%);
+  width: 700px;
+  text-align: center;
+  user-select: none;
+}
+.welcome-eyebrow {
+  font-size: 9px;
+  letter-spacing: 2.6px;
+  font-weight: 550;
+  color: #8d9585;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+.little-sun {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--lime);
+  border: 1px solid #a3b581;
+  box-shadow: 0 0 0 3px #eaf0dc;
+}
+.welcome h1 {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(70px, 8.2vw, 118px);
+  line-height: 0.95;
+  font-weight: 400;
+  letter-spacing: -3.5px;
+  margin: 33px 0 25px;
+  color: #364131;
+}
+.welcome h1 em {
+  font-weight: 400;
+  color: #7d8b61;
+}
+.welcome p {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #7b8574;
+  font-weight: 400;
+  letter-spacing: 0.05px;
+}
+.invitations {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 28px;
+}
+.invitations button {
+  gap: 8px;
+  padding: 10px 15px;
+  border: 1px solid #dfe3d5;
+  border-radius: 7px;
+  background: #fffef966;
+  font-size: 11px;
+  color: #6a765e;
+}
+.invitations button:hover {
+  background: #edf0e3;
+  border-color: #bcc9a5;
+  transform: translateY(-2px);
+}
+.empty-footnote {
+  display: block;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-style: italic;
+  color: #9da592;
+  font-size: 16px;
+  margin-top: 39px;
+}

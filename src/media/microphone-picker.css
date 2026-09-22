@@ -1,0 +1,9 @@
+.mic-picker { position: relative; margin: 0 0 12px; font-size: 12px; }
+.mic-picker .mic-picker-trigger { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 0; text-align: left; }
+.mic-picker-label { color: #87917d; }
+.mic-picker-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mic-picker-menu { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; max-height: 210px; overflow-y: auto; padding: 5px; border: 1px solid #e0e5d8; border-radius: 12px; background: #fffef9; box-shadow: 0 8px 24px #28342a18; }
+.mic-picker .mic-picker-menu button { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 7px; text-align: left; font-size: 12px; }
+.mic-picker-menu button:hover, .mic-picker-menu button[aria-pressed=true] { background: #eef2e6; }
+.mic-picker-menu button[aria-pressed=true] { color: #526c39; }
+.mic-picker-menu small { display: block; padding: 8px 10px; color: #87917d; }

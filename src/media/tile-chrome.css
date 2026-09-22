@@ -1,0 +1,17 @@
+.media-widget { container-type: size; }
+.media-widget .widget-title-bar {
+  position: absolute; inset: 0 0 auto; z-index: 3;
+  background: #fffef9eb; backdrop-filter: blur(12px);
+  opacity: 0; visibility: hidden; transition: opacity .15s, visibility 0s .15s;
+}
+.media-widget:hover .widget-title-bar { opacity: 1; visibility: visible; transition-delay: .7s; }
+.media-widget:focus-within .widget-title-bar { opacity: 1; visibility: visible; transition-delay: 0s; }
+.media-widget .widget-title-bar > span { flex: 1; }
+.media-settings { cursor: default; }
+.media-settings > button { display: grid; place-items: center; padding: 5px; border-radius: 6px; }
+.media-settings-menu { max-height: calc(100cqh - 46px); overflow-y: auto; position: absolute; top: 38px; right: 6px; width: 208px; padding: 8px; background: #fffef9; color: #28342a; border: 1px solid #dfe5d8; border-radius: 10px; box-shadow: 0 4px 20px #26372218; }
+.media-settings-menu button { display: block; width: 100%; padding: 7px; text-align: left; border-radius: 5px; }
+.media-settings-menu button:hover { background: #edf0e8; }
+.media-settings-menu label { display: block; padding: 5px; font-size: 11px; }
+.media-settings-menu select { display: block; width: 100%; margin-top: 3px; font: inherit; }
+@media (hover: none) { .media-widget:active .widget-title-bar { opacity: 1; visibility: visible; transition-delay: 0s; } }

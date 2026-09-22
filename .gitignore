@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-native/
+.env*
+!.env.example
+.data/
+test-results/
+playwright-report/
+logs/
+public/tldraw-assets/
+docs/evidence/native-voice*/runtime/

@@ -1,0 +1,63 @@
+.canvas {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+}
+.canvas:active {
+  cursor: grabbing;
+}
+.world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.overlay {
+  cursor: default;
+  touch-action: auto;
+}
+.world > * {
+  pointer-events: auto;
+}
+.canvas-navigation {
+  position: fixed;
+  bottom: 33px;
+  right: 30px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #7b8670;
+  background: #f6f5f0ab;
+  border-radius: 20px;
+  padding: 4px;
+  backdrop-filter: blur(12px);
+}
+.canvas-navigation button {
+  width: 25px;
+  height: 26px;
+  font-size: 16px;
+}
+.canvas-navigation button:hover {
+  background: #e4e9d9;
+  border-radius: 50%;
+}
+.canvas-navigation span {
+  min-width: 32px;
+  text-align: center;
+}
+.canvas-hint {
+  position: fixed;
+  bottom: 43px;
+  left: 38px;
+  font-size: 10px;
+  color: #a2aa96;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+}
+
+.settings-panel .model-fast { display: flex; align-items: center; gap: 10px; }
+.settings-panel .model-fast input { width: 18px; height: 18px; margin: 0; }

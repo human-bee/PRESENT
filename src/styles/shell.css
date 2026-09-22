@@ -1,0 +1,72 @@
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 94px;
+  display: flex;
+  align-items: center;
+  padding: 0 38px;
+  gap: 22px;
+  background: linear-gradient(#f6f5f0 40%, #f6f5f000);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 650;
+  font-size: 24px;
+  letter-spacing: -1.3px;
+}
+.brand img {
+  width: 29px;
+  height: 29px;
+  border-radius: 50%;
+}
+.top-divider {
+  height: 22px;
+  width: 1px;
+  background: #d8dbcf;
+}
+.room-title {
+  border: 0;
+  background: transparent;
+  width: 190px;
+  font-size: 13px;
+  color: #717b6d;
+  text-overflow: ellipsis;
+  padding: 8px 0;
+}
+.room-title:hover {
+  color: var(--ink);
+}
+.room-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #8c9585;
+  letter-spacing: 0.2px;
+}
+.room-status i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #b3b8ad;
+}
+.room-status i.online {
+  background: #7d985c;
+}
+.invite {
+  gap: 7px;
+  background: #fffef9a8;
+  border: 1px solid #dddfd2;
+  border-radius: 100px;
+  padding: 9px 16px;
+  font-size: 12px;
+}
+.invite:hover {
+  background: var(--lime);
+  border-color: var(--lime);
+}
