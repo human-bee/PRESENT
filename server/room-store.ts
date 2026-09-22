@@ -6,7 +6,7 @@ import { TLSocketRoom, type RoomSnapshot, type TLSyncStorageTransaction } from '
 import type { TLRecord } from '@tldraw/tlschema';
 import type { JsonObject } from '@tldraw/utils';
 import { operationSchema, type RoomState } from '../shared/room';
-import { DOCUMENT_ID, recordsToRoom, shapeToObject } from '../shared/tldraw-adapter';
+import { DOCUMENT_ID, recordsToRoom } from '../shared/tldraw-adapter';
 import { presentSchema } from '../shared/tldraw-schema';
 import { RoomError, validRoomId } from './tldraw-errors';
 import { applyDtoOperation, applyNativeMutation, deleteShapeTree, type NativeMutation } from './tldraw-operations';
@@ -16,7 +16,7 @@ export { RoomError, validRoomId } from './tldraw-errors';
 export type { NativeMutation } from './tldraw-operations';
 
 type Listener = (room: RoomState, requestId?: string) => void;
-type Entry = { native: TLSocketRoom<TLRecord>; storage: BoundedSyncStorage; listeners: Set<Listener>; dirty: boolean; publishedClock: number; savedClock: number };
+type Entry = { native: TLSocketRoom<TLRecord>; storage: BoundedSyncStorage; listeners: Set<Listener>; dirty: boolean; publishedClock: number; savedClock: number; expiryClock: number; nextExpiry: number; projection?: RoomState };
 type Options = { directory?: string; legacyDirectory?: string; now?: () => number; debounceMs?: number; maxRooms?: number };
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const copy = <T>(value: T): T => structuredClone(value);
@@ -55,7 +55,7 @@ export class RoomStore {
       for (const record of records) (presentSchema.types[record.typeName] as { validate(value: unknown): TLRecord }).validate(record);
     } catch { throw new RoomError('This native room could not be restored. Its saved files have been preserved.', 500); }
     const existed = existsSync(join(this.directory, `${id}.json`));
-    const entry: Entry = { native, storage, listeners: new Set(), dirty: !existed, publishedClock: storage.getClock(), savedClock: existed ? snapshot.documentClock ?? snapshot.clock ?? -1 : -1 };
+    const entry: Entry = { native, storage, listeners: new Set(), dirty: !existed, publishedClock: storage.getClock(), savedClock: existed ? snapshot.documentClock ?? snapshot.clock ?? -1 : -1, expiryClock: -1, nextExpiry: 0 };
     storage.onChange(() => this.changed(id, entry));
     this.rooms.set(id, entry);
     this.expire(id, entry);
@@ -68,7 +68,8 @@ export class RoomStore {
   getRoom(id: string): RoomState {
     const entry = this.load(id);
     this.expire(id, entry);
-    return recordsToRoom(id, this.getCanvasRecords(id), entry.native.getCurrentDocumentClock());
+    if (!entry.projection) entry.projection = recordsToRoom(id, entry.storage.getSnapshot().documents.map(document => document.state as TLRecord), entry.native.getCurrentDocumentClock());
+    return copy(entry.projection);
   }
   subscribeRoom(id: string, listener: Listener) {
     const entry = this.load(id); entry.listeners.add(listener);
@@ -115,19 +116,25 @@ export class RoomStore {
   private changed(id: string, entry: Entry, requestId?: string) {
     const clock = entry.storage.getClock();
     if (clock === entry.publishedClock) return;
-    entry.publishedClock = clock; entry.dirty = true; this.scheduleSave();
+    entry.publishedClock = clock; entry.dirty = true; entry.projection = undefined; this.scheduleSave();
     if (!entry.listeners.size) return;
-    const state = recordsToRoom(id, entry.storage.getSnapshot().documents.map(document => document.state as TLRecord), clock);
+    const state = entry.projection = recordsToRoom(id, entry.storage.getSnapshot().documents.map(document => document.state as TLRecord), clock);
     for (const listener of entry.listeners) try { listener(copy(state), requestId); } catch { /* A closed subscriber cannot roll back accepted work. */ }
   }
   private expire(id: string, entry: Entry) {
+    const now = this.now();
+    if (entry.expiryClock === entry.storage.getClock() && now < entry.nextExpiry) return;
+    let nextExpiry = Infinity;
     entry.storage.transaction(transaction => {
       for (const record of transaction.values()) {
         if (record.typeName !== 'shape') continue;
-        const shape = shapeToObject(record);
-        if (!shape.pinned && shape.expiresAt !== null && shape.expiresAt <= this.now()) deleteShapeTree(transaction, record.id);
+        const metadata = record.type === 'present-widget' ? record.props : object(record.meta.present);
+        if (metadata.pinned === true || typeof metadata.expiresAt !== 'number') continue;
+        if (metadata.expiresAt <= now) deleteShapeTree(transaction, record.id);
+        else nextExpiry = Math.min(nextExpiry, metadata.expiresAt);
       }
     });
+    entry.expiryClock = entry.storage.getClock(); entry.nextExpiry = nextExpiry;
     this.changed(id, entry);
   }
   sweepExpired() { for (const [id, entry] of this.rooms) this.expire(id, entry); }

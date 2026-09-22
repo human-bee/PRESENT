@@ -104,6 +104,20 @@ test('expiry removes unpinned objects and pinning preserves them across restart'
     restored.close();
   } finally { cleanup(); }
 });
+test('repeated room reads stay detached and refresh at the next expiry or mutation', () => {
+  let now = 100;
+  const { store, cleanup } = setup(() => now);
+  try {
+    store.applyOperation(roomA, { type: 'put', object: makeNote() }, 'human');
+    const exposed = store.getRoom(roomA);
+    exposed.objects[0].data.text = 'Changed outside the store';
+    assert.equal(store.getRoom(roomA).objects[0].data.text, 'Hello');
+    store.applyOperation(roomA, { type: 'patch', id: 'note-one', patch: { data: { text: 'Saved edit' }, expiresAt: 150 } }, 'human');
+    assert.equal(store.getRoom(roomA).objects[0].data.text, 'Saved edit');
+    now = 149; assert.equal(store.getRoom(roomA).objects.length, 1);
+    now = 150; assert.equal(store.getRoom(roomA).objects.length, 0);
+  } finally { cleanup(); }
+});
 test('object and room caps bound storage', () => {
   const { store, directory, cleanup } = setup();
   try {

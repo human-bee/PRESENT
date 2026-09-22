@@ -1,0 +1,11 @@
+.room-templates { width: min(420px, 92vw); max-height: 75vh; overflow: auto; padding: 22px; border: 1px solid var(--line); border-radius: 20px; background: var(--paper); color: var(--ink); box-shadow: 0 14px 50px #28332c18; }
+.room-templates h2 { margin: 0; font: 26px 'Instrument Serif', serif; }
+.room-templates p, .room-templates small { font-size: 12px; line-height: 1.5; }
+.room-templates ul { padding: 0; list-style: none; }
+.room-templates li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.room-templates small { display: block; color: #626b60; }
+.room-templates button { padding: 9px 14px; border-radius: 12px; background: var(--lime); white-space: nowrap; }
+.room-templates form { display: grid; gap: 10px; }
+.room-templates input { width: 100%; margin-top: 7px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.room-templates input:focus-visible { outline: 2px solid #718a43; }
+.room-templates [role=alert] { color: #9c3025; }
