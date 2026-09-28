@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useValue, type Editor } from 'tldraw';
+import { TLDOCUMENT_ID, useValue, type Editor } from 'tldraw';
 import { readTranscriptWindow } from '../shared/transcript';
 import type { RoomEvent } from '../shared/room';
 
 export function RoomMemory({ editor, events }: { editor: Editor | null; events: RoomEvent[] }) {
   const [query, setQuery] = useState('');
-  const transcript = useValue('room transcript', () => editor ? readTranscriptWindow(editor.store.allRecords()) : { entries: [], omitted: 0 }, [editor]);
+  const transcript = useValue('room transcript', () => { const document = editor?.store.get(TLDOCUMENT_ID); return readTranscriptWindow(document ? [document] : []); }, [editor]);
   const entries = [
     ...events.map(event => ({ ...event, source: 'activity' })),
     ...transcript.entries.map(entry => ({ ...entry, actor: entry.role === 'assistant' ? 'PRESENT' : 'Room audio', source: 'caption' })),

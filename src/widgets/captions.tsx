@@ -1,9 +1,9 @@
-import { useEditor, useValue } from 'tldraw';
+import { TLDOCUMENT_ID, useEditor, useValue } from 'tldraw';
 import { readTranscriptWindow } from '../../shared/transcript';
 
 export function SharedCaptions() {
   const editor = useEditor();
-  const transcript = useValue('shared captions', () => readTranscriptWindow(editor.store.allRecords()), [editor]);
+  const transcript = useValue('shared captions', () => { const document = editor.store.get(TLDOCUMENT_ID); return readTranscriptWindow(document ? [document] : []); }, [editor]);
   const captions = transcript.entries.slice(-30);
   return <section className="shared-captions" aria-label="Shared captions">
     <p className="caption-note">Final captions appear while a participant has listening on. Room audio may include several speakers.</p>

@@ -40,7 +40,7 @@ test('owner creates, editor joins/edits/reconnects, viewer is denied, revoke clo
     expect((await guest.request.get(`/api/room/${roomId}`)).status()).toBe(403);
     // Reuse the same isolated guest browser context as a fresh anonymous identity for the viewer leg.
     await guestContext.clearCookies();
-    await owner.getByLabel('Can', { exact: true }).selectOption('viewer');
+    await owner.getByRole('combobox', { name: 'Can', exact: true }).selectOption('viewer');
     await owner.getByRole('button', { name: 'Create invite', exact: true }).click();
     const viewerLink = await owner.getByLabel('Room link', { exact: true }).inputValue();
     await guest.goto(viewerLink);

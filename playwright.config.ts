@@ -14,6 +14,7 @@ export default defineConfig({
     baseURL,
     channel: process.env.PRESENT_E2E_BROWSER_CHANNEL || undefined,
     headless: true,
+    actionTimeout: 10_000,
     viewport: { width: 1440, height: 900 },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

@@ -12,7 +12,7 @@ test('every built-in instrument adds, shares, moves and survives reload', async 
   const errors: string[] = [], timings: { action: string; localMs: number; peerMs: number }[] = [];
   writer.on('pageerror', error => errors.push(error.message));
   peer.on('pageerror', error => errors.push(error.message));
-  const read = async (page: Page) => (await (await page.request.get(`/api/room/${room}`)).json()).room.objects as { id: string; x: number; y: number }[];
+  const read = async (page: Page) => (await (await page.request.get(`/api/room/${room}`)).json()).room.objects as { id: string; title: string; x: number; y: number }[];
   try {
     await Promise.all([writer.goto(`/r/${room}`), peer.goto(`/r/${room}`)]);
     await expect(writer.locator('.room-status')).toHaveText('here, together');
@@ -35,19 +35,23 @@ test('every built-in instrument adds, shares, moves and survives reload', async 
     }
     const objects = await read(writer);
     expect(objects).toHaveLength(labels.length);
-    const id = objects.at(-1)!.id;
+    // Canonical records are sorted by ID, not insertion order. Select the
+    // instrument explicitly; a native sticky note has no widget drag header.
+    const dice = objects.find(item => item.title === 'Dice table');
+    expect(dice).toBeDefined();
+    const id = dice!.id;
     const widget = writer.locator(`.tl-shape[data-shape-id="shape:${id}"]`);
     const peerWidget = peer.locator(`.tl-shape[data-shape-id="shape:${id}"]`);
     const peerStyleBefore = await peerWidget.getAttribute('style');
     const title = widget.locator('[title="Drag to move"]');
     const box = await title.boundingBox();
-    if (!box) throw new Error('Last widget is not visible for dragging');
+    if (!box) throw new Error('Dice table is not visible for dragging');
     const startX = box.x + box.width / 2, startY = box.y + box.height / 2;
     await writer.mouse.move(startX, startY);
     await writer.mouse.down();
     await writer.mouse.move(startX + 120, startY - 100, { steps: 8 });
     await writer.mouse.up();
-    await expect.poll(async () => (await read(writer)).find(item => item.id === id)?.x).not.toBe(objects.at(-1)!.x);
+    await expect.poll(async () => (await read(writer)).find(item => item.id === id)?.x).not.toBe(dice!.x);
     const moved = await read(writer);
     await expect(widget).toBeVisible();
     await expect.poll(() => peerWidget.getAttribute('style')).not.toBe(peerStyleBefore);

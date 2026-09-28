@@ -36,7 +36,7 @@ test('real Realtime speech creates a native note from a synthetic microphone', a
     '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
     `--use-file-for-fake-audio-capture=${wav}`, '--autoplay-policy=no-user-gesture-required',
   ] });
-  const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+  const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, permissions: ['microphone'] });
   const roomId = randomBytes(16).toString('hex');
   const report: Record<string, unknown> = {
     at: new Date().toISOString(), roomId, command, browser: process.env.PRESENT_E2E_BROWSER_CHANNEL || 'Playwright Chromium', mode: conversation ? 'conversation' : 'ambient',
@@ -99,8 +99,10 @@ test('real Realtime speech creates a native note from a synthetic microphone', a
     await expect(page.locator('.native-canvas .tl-canvas')).toBeVisible();
     await expect(page.locator('.tl-note__container')).toHaveCount(0);
     expect(await page.evaluate(() => (window as unknown as ProofWindow).__voiceProof.tracks.length)).toBe(0);
+    await page.getByRole('button', { name: 'Start listening', exact: true }).click({ button: 'right' });
+    await page.getByRole('button', { name: 'Microphone device', exact: true }).click();
+    await page.locator('.mic-picker-menu > button').first().click();
     if (conversation) {
-      await page.getByRole('button', { name: 'Start listening', exact: true }).click({ button: 'right' });
       await page.getByRole('button', { name: 'Talk with me', exact: true }).click();
     }
     const sessionResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/voice/session', { timeout: 25_000 });
