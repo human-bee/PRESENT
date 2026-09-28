@@ -1,4 +1,4 @@
-import { focusResult } from './tldraw/focus';
+import { fitCanvas, focusResult } from './tldraw/focus';
 import { type TLShapeId } from 'tldraw';
 import { RenderReceipts } from './tldraw/render-receipts';
 import { Tldraw, type Editor } from 'tldraw';
@@ -34,6 +34,7 @@ export function Canvas({ sync, roomId, selfId, onMount, act, onError, children }
         onMount(editor);
         const focus = new URLSearchParams(window.location.search).get('focus');
         if (focus && /^[\w-]{1,100}$/.test(focus)) void focusResult(editor, [`shape:${focus}` as TLShapeId]);
+        else fitCanvas(editor, [], 0, false);
         if (import.meta.env.DEV) (window as Window & { __presentEditor?: Editor }).__presentEditor = editor;
       }} licenseKey={import.meta.env.VITE_TLDRAW_LICENSE_KEY}>
         {import.meta.env.DEV && <RenderReceipts/>}
