@@ -1,0 +1,19 @@
+2026-09-28T19:36:58.4319250Z ✓ 1170 modules transformed.
+2026-09-28T19:36:59.8239815Z ✓ built in 7.71s
+2026-09-28T19:37:05.7730625Z Running 14 tests using 1 worker
+2026-09-28T19:37:09.8838088Z   ✓   1 tests/e2e/media.spec.ts:54:1 › joining and using the canvas does not capture any device or start a call (2.3s)
+2026-09-28T19:37:09.9217104Z   -   2 tests/e2e/media.spec.ts:78:1 › two people exchange synthetic LiveKit video and audio, then stop every captured track
+2026-09-28T19:37:16.7597567Z   ✓   3 tests/e2e/voice-layout.spec.ts:12:1 › @layout voice controls stay inside a mobile viewport after a failed connection (6.8s)
+2026-09-28T19:37:29.1666349Z   ✓   4 tests/e2e/widget-catalog.spec.ts:7:1 › every built-in instrument adds, shares, moves and survives reload (12.4s)
+2026-09-28T19:37:30.6374915Z   ✓   5 tests/e2e/widget-catalog.spec.ts:70:1 › composer keyboard shortcut and panel exclusivity survive repeated toggles (1.5s)
+2026-09-28T19:37:33.0327598Z   ✓   6 tests/e2e/widget-interactions.spec.ts:83:35 › Task board works through two people's real controls (2.4s)
+2026-09-28T19:37:35.4501542Z   ✓   7 tests/e2e/widget-interactions.spec.ts:83:35 › Meeting brief works through two people's real controls (2.4s)
+2026-09-28T19:37:37.8726467Z   ✓   8 tests/e2e/widget-interactions.spec.ts:83:35 › Audience Q&A works through two people's real controls (2.4s)
+2026-09-28T19:37:40.5534348Z   ✓   9 tests/e2e/widget-interactions.spec.ts:83:35 › Shared deck works through two people's real controls (2.7s)
+2026-09-28T19:37:42.9042851Z   ✓  10 tests/e2e/widget-interactions.spec.ts:83:35 › Debate desk works through two people's real controls (2.3s)
+2026-09-28T19:37:45.1679335Z   ✓  11 tests/e2e/widget-interactions.spec.ts:83:35 › Find your words works through two people's real controls (2.2s)
+2026-09-28T19:37:47.4977563Z   ✓  12 tests/e2e/widget-interactions.spec.ts:83:35 › A shared frequency works through two people's real controls (2.3s)
+2026-09-28T19:37:48.8161090Z   ✓  13 tests/e2e/widget-interactions.spec.ts:105:1 › a tall new instrument stays clear of mobile room controls (1.3s)
+2026-09-28T19:37:58.2498700Z   ✓  14 tests/e2e/widget-latency.spec.ts:5:1 › 60 alternating participant actions retain shared dice history and measure UI latency (9.4s)
+2026-09-28T19:37:58.4144143Z   1 skipped
+2026-09-28T19:37:58.4144592Z   13 passed (57.6s)

@@ -1,0 +1,54 @@
+{
+  "run": "https://github.com/human-bee/PRESENT/actions/runs/36473346595",
+  "commit": "4387016b8f1aa2fcfc4089424d42cb257e959da2",
+  "jobs": [
+    {
+      "id": 109100811348,
+      "name": "browser (production)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 109100811674,
+      "name": "browser (invite)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 109100811681,
+      "name": "browser (local)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 109100811850,
+      "name": "contracts",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "unit": {
+    "passed": 246,
+    "skipped": 2
+  },
+  "browser": {
+    "local": {
+      "passed": 24,
+      "skipped": 3
+    },
+    "invite": {
+      "passed": 1,
+      "skipped": 0
+    },
+    "production": {
+      "passed": 13,
+      "skipped": 1
+    }
+  },
+  "limits": [
+    "No live provider credentials: speech, TTS and LiveKit calls were skipped.",
+    "Browser/server measurements use one CI host, not WAN latency.",
+    "Production tests serve the built bundle locally; no public cloud deployment was performed.",
+    "Hosted work authorization adapter remains disabled."
+  ]
+}

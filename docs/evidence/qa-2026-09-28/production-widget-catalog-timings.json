@@ -1,0 +1,72 @@
+{
+  "timings": [
+    {
+      "action": "A thought Native sticky note",
+      "localMs": 552.5560379999988,
+      "peerMs": 614.5474610000001
+    },
+    {
+      "action": "A moment A shared timer",
+      "localMs": 288.8078519999999,
+      "peerMs": 364.47823400000016
+    },
+    {
+      "action": "A voice Find your flow",
+      "localMs": 288.9694039999995,
+      "peerMs": 412.07359299999916
+    },
+    {
+      "action": "A question Vote together",
+      "localMs": 295.95855200000005,
+      "peerMs": 415.4761749999998
+    },
+    {
+      "action": "A sound Play together",
+      "localMs": 413.41509100000076,
+      "peerMs": 582.9626180000014
+    },
+    {
+      "action": "Shared document Write Markdown, preview it and save versions.",
+      "localMs": 270.22712499999943,
+      "peerMs": 400.05498199999965
+    },
+    {
+      "action": "Task board Track tasks, owners and progress together.",
+      "localMs": 338.20683500000086,
+      "peerMs": 447.04415900000095
+    },
+    {
+      "action": "Meeting brief Keep the summary, decisions and next actions together.",
+      "localMs": 249.28159999999843,
+      "peerMs": 351.0100659999989
+    },
+    {
+      "action": "Audience Q&A Collect questions, vote and choose what to discuss.",
+      "localMs": 486.14389700000174,
+      "peerMs": 646.4747770000031
+    },
+    {
+      "action": "Live captions Read final captions shared by the room.",
+      "localMs": 417.24450499999875,
+      "peerMs": 597.4538160000011
+    },
+    {
+      "action": "Debate desk Collect claims, inspect evidence and score each side.",
+      "localMs": 345.9684759999982,
+      "peerMs": 549.6180209999984
+    },
+    {
+      "action": "Shared deck Draw, reveal and return cards around a shared table.",
+      "localMs": 376.0210819999993,
+      "peerMs": 590.5581619999975
+    },
+    {
+      "action": "Dice table Roll common dice with a shared, attributed history.",
+      "localMs": 367.42963999999847,
+      "peerMs": 543.3896679999998
+    }
+  ],
+  "boundary": "Playwright add click through persistence read, Fit click and DOM assertion; includes driver overhead and fit animation, not an isolated rendering or voice latency measurement.",
+  "commit": "4387016b8f1aa2fcfc4089424d42cb257e959da2",
+  "run": "https://github.com/human-bee/PRESENT/actions/runs/36473346595"
+}

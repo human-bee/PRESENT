@@ -1,6 +1,6 @@
 # Native PRESENT cloud readiness — 28 September 2026
 
-The native build and signed HTTP/WebSocket contracts pass locally. No hosted version was deployed or verified during this QA run. The project remains a Node service, not a static website.
+The native build, signed HTTP/WebSocket contracts and provider-free Chromium UI tests run locally and in GitHub Actions. No hosted version was deployed or verified during this QA run. The project remains a Node service, not a static website.
 
 ## Runtime contract
 
@@ -28,7 +28,7 @@ The managed development preview uses an isolated signed profile, private disposa
 ## What still blocks the complete hosted product
 
 - The shared work queue needs the per-job authorization adapter in [work-authorization-integration.md](work-authorization-integration.md). Its enable flag is intentionally unset. Hosted work routes fail closed; project metadata is readable by signed users, not permission to execute projects.
-- Live voice, TTS playback, physical media, multi-human browser convergence and visual layout were not verified in this environment. Browser installation failed and the managed browser could not navigate to the preview. Provider secrets were not available to this local runtime.
+- Real multi-participant browser convergence and desktop/mobile layout were verified in GitHub Actions after the local browser installation was blocked. Genuine speech, TTS playback and LiveKit calls remain unverified: provider credentials are unavailable to this QA runtime. The live suites are opt-in and are explicitly skipped in CI.
 - Sites' worker/static runtime cannot directly execute this Node WebSocket server and its filesystem-backed room/access stores. A durable realtime backend or a deliberate server/storage migration is required. Uploading the frontend alone would not provide a working room.
 - The client still has a large tldraw entry chunk. Deferred LiveKit reduces initial transfer; it does not prove subsecond cold loading over a real network.
 
@@ -42,4 +42,4 @@ The realtime service lists existing OpenAI, Cerebras and LiveKit variable names.
 
 ## Release acceptance
 
-Run the browser commands in the QA report against an isolated staging room. Verify owner/editor/viewer flows, revocation, reconnect after a process restart, durable assets, genuine spoken tool calls and received audible responses. Record click-to-visible, peer-visible and speech-to-result percentiles separately. Promote only after those checks and the required background-work adapter are complete.
+The provider-free browser commands and evidence are in the QA report. Repeat them against an isolated deployed staging room. Then verify reconnect after a process restart, durable assets, genuine spoken tool calls and received audible responses. Record click-to-visible, peer-visible and speech-to-result percentiles separately. Promote only after those checks and the required background-work adapter are complete.

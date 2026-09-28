@@ -1,0 +1,381 @@
+{
+  "boundary": "Real Chromium clicks through local and peer DOM assertions, including Playwright overhead. Two independent browser contexts and a same-host server; no WAN, paint or provider latency claim.",
+  "local": {
+    "count": 60,
+    "belowOneSecond": 60,
+    "p50": 78.08038200001465,
+    "p95": 113.45760600001086,
+    "max": 126.62164699999266
+  },
+  "peer": {
+    "count": 60,
+    "belowOneSecond": 60,
+    "p50": 123.24296299999696,
+    "p95": 153.76204200001666,
+    "max": 158.93822299997555
+  },
+  "samples": [
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 66.19490400000359,
+      "peerMs": 117.58060200000182
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 86.57711199999903,
+      "peerMs": 132.01552400001674
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 74.9437040000048,
+      "peerMs": 127.91020600000047
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 71.07310800001142,
+      "peerMs": 130.20018700000946
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 82.01038200000767,
+      "peerMs": 118.74580900001456
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 70.18208500000765,
+      "peerMs": 137.13117700000294
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 63.57523499999661,
+      "peerMs": 108.28081200001179
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 89.59105600000476,
+      "peerMs": 131.06797599999118
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 78.50216900001396,
+      "peerMs": 123.23571800001082
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 75.56779500000994,
+      "peerMs": 122.53676399998949
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 66.69541400001617,
+      "peerMs": 125.31009000001359
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 74.18539600001532,
+      "peerMs": 141.8574770000123
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 81.65030400000978,
+      "peerMs": 127.34692599999835
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 109.7271630000032,
+      "peerMs": 121.09180600001127
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 58.75942999997642,
+      "peerMs": 120.70192799999495
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 69.05194200002006,
+      "peerMs": 110.18036700002267
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 66.37399500000174,
+      "peerMs": 107.59020199999213
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 97.04593500000192,
+      "peerMs": 140.55199400000856
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 96.65262199999415,
+      "peerMs": 109.49857900000643
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 74.75377700000536,
+      "peerMs": 120.75736100002541
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 114.9000309999974,
+      "peerMs": 129.93466699999408
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 72.17580100000487,
+      "peerMs": 127.35387699998682
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 69.83666500000982,
+      "peerMs": 121.20491699999548
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 63.82232800000929,
+      "peerMs": 134.27627299999585
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 80.7573679999914,
+      "peerMs": 142.21760499998345
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 86.54007599997567,
+      "peerMs": 151.43087499999092
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 82.03516500000842,
+      "peerMs": 124.94081900001038
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 78.59427299999516,
+      "peerMs": 116.74764200000209
+    },
+    {
+      "action": "roll",
+      "participant": 0,
+      "localMs": 76.36829600000056,
+      "peerMs": 126.13509400002658
+    },
+    {
+      "action": "roll",
+      "participant": 1,
+      "localMs": 67.78450099998736,
+      "peerMs": 158.93822299997555
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 115.06601199999568,
+      "peerMs": 135.80171199998586
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 86.23068000000785,
+      "peerMs": 156.34486300000572
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 60.472758000018075,
+      "peerMs": 109.79910100001143
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 109.0618400000094,
+      "peerMs": 124.64968000000226
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 84.89602300000843,
+      "peerMs": 128.28322799998568
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 79.05434099998092,
+      "peerMs": 139.40651199998683
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 84.1212050000031,
+      "peerMs": 125.7733489999955
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 78.08038200001465,
+      "peerMs": 116.2883140000049
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 72.98964799998794,
+      "peerMs": 110.67298799997661
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 80.81512499999371,
+      "peerMs": 129.53682199999457
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 79.37585100001888,
+      "peerMs": 121.98654000001261
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 77.14540300000226,
+      "peerMs": 132.2599629999895
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 102.98925499999314,
+      "peerMs": 119.82205200000317
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 61.07400900000357,
+      "peerMs": 98.09110999997938
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 92.55692699999781,
+      "peerMs": 112.13930900002015
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 94.6632180000015,
+      "peerMs": 110.0292040000204
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 67.63416399998823,
+      "peerMs": 115.36979900000733
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 89.44454599998426,
+      "peerMs": 154.3679649999831
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 113.45760600001086,
+      "peerMs": 123.53288499999326
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 67.74226400000043,
+      "peerMs": 103.013357000018
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 70.03595099999802,
+      "peerMs": 106.82694500000798
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 72.95843800000148,
+      "peerMs": 143.22424599999795
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 55.56906300000264,
+      "peerMs": 118.74377100000856
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 99.79856999998447,
+      "peerMs": 123.64041199997882
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 65.42899599997327,
+      "peerMs": 101.70540399997844
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 70.79845100000966,
+      "peerMs": 108.3289999999979
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 72.87769600001047,
+      "peerMs": 123.24296299999696
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 82.91746100000455,
+      "peerMs": 119.06739300000481
+    },
+    {
+      "action": "remove",
+      "participant": 0,
+      "localMs": 83.11181900001247,
+      "peerMs": 122.2450339999923
+    },
+    {
+      "action": "remove",
+      "participant": 1,
+      "localMs": 126.62164699999266,
+      "peerMs": 153.76204200001666
+    }
+  ],
+  "commit": "abc75a0d4886bab1ff93a5b749ca9bb0e7500a97",
+  "run": "https://github.com/human-bee/PRESENT/actions/runs/36472872275"
+}
