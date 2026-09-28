@@ -7,16 +7,19 @@ import { codexCommand, codexConfigured } from './codex';
 import { CodexWire } from './codex-wire';
 import { AgentError, agentModels } from './contract';
 import { prepareWorkspace, readWorkspaceFiles } from './workspace-sandbox';
+import { ProjectRegistry } from '../projects/registry';
+import { inspectProjectWorkspace, prepareProjectWorkspace } from '../projects/workspace';
+import type { ProjectSnapshot } from '../../shared/project-work';
 import { runWorkspaceTurn } from './workspace-turn';
 
 export type WorkspaceWire = Pick<CodexWire, 'request' | 'send' | 'listeners' | 'close' | 'closed'> & { stopped?: Promise<void> };
 export type WorkspaceRunInput = GenerationOptions & {
   prompt: string; provider: 'spark' | 'codex' | 'luna' | 'terra'; jobId: string; attempt: number; state: WorkExecutionState;
-  onCheckpoint: (state: WorkExecutionState) => void; outputSchema?: object;
+  onCheckpoint: (state: WorkExecutionState) => void; outputSchema?: object; project?: ProjectSnapshot;
 };
 export type WorkspaceRunResult = { output: string; execution: WorkExecution };
 export type WorkspaceRunner = (input: WorkspaceRunInput, signal: AbortSignal) => Promise<WorkspaceRunResult>;
-type Options = { directory?: string; wire?: (options: { cwd: string; config: Record<string, unknown> }) => WorkspaceWire; configured?: () => boolean };
+type Options = { directory?: string; wire?: (options: { cwd: string; config: Record<string, unknown> }) => WorkspaceWire; configured?: () => boolean; projects?: ProjectRegistry };
 type ThreadResult = { thread: { id: string }; model: string; cwd: string; runtimeWorkspaceRoots: string[]; activePermissionProfile: { id: string } | null };
 
 export function workspaceThreadOptions(cwd: string, provider: 'spark' | 'codex' | 'luna' | 'terra') {
@@ -35,6 +38,7 @@ export function createRunWorkspaceWork(options: Options = {}): WorkspaceRunner {
     if (signal.aborted) throw new AgentError('Local work was cancelled.', 408);
     const base = options.directory ?? dataPath('workspaces');
     const workspace = prepareWorkspace(base, state.workspaceId), continued = state.threadId !== null;
+    if (input.project) prepareProjectWorkspace(workspace.cwd, input.project, options.projects ?? new ProjectRegistry());
     const checkpoint = (next: WorkExecutionState) => { state = workExecutionStateSchema.parse(next); input.onCheckpoint(structuredClone(state)); };
     let wire: WorkspaceWire | undefined;
     active.add(state.workspaceId);
@@ -66,6 +70,7 @@ export function createRunWorkspaceWork(options: Options = {}): WorkspaceRunner {
       wire?.close(); await wire?.stopped; active.delete(state.workspaceId);
     }
     if (signal.aborted) throw new AgentError('Local work was cancelled.', 408);
-    return { output, execution: { boundary: 'local-workspace', continued, commands: state.commands, files: readWorkspaceFiles(workspace.cwd) } };
+    const files = readWorkspaceFiles(workspace.cwd);
+    return { output, execution: { boundary: 'local-workspace', continued, commands: state.commands, files, ...(input.project ? { project: inspectProjectWorkspace(workspace.cwd, input.project) } : {}) } };
   };
 }

@@ -1,9 +1,10 @@
 import { microphoneConstraints, saveMicrophone } from './microphone';
-import { Room, RoomEvent, Track, TrackEvent, createLocalAudioTrack, createLocalScreenTracks, createLocalVideoTrack, type LocalTrack } from 'livekit-client';
+import type { LocalTrack, Room } from 'livekit-client';
 import { emptyMediaState, mediaError, participantsFor, sourceActive, type MediaState } from './media-state';
+import { loadLiveKit, preloadLiveKit, type LiveKitSDK } from './livekit-loader';
 
 type Device = 'mic' | 'camera' | 'screen';
-const sourceFor = { mic: Track.Source.Microphone, camera: Track.Source.Camera, screen: Track.Source.ScreenShare };
+const sourceFor = { mic: 'microphone', camera: 'camera', screen: 'screen_share' } as const;
 
 export class MediaSession {
   private state = emptyMediaState();
@@ -13,6 +14,7 @@ export class MediaSession {
   private request: AbortController | null = null;
   private generation = 0;
   private busy = new Set<Device>();
+  private sdk: LiveKitSDK | null = null;
 
   constructor(private roomId: string, private identity: string, private name: string) {}
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -24,11 +26,12 @@ export class MediaSession {
   private refresh(room: Room) {
     if (this.room !== room) return;
     const local = room.localParticipant;
-    this.update({ participants: participantsFor(room), mic: sourceActive(local, Track.Source.Microphone),
-      camera: sourceActive(local, Track.Source.Camera), screen: sourceActive(local, Track.Source.ScreenShare) });
+    this.update({ participants: participantsFor(room), mic: sourceActive(local, 'microphone'),
+      camera: sourceActive(local, 'camera'), screen: sourceActive(local, 'screen_share') });
   }
   private wire(room: Room) {
     const refresh = () => this.refresh(room);
+    const { RoomEvent, Track, TrackEvent } = this.sdk!;
     for (const event of [RoomEvent.ParticipantConnected, RoomEvent.ParticipantDisconnected,
       RoomEvent.TrackSubscribed, RoomEvent.TrackUnsubscribed, RoomEvent.TrackMuted,
       RoomEvent.TrackUnmuted, RoomEvent.LocalTrackPublished, RoomEvent.LocalTrackUnpublished,
@@ -60,9 +63,17 @@ export class MediaSession {
     if (!globalThis.RTCPeerConnection || globalThis.isSecureContext === false) {
       return Promise.reject(new Error('Calls need a browser with WebRTC on HTTPS or localhost.'));
     }
+    const promise = this.joinInternal();
+    this.joining = promise;
+    return promise;
+  }
+  private async joinInternal(): Promise<Room> {
     const epoch = this.generation;
     const request = new AbortController();
-    const room = new Room({ adaptiveStream: false, dynacast: true });
+    const sdk = await loadLiveKit();
+    if (epoch !== this.generation) throw new Error('Call cancelled.');
+    this.sdk = sdk;
+    const room = new sdk.Room({ adaptiveStream: false, dynacast: true });
     this.room = room;
     this.request = request;
     this.wire(room);
@@ -95,7 +106,6 @@ export class MediaSession {
         if (epoch === this.generation) this.joining = null;
       }
     })();
-    this.joining = promise;
     return promise;
   }
   connect = async () => {
@@ -103,15 +113,17 @@ export class MediaSession {
     try { await this.join(); }
     catch (error) { if (epoch === this.generation) this.update({ status: 'error', error: mediaError(error) }); }
   };
-  private capture(device: Device): Promise<LocalTrack[]> {
+  private async capture(device: Device): Promise<LocalTrack[]> {
+    const sdk = this.sdk ?? await loadLiveKit();
+    this.sdk = sdk;
     if (!navigator.mediaDevices) return Promise.reject(new Error('Media devices are unavailable in this browser.'));
     if (device === 'screen') {
       if (!navigator.mediaDevices.getDisplayMedia) return Promise.reject(new Error('Screen sharing is unavailable in this browser.'));
-      return createLocalScreenTracks({ audio: true });
+      return sdk.createLocalScreenTracks({ audio: true });
     }
     return device === 'mic'
-      ? microphoneConstraints().then(options => createLocalAudioTrack(options)).then((track) => [track])
-      : createLocalVideoTrack({ resolution: { width: 1280, height: 720, frameRate: 24 } }).then((track) => [track]);
+      ? microphoneConstraints().then(options => sdk.createLocalAudioTrack(options)).then((track) => [track])
+      : sdk.createLocalVideoTrack({ resolution: { width: 1280, height: 720, frameRate: 24 } }).then((track) => [track]);
   }
   private async toggle(device: Device) {
     if (this.busy.has(device)) return;
@@ -128,9 +140,11 @@ export class MediaSession {
       if (epoch !== this.generation) return;
       publishingRoom = room;
       const local = room.localParticipant;
-      const publication = local.getTrackPublication(sourceFor[device]);
+      const { Track } = this.sdk!;
+      const primarySource = device === 'mic' ? Track.Source.Microphone : device === 'camera' ? Track.Source.Camera : Track.Source.ScreenShare;
+      const publication = local.getTrackPublication(primarySource);
       if (publication?.track) {
-        const sources = device === 'screen' ? [Track.Source.ScreenShare, Track.Source.ScreenShareAudio] : [sourceFor[device]];
+        const sources = device === 'screen' ? [Track.Source.ScreenShare, Track.Source.ScreenShareAudio] : [primarySource];
         for (const source of sources) {
           const track = local.getTrackPublication(source)?.track;
           if (track) { track.stop(); await local.unpublishTrack(track); }
@@ -163,6 +177,7 @@ export class MediaSession {
   toggleMic = () => this.toggle('mic');
   toggleCamera = () => this.toggle('camera');
   toggleScreen = () => this.toggle('screen');
+  preload = preloadLiveKit;
   disconnect = () => {
     this.generation += 1;
     this.request?.abort();

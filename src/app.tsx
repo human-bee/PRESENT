@@ -1,3 +1,6 @@
+import { useViewerControls } from './access/viewer';
+import type { RoomGrant } from '../shared/room-access';
+import { RoomPanel } from './access/room-panel';
 import { SceneControls } from './scenes/scene-controls';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { makeObject, type Operation } from '../shared/room';
@@ -27,21 +30,24 @@ import { fitCanvas, focusResult } from './tldraw/focus';
 import { ActivityController } from './activities/activity-stage';
 import { savePendingGeneration, loadPendingGeneration, forgetPendingGeneration, type PendingGeneration } from './requests/pending-generation';
 
-export function App() {
-  const [roomId] = useState(getRoomId);
+export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: RoomGrant; onRoomOpen?: (id: string) => void | Promise<void>; onAccessLeave?: () => void } = {}) {
+  const viewer = accessGrant?.role === 'viewer';
+  useViewerControls(viewer);
+  const [roomId] = useState(() => accessGrant?.roomId ?? getRoomId());
   const [name, setName] = useState(() => localStorage.getItem('present:name') || 'Guest');
-  const room = useRoom(roomId, name);
+  const room = useRoom(roomId, name, accessGrant);
   const canvasContext = useMemo(() => createCanvasContext(room.editor), [room.editor]);
   const media = useMedia(roomId, room.selfId, name);
   const viewport = room.viewport;
   const selected = room.selected[0] ?? null;
   const select = (id: string | null) => room.editor?.setSelectedShapes(id ? [shapeIdForObject(id)] : []);
   const setViewport = (v: Viewport) => room.editor?.setCamera({ x: v.x / v.zoom, y: v.y / v.zoom, z: v.zoom });
-  const [panel, setPanel] = useState<'add' | 'settings' | 'history' | null>(null);
+  const [panel, setPanel] = useState<'add' | 'settings' | 'history' | 'room' | 'voice' | null>(null);
   const [prompt, setPrompt] = useState('');
-  const [provider, setProvider] = useState<AgentProvider>(() => { try { const saved = providerSchema.safeParse(localStorage.getItem('present:provider')); return saved.success && saved.data !== 'spark' ? saved.data : 'luna'; } catch { return 'luna'; } });
+  const providerStorageKey = accessGrant ? 'present:invite-provider' : 'present:provider';
+  const [provider, setProvider] = useState<AgentProvider>(() => { const fallback = accessGrant ? 'cerebras' : 'luna'; try { const saved = providerSchema.safeParse(localStorage.getItem(providerStorageKey)); return saved.success && saved.data !== 'spark' ? saved.data : fallback; } catch { return fallback; } });
   const [generationOptions, setGenerationOptions] = useState<GenerationOptions>(() => { try { return generationOptionsSchema.parse(JSON.parse(localStorage.getItem('present:generation-options') ?? '{"reasoning":"low","fast":false}')); } catch { return { reasoning: 'low', fast: false }; } });
-  useEffect(() => { try { localStorage.setItem('present:provider', provider); localStorage.setItem('present:generation-options', JSON.stringify(generationOptions)); } catch { /* Session-only if storage is blocked. */ } }, [provider, generationOptions]);
+  useEffect(() => { try { localStorage.setItem(providerStorageKey, provider); localStorage.setItem('present:generation-options', JSON.stringify(generationOptions)); } catch { /* Session-only if storage is blocked. */ } }, [providerStorageKey, provider, generationOptions]);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
   const [lastGeneration, setLastGeneration] = useState('');
@@ -66,7 +72,7 @@ export function App() {
   };
   function add(kind: AddKind) {
     const editor = room.editor;
-    if (!editor) return;
+    if (!editor || viewer) return;
     const object = isCapabilityKind(kind) ? createCapability(kind, room.selfId, position()) : createStarter(kind, room.selfId, position());
     const index = getIndexAbove(editor.getCurrentPageShapesSorted().at(-1)?.index);
     editor.markHistoryStoppingPoint(`Add ${kind}`);
@@ -81,7 +87,7 @@ export function App() {
   }
   const webmcp = useWebMCP({ room: room.room, participants: room.participants, selected, viewport, act: room.act, focus, editor: room.editor });
   async function generate(text: string) {
-    if (!text.trim() || busy || !room.connected) return;
+    if (viewer || !text.trim() || busy || !room.connected) return;
     setBusy(true); setPrompt(''); setPanel(null);
     try {
       const view = room.editor?.getViewportPageBounds();
@@ -129,27 +135,30 @@ export function App() {
 
     }
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
-  });
+  }, []);
   const toggle = (next: typeof panel) => setPanel(panel === next ? null : next);
   return <>
-    <ActivityController editor={room.editor} roomId={roomId} selfId={room.selfId} name={name} connected={room.connected}/>
+    {!viewer && <ActivityController editor={room.editor} roomId={roomId} selfId={room.selfId} name={name} connected={room.connected}/>}
     <CanvasMediaProvider media={media}><Canvas sync={room.sync} roomId={roomId} selfId={room.selfId} onMount={room.setEditor} act={room.act} onError={setToast}>
-      {!room.room.objects.length && <div className="welcome overlay"><div className="welcome-eyebrow"><span className="little-sun"/> A SHARED SPACE. AN OPEN POSSIBILITY.</div><h1>A room for<br/><em>anything.</em></h1><p>Come as you are. Bring your people.<br/>Let the room become what you need.</p><div className="invitations"><button type="button" onClick={() => add('note')}><Icon name="note" size={15}/> Leave a thought</button><button type="button" onClick={() => generate('Create a beautiful shared interactive constellation where each participant can name a star, with connections between them.')} disabled={busy || !room.connected}><Icon name="spark" size={15}/> Make something together</button></div><span className="empty-footnote">A meeting. A game. A thought that becomes something.</span></div>}
+      {!viewer && !room.room.objects.length && <div className="welcome overlay"><div className="welcome-eyebrow"><span className="little-sun"/> A SHARED SPACE. AN OPEN POSSIBILITY.</div><h1>A room for<br/><em>anything.</em></h1><p>Come as you are. Bring your people.<br/>Let the room become what you need.</p><div className="invitations"><button type="button" onClick={() => add('note')}><Icon name="note" size={15}/> Leave a thought</button><button type="button" onClick={() => generate('Create a beautiful shared interactive constellation where each participant can name a star, with connections between them.')} disabled={busy || !room.connected}><Icon name="spark" size={15}/> Make something together</button></div><span className="empty-footnote">A meeting. A game. A thought that becomes something.</span></div>}
     </Canvas></CanvasMediaProvider>
-    <header className="topbar overlay"><div className="brand"><img src="/mark.svg" alt=""/><span>present</span></div><span className="top-divider"/><input className="room-title" aria-label="Room name" defaultValue={room.room.title} key={`${roomId}-${room.room.title}`} onBlur={event => { const title = event.target.value.trim(); if (title && title !== room.room.title) attempt({ type: 'rename', title }); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}/><div className="room-status"><i className={room.connected ? 'online' : ''}/>{room.connected ? 'here, together' : 'connecting…'}</div><button type="button" className="invite" onClick={() => navigator.clipboard.writeText(location.href).then(() => setToast('Room link copied. Open it in another browser to join.')).catch(() => setToast(location.href))}><Icon name="plus" size={15}/> Invite</button></header>
-    <SceneControls roomId={roomId} editor={room.editor}/>
+    <header className="topbar overlay"><div className="brand"><img src="/mark.svg" alt=""/><span>present</span></div><span className="top-divider"/><input className="room-title" aria-label="Room name" readOnly={viewer} defaultValue={room.room.title} key={`${roomId}-${room.room.title}`} onBlur={event => { const title = event.target.value.trim(); if (title && title !== room.room.title) attempt({ type: 'rename', title }); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}/><div className="room-status"><i className={room.connected ? 'online' : ''}/>{room.connected ? 'here, together' : 'connecting…'}</div><button type="button" className="invite" onClick={() => toggle('room')}><Icon name="plus" size={15}/>{!accessGrant || accessGrant.role === 'owner' ? 'Invite' : 'Room'}</button></header>
+    {!viewer && <SceneControls roomId={roomId} editor={room.editor}/>}
     <People participants={room.participants} selfId={room.selfId} media={media} place={(id, name, kind) => attempt({ type: 'put', object: makeMediaObject(id, name, kind, room.selfId, position()) })}/><RoomAudio participants={media.participants}/>
-    <div className="bottom-area overlay">
+    {!viewer && <div className="bottom-area overlay">
 
       <form className={`composer${busy ? ' thinking' : ''}`} onSubmit={event => { event.preventDefault(); void generate(prompt); }}>
         <span className="composer-orbit" aria-hidden="true"/><input ref={input} aria-label="Ask the room" value={prompt} onChange={event => setPrompt(event.target.value)} placeholder={selected ? 'Change this, or imagine something new…' : 'What do you want to make room for?'} autoComplete="off" maxLength={3000}/><button className="send" type="submit" aria-label="Create with agent" disabled={!prompt.trim() || busy || !room.connected}><Icon name="arrow" size={18}/></button>
       </form>
       {(busy || lastGeneration) && <div className={`agent-progress${busy ? ' working' : ''}`} aria-live="polite"><span className="mini-orbit"/>{busy ? 'Making room for your idea…' : lastGeneration}</div>}
       {!busy && pendingGeneration && <div className="agent-progress request-recovery" role="status"><span>An unfinished request is saved.</span><button type="button" onClick={() => void generate(pendingGeneration.prompt)}>Recover result</button><button type="button" onClick={() => { forgetPendingGeneration(roomId, room.selfId); setPendingGeneration(null); }}>Dismiss</button></div>}
-      <nav className="dock" aria-label="Room controls"><DockButton icon="plus" label="Add to room" onClick={() => toggle('add')} active={panel === 'add'}/><span className="dock-divider"/><DockButton icon="mic" label={media.mic ? 'Turn microphone off' : 'Turn microphone on'} onClick={() => void media.toggleMic()} active={media.mic}/><DockButton icon="camera" label={media.camera ? 'Turn camera off' : 'Turn camera on'} onClick={() => void media.toggleCamera()} active={media.camera}/><DockButton icon="screen" label={media.screen ? 'Stop screen sharing' : 'Share screen'} onClick={() => void media.toggleScreen()} active={media.screen}/><span className="dock-divider"/><VoiceControl provider={provider} generationOptions={generationOptions} canvasContext={canvasContext} roomId={roomId} selfId={room.selfId} position={position} audioStreams={media.participants.filter(p => !p.isLocal).flatMap(p => [p.stream, p.screenStream].filter((s): s is MediaStream => Boolean(s)))}/><DockButton icon="history" label="Room memory" onClick={() => toggle('history')} active={panel === 'history'}/><DockButton icon="settings" label="Room settings" onClick={() => toggle('settings')} active={panel === 'settings'}/></nav>
+      <nav className="dock" aria-label="Room controls"><DockButton icon="plus" label="Add to room" onClick={() => toggle('add')} active={panel === 'add'}/><span className="dock-divider"/><DockButton icon="mic" label={media.mic ? 'Turn microphone off' : 'Turn microphone on'} onClick={() => void media.toggleMic()} active={media.mic}/><DockButton icon="camera" label={media.camera ? 'Turn camera off' : 'Turn camera on'} onClick={() => void media.toggleCamera()} active={media.camera}/><DockButton icon="screen" label={media.screen ? 'Stop screen sharing' : 'Share screen'} onClick={() => void media.toggleScreen()} active={media.screen}/><span className="dock-divider"/><VoiceControl open={panel === 'voice'} setOpen={open => setPanel(current => open ? 'voice' : current === 'voice' ? null : current)} provider={provider} generationOptions={generationOptions} canvasContext={canvasContext} roomId={roomId} selfId={room.selfId} position={position} audioStreams={media.participants.filter(p => !p.isLocal).flatMap(p => [p.stream, p.screenStream].filter((s): s is MediaStream => Boolean(s)))}/><DockButton icon="history" label="Room memory" onClick={() => toggle('history')} active={panel === 'history'}/><DockButton icon="settings" label="Room settings" onClick={() => toggle('settings')} active={panel === 'settings'}/></nav>
     </div>
+    }
+    {viewer && <div className="viewer-banner">View only · You can explore the canvas and listen <button onClick={() => void media.connect()} disabled={media.status === 'connected'}>Join call</button></div>}
     <div className="canvas-navigation overlay"><button type="button" aria-label="Zoom out" onClick={() => setViewport({ ...viewport, zoom: Math.max(.2, viewport.zoom - .1) })}>−</button><span>{Math.round(viewport.zoom * 100)}%</span><button type="button" aria-label="Zoom in" onClick={() => setViewport({ ...viewport, zoom: Math.min(2.5, viewport.zoom + .1) })}>+</button><button type="button" aria-label="Fit everything" title="Fit everything" onClick={() => focus()}><Icon name="fit" size={16}/></button></div>
     <span className="canvas-hint">draw a thought · space to wander</span>
+    {panel === 'room' && <RoomPanel grant={accessGrant} roomId={roomId} close={() => setPanel(null)} onLeave={() => onAccessLeave?.()} onOpen={id => onRoomOpen ? onRoomOpen(id) : location.assign(`/r/${id}`)}/>}
     {panel === 'add' && <AddMenu mcp={{ roomId, actor: room.selfId, position, pageId: () => room.editor?.getCurrentPageId(), onAdded: id => { setPanel(null); if (room.editor) void focusResult(room.editor, [shapeIdForObject(id)]); } }} add={add} upload={files => { setPanel(null); void room.editor?.putExternalContent({ type: 'files', files, point: position() }).catch(error => setToast(error.message)); }} video={url => { try { attempt({ type: 'put', object: makeVideoObject(url, room.selfId, position()) }); setPanel(null); } catch (error) { setToast(error instanceof Error ? error.message : 'Use a valid video link.'); } }} work={() => { const object = makeObject('widget', room.selfId, position(), { capability: 'work', owner: name, prompt: '' }); object.title = 'Follow through'; object.w = 390; object.h = 390; attempt({ type: 'put', object }); setPanel(null); }}/>}
     {panel === 'settings' && <Settings editor={room.editor} onError={setToast} name={name} setName={setName} provider={provider} setProvider={setProvider} generationOptions={generationOptions} setGenerationOptions={setGenerationOptions} webmcp={webmcp} capabilities={capabilities} room={room.room} close={() => setPanel(null)}/>}
     {panel === 'history' && <RoomMemory editor={room.editor} events={room.room.events}/>}

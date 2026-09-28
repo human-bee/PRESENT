@@ -7,6 +7,7 @@ import { roleAllows, type RoomGrant, type RoomInvite, type RoomPermission } from
 const id = () => randomBytes(24).toString('hex');
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const key = z.string().regex(/^[a-f0-9]{48}$/);
+const claimsSchema = z.object({ userId: key, expiresAt: z.number().int() });
 const member = z.object({ role: z.enum(['owner', 'editor', 'viewer']), inviteId: key.optional(), revoked: z.boolean() });
 const schema = z.object({ version: z.literal(1), sessions: z.record(key, z.object({ expiresAt: z.number().int(), revoked: z.boolean() })), rooms: z.record(key, z.object({ members: z.record(key, member), invites: z.record(key, z.object({ digest: z.string(), role: z.enum(['editor', 'viewer']), expiresAt: z.number().int(), maxUses: z.number().int().min(1).max(10), uses: z.number().int(), revoked: z.boolean() })) })) });
 type State = z.infer<typeof schema>;
@@ -74,7 +75,7 @@ export class RoomAccess {
     const expected = Buffer.from(this.sign(payload ?? ''));
     if (!payload || !signature || extra || Buffer.byteLength(signature) !== expected.length || !timingSafeEqual(Buffer.from(signature), expected)) throw new AccessError('Session required.', 401);
     let claims: { userId: string; expiresAt: number };
-    try { claims = z.object({ userId: key, expiresAt: z.number().int() }).parse(JSON.parse(Buffer.from(payload, 'base64url').toString())); } catch { throw new AccessError('Session required.', 401); }
+    try { claims = claimsSchema.parse(JSON.parse(Buffer.from(payload, 'base64url').toString())); } catch { throw new AccessError('Session required.', 401); }
     const record = this.state.sessions[claims.userId];
     if (!record || record.revoked || record.expiresAt !== claims.expiresAt || claims.expiresAt <= this.now()) throw new AccessError('Session expired or revoked.', 401);
     return claims;
@@ -140,6 +141,14 @@ export class RoomAccess {
       if (!member || member.role === 'owner') throw new AccessError();
       member.revoked = true;
     });
+  }
+  members(token: string, roomId: string) {
+    this.authorize(token, roomId, 'invite');
+    return Object.entries(this.state.rooms[roomId].members).map(([userId, member]) => ({ userId, role: member.role, revoked: member.revoked }));
+  }
+  invites(token: string, roomId: string) {
+    this.authorize(token, roomId, 'invite');
+    return Object.entries(this.state.rooms[roomId].invites).map(([id, invite]) => ({ id, role: invite.role, expiresAt: invite.expiresAt, maxUses: invite.maxUses, uses: invite.uses, revoked: invite.revoked }));
   }
   revokeSession(token: string) {
     const who = this.identity(token); this.commit(state => { state.sessions[who.userId].revoked = true; });

@@ -1,0 +1,30 @@
+{
+  "shapes": 500,
+  "strokePoints": 10000,
+  "iterations": 500,
+  "pointer": {
+    "before": {
+      "p50Ms": 0.9715959999999768,
+      "p95Ms": 1.7761199999999917,
+      "maxMs": 4.610045000000014
+    },
+    "after": {
+      "p50Ms": 0.0001399999999875945,
+      "p95Ms": 0.00015099999995982216,
+      "maxMs": 0.013078999999947882
+    }
+  },
+  "drag": {
+    "before": {
+      "p50Ms": 0.9096629999999095,
+      "p95Ms": 1.7052419999999984,
+      "maxMs": 7.7024099999998725
+    },
+    "after": {
+      "p50Ms": 0.010605999999825144,
+      "p95Ms": 0.017266000000063286,
+      "maxMs": 0.06592899999986912
+    }
+  },
+  "scope": "Node CPU microbenchmark of derived room state, not browser rendering, network or speech latency."
+}

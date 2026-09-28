@@ -5,12 +5,12 @@ import { Icon } from './icons';
 import { useVoice } from './voice/use-voice';
 import type { CanvasContextProvider } from '../shared/canvas-commands';
 
-export function VoiceControl({ roomId, selfId, position, audioStreams, canvasContext, provider, generationOptions }: {
+export function VoiceControl({ roomId, selfId, position, audioStreams, canvasContext, provider, generationOptions, open, setOpen }: {
   roomId: string; selfId: string; position: () => { x: number; y: number }; audioStreams: MediaStream[];
   provider: AgentProvider; generationOptions: GenerationOptions;
   canvasContext?: CanvasContextProvider;
+  open: boolean; setOpen: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'ambient' | 'conversation'>('ambient');
   const [capture, setCapture] = useState<'personal' | 'shared'>('personal');
   const voice = useVoice(roomId, { selfId, viewport: position(), audioStreams, mode, capture, name: localStorage.getItem('present:name') || 'Participant', canvasContext, provider, generationOptions });

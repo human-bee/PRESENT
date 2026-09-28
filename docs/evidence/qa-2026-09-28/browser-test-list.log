@@ -1,0 +1,21 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+Listing tests:
+  activity.spec.ts:4:1 › audience suggestions are moderated, voted, brought on air and retained across reconnects
+  activity.spec.ts:71:1 › two participants instantly launch, take opposing seats, correct claims and reload the same native activity
+  document.spec.ts:31:1 › fast shared-document typing preserves every character through delayed native sync and reload
+  media.spec.ts:54:1 › joining and using the canvas does not capture any device or start a call
+  media.spec.ts:78:1 › two people exchange synthetic LiveKit video and audio, then stop every captured track
+  native-tools.spec.ts:50:1 › human native tools draw, erase, rotate, group, frame, copy, paste and undo across peers and reload
+  poll.spec.ts:4:1 › each participant has one shared vote and keeps their choice after reloading
+  request-recovery.spec.ts:4:1 › a reload restores the original request identity and recovers its result
+  room.spec.ts:44:1 › two people natively edit, drag, resize, undo, time, roll, and reload the same room
+  room.spec.ts:148:1 › native rich text keeps every character while prior server acknowledgements arrive late
+  roomos-live.spec.ts:6:1 › contextual RoomOS speech acceptance with real providers
+  sandbox.spec.ts:31:1 › different state keys survive concurrent changes from two stale iframe clients
+  sandbox.spec.ts:69:1 › generated iframe cannot directly read its parent, send requests, open windows, or navigate the room
+  sandbox.spec.ts:107:1 › an explicit source-link click opens a separate tab through the parent bridge
+  voice-layout.spec.ts:11:1 › @layout voice controls stay inside a mobile viewport after a failed connection
+  voice-live.spec.ts:20:1 › real Realtime speech creates a native note from a synthetic microphone
+  widget-catalog.spec.ts:7:1 › every built-in instrument adds, shares, moves and survives reload
+  widget-catalog.spec.ts:66:1 › composer keyboard shortcut and panel exclusivity survive repeated toggles
+Total: 18 tests in 12 files

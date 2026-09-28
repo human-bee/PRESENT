@@ -8,7 +8,7 @@ export function ModelPicker({ provider, setProvider, options, setOptions, capabi
   const available = selected?.reasoning ?? ['low'];
   const change = (value: AgentProvider) => {
     const next = providers.find(p => p.id === value);
-    setProvider(value); setOptions({ ...options, reasoning: next?.reasoning.includes(options.reasoning ?? 'low') ? options.reasoning : 'low', fast: !!next?.fast && !!options.fast });
+    setProvider(value); setOptions({ ...options, reasoning: next?.reasoning?.includes(options.reasoning ?? 'low') ? options.reasoning : 'low', fast: !!next?.fast && !!options.fast });
   };
   return <>
     <label>Who’s making things?<select value={provider} onChange={event => change(event.target.value as AgentProvider)}>

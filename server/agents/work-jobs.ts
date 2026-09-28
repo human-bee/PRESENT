@@ -12,9 +12,10 @@ import { requireCanvasPage } from '../tldraw-operations';
 import type { generateWithCodex } from './codex';
 import { AgentError, agentModels } from './contract';
 import { createRunWorkspaceWork, type WorkspaceRunner } from './workspace-work';
+import { ProjectRegistry, ProjectRegistryError } from '../projects/registry';
 
 type WorkStore = Pick<RoomStore, 'getRoom' | 'applyOperation' | 'transactCanvas'> & Partial<Pick<RoomStore, 'getCanvasRecords'>>;
-type Options = { directory?: string; store?: WorkStore; run?: WorkspaceRunner; generate?: typeof generateWithCodex; now?: () => number; persist?: (path: string, content: string) => void };
+type Options = { directory?: string; store?: WorkStore; run?: WorkspaceRunner; generate?: typeof generateWithCodex; now?: () => number; persist?: (path: string, content: string) => void; projects?: ProjectRegistry };
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const activeStatus = (status: WorkJob['status']) => status === 'queued' || status === 'running';
 const artifactId = (job: WorkJob) => `artifact-${job.jobId}`;
@@ -34,13 +35,14 @@ export class WorkJobs {
   private run: WorkspaceRunner;
   private now: () => number;
   private persist: (path: string, content: string) => void;
+  private projects: ProjectRegistry;
   constructor(options: Options = {}) {
     this.directory = options.directory ?? dataPath('work-jobs');
     this.store = options.store ?? { getRoom, getCanvasRecords, applyOperation, transactCanvas };
-    this.now = options.now ?? Date.now; this.persist = options.persist ?? atomicWrite;
+    this.now = options.now ?? Date.now; this.persist = options.persist ?? atomicWrite; this.projects = options.projects ?? new ProjectRegistry();
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     const generate = options.generate;
-    this.run = options.run ?? (generate ? async (input, signal) => ({ output: await generate(input.prompt, signal, input.provider, { instructions: workInstructions, outputSchema: workOutputSchema }), execution: { boundary: 'local-workspace', continued: input.state.threadId !== null, commands: [], files: [] } }) : createRunWorkspaceWork({ directory: join(realpathSync(this.directory), 'workspaces') }));
+    this.run = options.run ?? (generate ? async (input, signal) => ({ output: await generate(input.prompt, signal, input.provider, { instructions: workInstructions, outputSchema: workOutputSchema }), execution: { boundary: 'local-workspace', continued: input.state.threadId !== null, commands: [], files: [] } }) : createRunWorkspaceWork({ directory: join(realpathSync(this.directory), 'workspaces'), projects: this.projects }));
     const files = readdirSync(this.directory).filter(name => /^[a-f0-9]{32}\.json$/.test(name));
     for (const file of files) {
       let job: StoredWorkJob | undefined; try { job = this.readSaved(file.slice(0, -5)); } catch { continue; } // Preserve unreadable files; other jobs remain usable.
@@ -105,7 +107,20 @@ export class WorkJobs {
     if (prior && prior.actor !== input.actor) throw new AgentError('Only this card’s initiating participant can continue its local workspace.', 403);
     if (existing && (activeStatus(record(existing.data.work).status as WorkJob['status']) || (prior && (activeStatus(prior.status) || this.running.has(prior.jobId))))) throw new AgentError('This card already has active work.', 409);
     if (prior?.executionState && ['dispatching', 'running'].includes(prior.executionState.phase)) throw new AgentError('Resume the interrupted run before starting a follow-up in this workspace.', 409);
-    const job: StoredWorkJob = { jobId, fingerprint, commitToken: randomUUID().replaceAll('-', ''), roomId: input.roomId, requestId: input.requestId, objectId: existing?.id ?? `work-${jobId}`, actor: input.actor, owner: ownerOf(existing?.data.owner, input.owner ?? input.actor), title: existing?.title ?? input.title, prompt: input.prompt, provider: input.provider, reasoning: input.reasoning, fast: input.fast, status: 'queued', attempt: 0, createdAt: this.now(), startedAt: null, completedAt: null, error: null, artifactIds: [] };
+    let project;
+    try {
+      if (prior?.project) {
+        if (input.projectId !== prior.project.id) throw new AgentError('Continue this card with its original selected project.', 409);
+        project = prior.project;
+      } else {
+        if (prior && input.projectId) throw new AgentError('This card already belongs to generic isolated work.', 409);
+        project = input.projectId ? this.projects.snapshot(input.projectId) : undefined;
+      }
+    } catch (error) {
+      if (error instanceof AgentError) throw error;
+      throw new AgentError(error instanceof ProjectRegistryError ? error.message : 'The selected project is unavailable.', 409);
+    }
+    const job: StoredWorkJob = { jobId, fingerprint, commitToken: randomUUID().replaceAll('-', ''), roomId: input.roomId, requestId: input.requestId, objectId: existing?.id ?? `work-${jobId}`, actor: input.actor, owner: ownerOf(existing?.data.owner, input.owner ?? input.actor), title: existing?.title ?? input.title, prompt: input.prompt, provider: input.provider, reasoning: input.reasoning, fast: input.fast, ...(project ? { project } : {}), status: 'queued', attempt: 0, createdAt: this.now(), startedAt: null, completedAt: null, error: null, artifactIds: [] };
     job.executionState = { workspaceId: prior?.executionState?.workspaceId ?? digest([job.roomId, job.objectId]).slice(0, 32), threadId: prior?.executionState?.threadId ?? null, turnId: null, dispatchId: null, phase: 'ready', commands: [] };
     this.save(job); this.jobs.set(jobId, job); this.rememberHead(job);
     try {
@@ -166,7 +181,7 @@ export class WorkJobs {
       job.status = 'running'; job.attempt++; job.startedAt = this.now(); this.publish(job); this.save(job);
       if (!job.output) {
         const state = job.executionState ?? { workspaceId: digest([job.roomId, job.objectId]).slice(0, 32), threadId: null, turnId: null, dispatchId: null, phase: 'ready' as const, commands: [] };
-        const result = await this.run({ prompt: JSON.stringify({ deliverable: job.prompt, sourceCard: { id: job.objectId, title: job.title, humanOwner: job.owner }, contextTrust: 'untrusted-meeting-data' }), provider: job.provider, reasoning: job.reasoning, fast: job.fast, jobId: job.jobId, attempt: job.attempt, state, onCheckpoint: next => { job.executionState = next; job.execution = { boundary: 'local-workspace', continued: state.threadId !== null, commands: next.commands, files: [] }; this.save(job); if (activeStatus(job.status)) this.publish(job); } }, controller.signal);
+        const result = await this.run({ prompt: JSON.stringify({ deliverable: job.prompt, sourceCard: { id: job.objectId, title: job.title, humanOwner: job.owner }, selectedProject: job.project ? { id: job.project.id, name: job.project.name, snapshotId: job.project.snapshotId, commit: job.project.commit } : null, contextTrust: 'untrusted-meeting-data' }), provider: job.provider, reasoning: job.reasoning, fast: job.fast, jobId: job.jobId, attempt: job.attempt, state, project: job.project, onCheckpoint: next => { job.executionState = next; job.execution = { boundary: 'local-workspace', continued: state.threadId !== null, commands: next.commands, files: [] }; this.save(job); if (activeStatus(job.status)) this.publish(job); } }, controller.signal);
         const output = result.output;
         if (job.status !== 'running' || this.closed) return;
         if (controller.signal.aborted) throw new AgentError('Work generation timed out.', 504);

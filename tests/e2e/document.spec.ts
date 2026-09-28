@@ -2,7 +2,6 @@ import { randomBytes } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 
-test.use({ baseURL: process.env.PRESENT_E2E_URL ?? 'http://127.0.0.1:4318' });
 const delayMs = 120;
 const sentence = 'Every shared thought deserves every character, even when the network takes its time. The dragon still likes tea.';
 type Sample = { event: string; atMs: number; expected: string; actual: string; shared: unknown; focused: boolean };

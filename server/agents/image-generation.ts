@@ -1,3 +1,4 @@
+import { scopedAssetDirectory, storedAssetURL, referenceAsset } from '../access/assets';
 import {dataPath} from '../data-path';
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
@@ -21,12 +22,13 @@ function loadReference(objectId: string, room: ReturnType<typeof getRoom>, depen
   const object = room.objects.find(value => value.id === objectId);
   if (object?.kind !== 'image' || typeof object.data.src !== 'string') throw new AgentError('Each image reference must be an existing native image in this room.', 400);
   const src = object.data.src;
+  const privateAsset = referenceAsset(src, dependencies.assetDirectory, room.id);
   const asset = /^\/api\/assets\/([a-f0-9]{64}\.(png|jpg|webp))$/.exec(src);
   const media = /^\/media\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,119}\.(png|jpe?g|webp))$/.exec(src);
-  const match = asset ?? media;
+  const match = privateAsset ? [src, privateAsset.name, privateAsset.name.split('.').pop()!] : asset ?? media;
   if (!match) throw new AgentError('Image references must be local PNG, JPEG or WebP assets.', 400);
   const name = match[1], extension = match[2];
-  const directory = asset ? dependencies.assetDirectory : dependencies.mediaDirectory;
+  const directory = privateAsset?.directory ?? (asset ? dependencies.assetDirectory : dependencies.mediaDirectory);
   let descriptor: number | undefined;
   try {
     if (!lstatSync(directory).isDirectory() || realpathSync(directory) !== resolve(directory)) throw new Error('Unsafe asset directory');
@@ -37,7 +39,7 @@ function loadReference(objectId: string, room: ReturnType<typeof getRoom>, depen
     const valid = extension === 'png' ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) : extension === 'webp' ? bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP' : bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
     if (!valid || bytes.length > MAX_BYTES) throw new Error('Invalid image bytes');
     const sha256 = createHash('sha256').update(bytes).digest('hex');
-    if (asset && name.split('.')[0] !== sha256) throw new Error('Asset content changed');
+    if ((asset || privateAsset) && name.split('.')[0] !== sha256) throw new Error('Asset content changed');
     return { objectId, src, sha256, name, mimeType: extension === 'png' ? 'image/png' : extension === 'webp' ? 'image/webp' : 'image/jpeg', bytes };
   } catch { throw new AgentError('A reference image is unavailable or is not a safe local image file.', 400); }
   finally { if (descriptor !== undefined) closeSync(descriptor); }
@@ -62,17 +64,18 @@ export function decodeGeneratedPng(encoded: string): { bytes: Buffer; width: num
   return { bytes, width, height };
 }
 function storePng(bytes: Buffer, directory: string): string {
+  directory = scopedAssetDirectory(directory);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const name = `${createHash('sha256').update(bytes).digest('hex')}.png`; const file = join(directory, name);
   if (existsSync(file)) {
     if (!lstatSync(file).isFile()) throw new AgentError('The generated image could not be stored.');
-    return `/api/assets/${name}`;
+    return storedAssetURL(name);
   }
   const files = readdirSync(directory).filter(entry => /^[a-f0-9]{64}\.(png|jpg|gif|webp|avif|mp4|webm|mov)$/.test(entry));
   if (files.length >= 1000 || files.reduce((total, entry) => total + lstatSync(join(directory, entry)).size, 0) + bytes.length > 512 * 1024 * 1024) throw new AgentError('Local asset storage is full.', 507);
   const temporary = `${file}.${randomUUID()}.tmp`;
   writeFileSync(temporary, bytes, { mode: 0o600, flag: 'wx' }); renameSync(temporary, file);
-  return `/api/assets/${name}`;
+  return storedAssetURL(name);
 }
 
 export function createGenerateRoomImage(overrides: Partial<Dependencies> = {}) {

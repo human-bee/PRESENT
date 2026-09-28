@@ -3,6 +3,7 @@ import { readRoomOS } from '../../shared/activity';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { ObjectPatch, RoomObject } from '../../shared/room';
 import { workExecutionSchema, type WorkExecution } from '../../shared/work-execution';
+import { projectSummarySchema, type ProjectSummary } from '../../shared/project-work';
 
 type WorkStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
 type Work = {
@@ -15,6 +16,7 @@ type Work = {
   error?: string;
   artifactIds: string[];
   execution?: WorkExecution;
+  project?: { id: string; name: string; snapshotId: string; commit: string };
 };
 type Action = 'start' | 'cancel' | 'resume';
 export type WorkCardProps = {
@@ -56,7 +58,23 @@ function readWork(value: unknown): Work | null {
       ? work.artifactIds.filter((id): id is string => typeof id === 'string')
       : [],
     ...(execution.success ? { execution: execution.data } : {}),
+    ...(work.project && typeof work.project === 'object' && typeof (work.project as Record<string, unknown>).id === 'string' && typeof (work.project as Record<string, unknown>).name === 'string' && typeof (work.project as Record<string, unknown>).snapshotId === 'string' && typeof (work.project as Record<string, unknown>).commit === 'string' ? { project: work.project as Work['project'] } : {}),
   };
+}
+
+function useProjects() {
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  useEffect(() => {
+    let disposed = false;
+    void fetch('/api/projects', { cache: 'no-store' }).then(async response => {
+      if (!response.ok) return [];
+      const raw: unknown = await response.json();
+      const list = raw && typeof raw === 'object' && Array.isArray((raw as { projects?: unknown }).projects) ? (raw as { projects: unknown[] }).projects : [];
+      return list.map(project => projectSummarySchema.safeParse(project)).filter(result => result.success).map(result => result.data);
+    }).then(value => { if (!disposed) setProjects(value); }).catch(() => {});
+    return () => { disposed = true; };
+  }, []);
+  return projects;
 }
 
 function useWorkRefresh(roomId: string, jobId: string | undefined, status: WorkStatus | undefined) {
@@ -118,6 +136,8 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
   const [pending, setPending] = useState<Action | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [followUp, setFollowUp] = useState('');
+  const projects = useProjects();
+  const [projectId, setProjectId] = useState(work?.project?.id ?? '');
   const inFlight = useRef(false);
   const startRequest = useRef<{ objectId: string; prompt: string; requestId: string } | null>(null);
   const active = work?.status === 'queued' || work?.status === 'running';
@@ -160,6 +180,7 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
               requestId: startRequest.current?.requestId,
               prompt: nextPrompt.trim(),
               provider: work?.provider ?? 'spark',
+              ...(projectId ? { projectId } : {}),
             }
           : { roomId, actor: selfId, jobId: work?.jobId };
       const response = await fetch(`/api/work/${action}`, {
@@ -235,6 +256,21 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
           {prompt}
         </p>
       )}
+      <label style={label}>
+        Project source
+        <select
+          aria-label="Selected project"
+          value={work?.project?.id ?? projectId}
+          disabled={Boolean(work) || active || pending !== null}
+          style={field}
+          onChange={(event) => setProjectId(event.target.value)}
+        >
+          <option value="">Generic isolated workspace</option>
+          {work?.project && !projects.some(project => project.id === work.project?.id) && <option value={work.project.id}>{work.project.name}</option>}
+          {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+        </select>
+        {work?.project && <span>Snapshot {work.project.snapshotId.slice(0, 12)} · {work.project.commit.slice(0, 12)}</span>}
+      </label>
       <label style={{ ...label, flex: '1 0 auto' }}>
         {work && !active ? 'Follow-up request' : 'Request'}
         <textarea
@@ -271,6 +307,11 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
               {command.exitCode !== null ? ` · exit ${command.exitCode}` : ''}
             </div>
           ))}
+          {work.execution.project && <>
+            <p style={{ marginBottom: 4 }}>{work.execution.project.changes.length} project changes{work.execution.project.diffTruncated ? ' · diff truncated' : ''}</p>
+            {work.execution.project.changes.map(change => <div key={`${change.status}:${change.path}`}><code>{change.status} {change.path}</code></div>)}
+            {work.execution.project.diff && <pre style={{ margin: '6px 0 0', whiteSpace: 'pre-wrap', fontSize: 11 }}>{work.execution.project.diff}</pre>}
+          </>}
         </details>
       )}
       {error && (

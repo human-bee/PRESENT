@@ -7,6 +7,7 @@ import { type Meeting } from '../../shared/meeting';
 import { startWork, getWork, cancelWork } from '../agents/work-jobs';
 
 import { ActivityAuthority } from './authority';
+import { ProjectRegistry } from '../projects/registry';
 import { fetchLinearProfile } from './linear';
 
 type Access = {
@@ -19,6 +20,7 @@ type Services = {
   get: typeof getWork;
   profile: typeof fetchLinearProfile;
   authority: ActivityAuthority;
+  projects?: ProjectRegistry;
 };
 type Blocker = Meeting['blockers'][number];
 
@@ -35,6 +37,7 @@ export class MeetingCoordinator {
       get: getWork,
       profile: fetchLinearProfile,
       authority: new ActivityAuthority(),
+      projects: new ProjectRegistry(),
     },
   ) {}
   private signResolution(
@@ -76,7 +79,7 @@ export class MeetingCoordinator {
   }
 
   reduce(roomId: string, a: Activity, command: ActivityCommand, actor: string, requestId: string) {
-    return reduceMeeting(roomId, a, command, actor, requestId, this.services.authority, this.signResolution.bind(this));
+    return reduceMeeting(roomId, a, command, actor, requestId, this.services.authority, this.signResolution.bind(this), projectId => (this.services.projects ?? new ProjectRegistry()).resolve(projectId));
   }
   afterAction(roomId: string) {
     if (this.closed) return;
@@ -124,6 +127,7 @@ export class MeetingCoordinator {
             prompt: c.prompt,
             owner: c.ownerId,
             provider: 'spark',
+            ...(c.projectId ? { projectId: c.projectId } : {}),
             position: {
               x: 100,
               y: 1000 + a.meeting.commitments.indexOf(c) * 430,

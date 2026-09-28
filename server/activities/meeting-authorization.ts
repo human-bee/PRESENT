@@ -18,6 +18,7 @@ export const grant = (roomId: string, activityId: string, c: Commitment) => [
   c.authorizedBy,
   c.authorizedAt,
   c.authorizedDependencies,
+  c.projectId,
 ];
 export const resolution = (roomId: string, activityId: string, b: Blocker) => [
   roomId,

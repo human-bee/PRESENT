@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, stopEventPropagation, useEditor, useValue, TLDOCUMENT_ID, type TLResizeInfo } from 'tldraw';
 import { type PresentWidgetShape, presentWidgetMigrations, presentWidgetShapeProps } from '../../shared/tldraw-schema';
 import { patchNativeShape, shapeToObject } from '../../shared/tldraw-adapter';
@@ -15,15 +15,18 @@ function PresentWidget({ shape }: { shape: PresentWidgetShape }) {
   const { act, selfId, onError } = useWidgetRuntime();
   const [error, setError] = useState<string | null>(null);
   const pending = useRef<Promise<unknown>>(Promise.resolve());
-  // Read the widget and receipts in one native snapshot, including before React receives new shape props.
-  const { object, receipts } = useValue('present-widget-state', () => {
+  const object = useValue('present-widget-state', () => {
     const current = editor.getShape(shape.id);
+    return current ? shapeToObject(current) : null;
+  }, [editor, shape.id]);
+  // Moving/resizing a widget must not resend unchanged state into its iframe.
+  const receiptJSON = useValue('present-widget-receipts', () => {
     const document = editor.store.get(TLDOCUMENT_ID);
     const present = document?.typeName === 'document' ? document.meta.present : null;
     const requests = present && typeof present === 'object' && !Array.isArray(present) ? present.requests : null;
-    return { object: current ? shapeToObject(current) : null,
-      receipts: Array.isArray(requests) ? requests.flatMap(pair => Array.isArray(pair) && typeof pair[0] === 'string' ? [pair[0]] : []) : [] };
-  }, [editor, shape.id]);
+    return JSON.stringify(Array.isArray(requests) ? requests.flatMap(pair => Array.isArray(pair) && typeof pair[0] === 'string' ? [pair[0]] : []) : []);
+  }, [editor]);
+  const receipts = useMemo<string[]>(() => JSON.parse(receiptJSON), [receiptJSON]);
   const send = (operation: Operation, requestId?: string) => {
     setError(null);
     // Same-widget edits reach the server in input order; other participants remain independent.

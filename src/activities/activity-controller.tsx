@@ -1,7 +1,7 @@
 import { shapeIdForObject } from '../../shared/tldraw-adapter';
 import { fitCanvas } from '../tldraw/focus';
 import { useEffect, useState, useRef } from 'react';
-import { useValue, type Editor } from 'tldraw';
+import { TLDOCUMENT_ID, useValue, type Editor } from 'tldraw';
 import { activityKinds, activityTemplates, readRoomOS, type ActivityKind } from '../../shared/activity';
 import { post } from './activity-api';
 import { ActivityStage } from './activity-stage';
@@ -19,7 +19,10 @@ export function ActivityController({
   name: string;
   connected: boolean;
 }) {
-  const os = useValue('activity-controller', () => readRoomOS(editor?.store.allRecords() ?? []), [editor]);
+  const os = useValue('activity-controller', () => {
+    const document = editor?.store.get(TLDOCUMENT_ID);
+    return readRoomOS(document ? [document] : []);
+  }, [editor]);
   const [menu, setMenu] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(
     () => new URLSearchParams(location.search).get('activity') ?? new URLSearchParams(location.search).get('audience') ?? sessionStorage.getItem(`present:activity:${roomId}`),

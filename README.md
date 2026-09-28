@@ -2,7 +2,7 @@
 
 A room for people, their agents, and whatever they make together.
 
-This native application now includes RoomOS activities on `codex/room-os-mini`, continuing the `codex/present-essence` milestone. The previous PRESENT checkouts are preserved. The canvas uses real tldraw: human drawing, shared instruments, generated applets and agent changes live in the same native document.
+This native application includes RoomOS activities and a signed invitation profile. The canvas uses real tldraw: human drawing, shared instruments, generated applets and agent changes live in the same native document. The September QA integration builds on `codex/present-cloud-base-20260921`; see [measured results and open checks](docs/QA-2026-09-28.md).
 
 ## Run
 
@@ -24,7 +24,7 @@ Open **http://127.0.0.1:4317**. The root creates a room; its link returns to tha
 - **Bring in an audience.** A Live room has a separate audience link, incoming comments, host moderation, votes, and an on-air/next-up queue. YouTube chat is a read-only connector requiring `YOUTUBE_API_KEY` and an active chat ID. Local moderation does not moderate the external YouTube channel.
 
 - **Draw directly.** The left rail contains selection, pan, pen, eraser, text, sticky notes, rectangles, ellipses, arrows, frames and undo/redo. Native handles move, resize and rotate objects. Selection reveals styles and grouping. Use the bottom-right Fit everything control to frame the room; **F** selects the frame tool.
-- **Ask in the composer.** Spark is the default. Requests can draw native shapes, create or change a shared applet, research with source links, generate an image, or start a work card. Selection and viewport provide context. Choose Astra in settings for deeper work. Requested models do not silently fall back.
+- **Ask in the composer.** Luna is the local default; invite sessions default to the hosted Cerebras provider. Requests can draw native shapes, create or change a shared applet, research with source links, generate an image, or start a work card. Selection and viewport provide context. Choose another available model in settings for deeper work. Requested models do not silently fall back.
 - **Add an instrument.** The plus opens notes, timers, dice, polls, documents, briefs, task boards, debate tools, cards, audience questions, captions and media. Generated HTML applets can implement additional shared interactions.
 - **Meet.** Turn on mic, camera or screen sharing explicitly. LiveKit carries the human call; tiles can be placed on the canvas. Canvas reconnects preserve a healthy media connection.
 - **Invite the voice agent.** The sparkle opens the listener. Listen quietly produces text and canvas changes; Talk with me plays responses to that listener. Each participant can use a personal microphone session with attributable speech. A shared microphone mixes call audio and keeps speakers unknown; it cannot overlap personal listeners. Shared captions retain bounded recent room audio text.
@@ -51,13 +51,11 @@ npm run build
 npm run test:e2e
 ```
 
-Browser tests use installed Chrome and synthetic media. Live provider/voice proofs are separately bounded because they make real model calls. See [current verification](docs/VERIFICATION.md), [capability status](docs/parity/capability-status.md), [historical intent](docs/HISTORY.md), and [legacy parity research](docs/parity/legacy-capabilities.md).
+Browser tests use Playwright Chromium (`npx playwright install chromium`), or installed Chrome with `PRESENT_E2E_BROWSER_CHANNEL=chrome`. The local suite and invite suite use separate runtimes. Live provider/voice checks are separately bounded because they make real model calls. See [current QA results and exact smoke commands](docs/QA-2026-09-28.md).
 
-See [Contextual RoomOS verification and recordings](docs/ROOM-OS-CONTEXT-VERIFICATION.md) for the new activity contracts, live results, connector boundaries, and repeatable acceptance commands.
+## Hosting boundary
 
-## Local boundary
-
-This is a local app. It binds loopback and checks Host/Origin; an invite works in another browser on this computer. Public sharing needs authenticated room membership and a deployment that preserves single ownership of each room. Shared room data is visible to participants; hiding a card does not make its content private.
+Local mode binds loopback and checks Host/Origin. Network hosting requires the signed invitation profile and one durable Node server that owns the native rooms. See [cloud readiness](docs/cloud-readiness.md) and [room access](docs/room-access.md). Shared room data is visible to participants; hiding a card does not make its content private. Hosted background work remains unavailable until its per-job authorization adapter is integrated.
 
 Voice uses `gpt-live-1` WebRTC with a delegated backend. Connection, tool execution and image delivery have saved live proof; the complete combined human conversation remains an acceptance target. Cerebras is optional and reports billing errors explicitly. Physical-device meetings, remote deployment, several older external integrations and universal latency improvement remain unproved. Read the capability report for the precise implemented and missing scope.
 

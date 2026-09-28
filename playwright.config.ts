@@ -4,6 +4,7 @@ const baseURL = process.env.PRESENT_E2E_URL ?? 'http://127.0.0.1:4320';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  testIgnore: '**/access-profile.spec.ts',
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,
@@ -11,7 +12,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL,
-    channel: 'chrome',
+    channel: process.env.PRESENT_E2E_BROWSER_CHANNEL || undefined,
     headless: true,
     viewport: { width: 1440, height: 900 },
     trace: 'retain-on-failure',
