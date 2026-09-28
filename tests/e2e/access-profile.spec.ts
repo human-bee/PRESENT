@@ -50,7 +50,7 @@ test('owner creates, editor joins/edits/reconnects, viewer is denied, revoke clo
     expect((await guest.request.post(`/api/room/${roomId}/operation`, { headers: { origin: baseURL! }, data: { actor: 'forged-owner', requestId: 'viewer-write', operation: { type: 'rename', title: 'Forbidden' } } })).status()).toBe(403);
     await owner.getByLabel('Reusable template name').fill('Private smoke layout');
     await owner.getByRole('button', { name: 'Save this layout' }).click();
-    await expect(owner.getByText('Private smoke layout', { exact: true })).toBeVisible();
+    await expect(owner.getByRole('listitem').filter({ hasText: 'Private smoke layout' })).toBeVisible();
     const before = owner.url();
     await owner.getByRole('listitem').filter({ hasText: 'Focus · one thought' }).getByRole('button', { name: 'Use', exact: true }).click();
     await expect(owner).not.toHaveURL(before);

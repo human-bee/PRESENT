@@ -78,6 +78,9 @@ export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: 
     editor.markHistoryStoppingPoint(`Add ${kind}`);
     editor.createShape(objectToShape(object, { parentId: editor.getCurrentPageId(), index }));
     select(object.id); setPanel(null);
+    // Instruments have different sizes. Frame the actual new shape above the
+    // composer and dock so their controls cannot steal its first interactions.
+    fitCanvas(editor, [shapeIdForObject(object.id)], 0);
   }
   function focus(ids: string[] = []) {
     const editor = room.editor;

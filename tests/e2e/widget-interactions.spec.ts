@@ -91,8 +91,36 @@ for (const scenario of scenarios) test(`${scenario.title} works through two peop
     for (const page of pages) await expect(page.locator('.room-status')).toHaveText('here, together');
     await pages[0].getByRole('button', { name: 'Add to room', exact: true }).click();
     await pages[0].getByRole('button', { name: scenario.button, exact: true }).click();
+    await expect.poll(async () => {
+      const widget = await pages[0].locator('.tl-shape').boundingBox();
+      const composer = await pages[0].locator('.composer').boundingBox();
+      return !!widget && !!composer && widget.y >= 120 && widget.y + widget.height < composer.y;
+    }, { message: 'New instrument controls must sit above the composer and dock' }).toBe(true);
     const frames = pages.map(page => page.frameLocator(`iframe[title="${scenario.title}"]`));
     await scenario.exercise(frames[0], frames[1]);
     expect(errors).toEqual([]);
   } finally { await Promise.all(contexts.map(context => context.close())); }
+});
+
+test('a tall new instrument stays clear of mobile room controls', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/r/${randomBytes(16).toString('hex')}`);
+  await expect(page.locator('.room-status')).toHaveText('here, together');
+  await page.getByRole('button', { name: 'Add to room', exact: true }).click();
+  await page.getByRole('button', { name: button('debate'), exact: true }).click();
+  const widget = await page.locator('.tl-shape').boundingBox();
+  const composer = await page.locator('.composer').boundingBox();
+  expect(widget).not.toBeNull(); expect(composer).not.toBeNull();
+  expect(widget!.x).toBeGreaterThanOrEqual(0);
+  expect(widget!.x + widget!.width).toBeLessThanOrEqual(390);
+  expect(widget!.y).toBeGreaterThanOrEqual(120);
+  expect(widget!.y + widget!.height).toBeLessThan(composer!.y);
+  const frame = page.frameLocator('iframe[title="Debate desk"]');
+  await frame.getByText('Add claims & score', { exact: true }).click();
+  await frame.locator('#new-claim').fill('A reachable mobile claim');
+  await frame.getByRole('button', { name: 'Add claim', exact: true }).click();
+  await expect(frame.locator('[data-claim-id]')).toHaveCount(1);
+  await frame.getByRole('button', { name: 'Delete claim', exact: true }).click();
+  await expect(frame.locator('[data-claim-id]')).toHaveCount(0);
+  await expect(page.locator('.popover')).toHaveCount(0);
 });
