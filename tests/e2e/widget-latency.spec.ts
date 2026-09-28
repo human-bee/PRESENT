@@ -9,8 +9,10 @@ test('60 alternating participant actions retain shared dice history and measure 
   const pages = await Promise.all(contexts.map(context => context.newPage()));
   const samples: { action: string; participant: number; localMs: number; peerMs: number }[] = [];
   try {
+    const openedAt = performance.now();
     await Promise.all(pages.map(page => page.goto(`/r/${roomId}`)));
     for (const page of pages) await expect(page.locator('.room-status')).toHaveText('here, together');
+    const bothFreshContextsReadyMs = performance.now() - openedAt;
     await pages[0].getByRole('button', { name: 'Add to room', exact: true }).click();
     await pages[0].getByRole('button', { name: 'Dice table Roll common dice with a shared, attributed history.', exact: true }).click();
     const frames = pages.map(page => page.frameLocator('iframe[title="Dice table"]'));
@@ -34,7 +36,7 @@ test('60 alternating participant actions retain shared dice history and measure 
       return { count: sorted.length, belowOneSecond: sorted.filter(ms => ms < 1000).length,
         p50: sorted[Math.ceil(sorted.length * .5) - 1], p95: sorted[Math.ceil(sorted.length * .95) - 1], max: sorted.at(-1) };
     };
-    const report = { boundary: 'Real Chromium clicks through local and peer DOM assertions, including Playwright overhead. Two independent browser contexts and a same-host server; no WAN, paint or provider latency claim.', local: summarize('localMs'), peer: summarize('peerMs'), samples };
+    const report = { boundary: 'Real Chromium clicks through local and peer DOM assertions, including Playwright overhead. Two independent browser contexts and a same-host server; no WAN, paint or provider latency claim.', bothFreshContextsReadyMs, local: summarize('localMs'), peer: summarize('peerMs'), samples };
     const path = info.outputPath('widget-action-latency.json');
     await writeFile(path, `${JSON.stringify(report, null, 2)}\n`);
     await info.attach('widget-action-latency', { path, contentType: 'application/json' });

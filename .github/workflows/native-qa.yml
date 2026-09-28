@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [local, invite]
+        profile: [local, invite, production]
     env:
       PRESENT_ENV_FILE: /tmp/present-no-provider-environment
     steps:
@@ -52,6 +52,11 @@ jobs:
       - name: Signed owner, editor, viewer and revocation
         if: matrix.profile == 'invite'
         run: npx playwright test --config tests/access-playwright.config.ts
+      - name: Production bundle and UI latency
+        if: matrix.profile == 'production'
+        run: |
+          npm run build
+          npx playwright test --config tests/production-playwright.config.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
