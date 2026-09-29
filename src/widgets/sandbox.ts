@@ -68,7 +68,10 @@ export function buildSandboxDocument(html: string, channel: string, state: Widge
 <script>(()=>{
 const __name=(fn)=>fn;
 const channel=${scriptJson(channel)};const view=(${createWidgetStateView.toString()})(${scriptJson(initialState)});let state=view.read();let sequence=0;
-const emit=()=>window.dispatchEvent(new CustomEvent('present:state',{detail:structuredClone(state)}));
+// Receipt-only native updates still retire pending edits and acknowledge rendering,
+// but must not rebuild every unrelated widget's DOM on another user's keystroke.
+let emittedState=null;
+const emit=()=>{const next=JSON.stringify(state);if(next===emittedState)return;emittedState=next;window.dispatchEvent(new CustomEvent('present:state',{detail:structuredClone(state)}))};
 const safe=(value)=>{try{const text=JSON.stringify(value);return text.length<=48000&&value&&typeof value==='object'&&!Array.isArray(value)&&!/("(?:__proto__|prototype|constructor)"\\s*:)/.test(text)}catch{return false}};
 window.present=Object.freeze({participantId:${scriptJson(participantId)},getState:()=>structuredClone(state),setState:patch=>{
 if(!safe(patch))return;patch=JSON.parse(JSON.stringify(patch));if(!safe({...state,...patch}))return;

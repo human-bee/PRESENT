@@ -79,6 +79,19 @@ test('iframe API sends partial updates, exposes stable participant identity and 
   frames.shift()?.(); frames.shift()?.();
   assert.equal(posted.at(-1)?.type, 'present:rendered');
   assert.deepEqual(posted.at(-1)?.receipts, ['channel:1', 'channel:2']);
+  handlers.message({ source: parent, data: { channel: 'channel', type: 'present:state', state: { left: 1, right: 2, score: 3 }, receipts: ['channel:1', 'channel:2', 'other-widget:1'] } });
+  assert.equal(stateEvents, 3, 'another widget receipt must not rebuild this unchanged widget');
+  frames.shift()?.(); frames.shift()?.();
+  assert.deepEqual(posted.at(-1)?.receipts, ['channel:1', 'channel:2', 'other-widget:1'], 'render acknowledgement remains available');
+  present.increment('score');
+  assert.equal(stateEvents, 4);
+  handlers.message({ source: parent, data: { channel: 'channel', type: 'present:state', state: { left: 1, right: 2, score: 4 }, receipts: ['channel:1', 'channel:2', 'channel:3'] } });
+  assert.equal(stateEvents, 4, 'canonical confirmation of the optimistic view is not a visible change');
+  present.increment('score');
+  assert.equal(stateEvents, 5);
+  handlers.message({ source: parent, data: { channel: 'channel', type: 'present:rejected', requestId: 'channel:4' } });
+  assert.equal(stateEvents, 6, 'rejection must still render the rollback');
+  assert.deepEqual(present.getState(), { left: 1, right: 2, score: 4 });
 });
 
 test('widget request receipts cannot be forged for another iframe channel', () => {

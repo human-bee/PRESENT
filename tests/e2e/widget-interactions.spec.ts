@@ -129,3 +129,31 @@ test('a tall new instrument stays clear of mobile room controls', async ({ page 
   await expect(frame.locator('[data-claim-id]')).toHaveCount(0);
   await expect(page.locator('.popover')).toHaveCount(0);
 });
+
+test('typing in one widget does not rebuild an unchanged task board', async ({ browser, baseURL }) => {
+  const roomId = randomBytes(16).toString('hex');
+  const contexts = await Promise.all([browser.newContext({ baseURL }), browser.newContext({ baseURL })]);
+  const pages = await Promise.all(contexts.map(context => context.newPage()));
+  const errors: string[] = [];
+  for (const page of pages) page.on('pageerror', error => errors.push(error.message));
+  try {
+    await Promise.all(pages.map(page => page.goto(`/r/${roomId}`)));
+    for (const page of pages) await expect(page.locator('.room-status')).toHaveText('here, together');
+    for (const kind of ['kanban', 'document']) {
+      await pages[0].getByRole('button', { name: 'Add to room', exact: true }).click();
+      await pages[0].getByRole('button', { name: button(kind), exact: true }).click();
+    }
+    const boards = pages.map(page => page.frameLocator('iframe[title="Task board"]'));
+    const documents = pages.map(page => page.frameLocator('iframe[title="Shared document"]'));
+    for (const board of boards) await expect(board.locator('#board .panel')).toHaveCount(3);
+    for (const page of pages) await expect(page.locator('iframe[title="Task board"]')).toHaveAttribute('data-present-rendered-receipts', /\[/);
+    // Hold actual DOM nodes, not app state. Receipt-only renders used to destroy them.
+    const panels = await Promise.all(boards.map(board => board.locator('#board .panel').first().elementHandle()));
+    const input = documents[0].getByRole('textbox', { name: 'Document Markdown' });
+    await input.fill('Keep existing widgets responsive.');
+    await input.pressSequentially(' No unrelated rebuilds.', { delay: 12 });
+    await expect(documents[1].getByRole('textbox', { name: 'Document Markdown' })).toHaveValue('Keep existing widgets responsive. No unrelated rebuilds.');
+    for (const panel of panels) expect(await panel?.evaluate(node => node.isConnected)).toBe(true);
+    expect(errors).toEqual([]);
+  } finally { await Promise.all(contexts.map(context => context.close())); }
+});
