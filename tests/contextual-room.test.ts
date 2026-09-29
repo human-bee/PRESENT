@@ -11,7 +11,7 @@ import { applyInterpretation } from '../server/activities/apply-interpretation';
 import { appendUtterance, changeTopic } from '../server/activities/activity-mutations';
 import { makeActivity, type ActivityCommand } from '../shared/activity';
 import { emptyPlan, type ConversationPlan, type ResolutionVerdict } from '../shared/conversation-plan';
-import { validateDataset } from '../server/activities/research-comparison';
+import { datasetIssues, validateDataset } from '../server/activities/research-comparison';
 import type { WorkJob } from '../shared/work';
 
 const room = 'c8'.repeat(16);
@@ -100,4 +100,17 @@ test('dataset validation preserves literal numbers and rejects invented, overquo
   assert.equal(validateDataset({ ...data, rows: [{ ...data.rows[0], valueText: '4,2' }, data.rows[1]] }, pages), null);
   assert.equal(validateDataset({ ...data, rows: [{ ...data.rows[0], valueText: '4201' }, data.rows[1]] }, pages), null);
   assert.equal(validateDataset({ ...data, rows: [{ ...data.rows[0], quote: 'Invented 4,200 ft.' }, data.rows[1]] }, pages), null);
+});
+
+test('dataset repair feedback includes the unit excerpts counted by validation', () => {
+  const unitQuote = 'For this table all baseline counts are measured in units across the complete sampled population.';
+  const rows = ['Alpha', 'Beta'].map((label, index) => ({ label, valueText: String(index + 1), unitText: 'units', unitQuote,
+    sourceId: '1', quote: `${label} group baseline count is ${index + 1} units.`, cohort: label }));
+  const pages = [{ id: '1', url: 'https://example.com/source', title: 'Fixture', text: `${unitQuote} ${rows.map(row => row.quote).join(' ')}`, sha256: 'fixture' }];
+  const data = { comparable: true, title: 'Counts', unit: 'units', scope: 'Fixture groups', rows, caveats: [], reason: '' };
+  assert.equal(validateDataset(data, pages), null);
+  assert.match(datasetIssues(data, pages).join('\n'), /29 quoted words including unit excerpts/);
+  const compact = { ...data, rows: rows.map(row => ({ ...row, unitQuote: 'units' })) };
+  assert.deepEqual(datasetIssues(compact, pages), []);
+  assert.deepEqual(validateDataset(compact, pages)?.map(row => row.value), [1, 2]);
 });

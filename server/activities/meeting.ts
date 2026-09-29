@@ -126,7 +126,7 @@ export class MeetingCoordinator {
             title: c.title,
             prompt: c.prompt,
             owner: c.ownerId,
-            provider: 'spark',
+            provider: 'luna',
             ...(c.projectId ? { projectId: c.projectId } : {}),
             position: {
               x: 100,

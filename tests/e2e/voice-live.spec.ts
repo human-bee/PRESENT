@@ -14,7 +14,7 @@ type VoiceProof = {
   recording?: { recorder: MediaRecorder; chunks: Blob[] };
 };
 type ProofWindow = Window & { __voiceProof: VoiceProof };
-const command = 'Present, add a sticky note saying the dragon likes tea, then briefly confirm';
+const command = 'Present, add a sticky note saying the dragon likes tea. After adding it, say exactly: The note is ready.';
 const expectedWords = /dragon likes tea/i;
 
 test.describe.configure({ retries: 0 });
@@ -145,6 +145,8 @@ test('real GPT Live speech creates a native note from a synthetic microphone', a
         return inbound && playback;
       }), { timeout: 10000 }).toBe(true);
       await expect.poll(() => page.evaluate(() => (window as unknown as ProofWindow).__voiceProof.events.some(event => event.type === 'session.output_transcript.delta'))).toBe(true);
+      await expect(page.locator('.voice-transcript .assistant').filter({ hasText: /the note is ready/i })).toBeVisible({ timeout: 20000 });
+      await page.waitForTimeout(2000); // Preserve the short confirmation's audio tail before stopping capture.
       report.tts = 'Nonzero received audio energy and active unmuted browser playback; no physical-speaker or intelligibility claim.';
     }
     report.outcome = 'passed';
@@ -169,7 +171,11 @@ test('real GPT Live speech creates a native note from a synthetic microphone', a
             let binary = ''; for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
             return btoa(binary);
           });
-          if (recording) await info.attach('received-tts-audio', { body: Buffer.from(recording, 'base64'), contentType: 'audio/webm' });
+          if (recording) {
+            const audioPath = info.outputPath('received-tts-audio.webm');
+            await writeFile(audioPath, Buffer.from(recording, 'base64'));
+            await info.attach('received-tts-audio', { path: audioPath, contentType: 'audio/webm' });
+          }
           await page.screenshot({ path: resolve(evidence, 'voice-live.png'), timeout: 5000 });
         } finally {
           const stop = page.getByRole('button', { name: 'Stop listening', exact: true });
@@ -186,6 +192,7 @@ test('real GPT Live speech creates a native note from a synthetic microphone', a
       failure ??= error;
     } finally {
       clearTimeout(safetyTimer);
+      await context.close();
       await browser.close();
       const video = page.video();
       if (video) await info.attach('gpt-live-session-video', { path: await video.path(), contentType: 'video/webm' });

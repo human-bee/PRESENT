@@ -3,6 +3,23 @@ import { test, expect } from '@playwright/test';
 
 test.use({ permissions: ['microphone'] });
 
+test('voice settings remain usable while an activity is open', async ({ page }, info) => {
+  await page.goto(`/r/${randomBytes(16).toString('hex')}`);
+  await expect(page.locator('.room-status')).toHaveText('here, together');
+  await page.getByRole('button', { name: '◈ Activities', exact: true }).click();
+  await page.locator('.activity-template-grid button').filter({ has: page.getByText('Debate', { exact: true }) }).click();
+  await expect(page.getByRole('dialog', { name: 'Debate room' })).toBeVisible();
+  await page.getByRole('button', { name: 'Start listening', exact: true }).click({ button: 'right' });
+  await page.getByRole('button', { name: 'Microphone device', exact: true }).click();
+  await page.locator('.mic-picker-menu > button').first().click();
+  await page.getByRole('combobox', { name: 'Microphone identity' }).selectOption('shared');
+  await page.getByRole('button', { name: 'Talk with me', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Microphone identity' })).toHaveValue('shared');
+  await page.screenshot({ path: info.outputPath('voice-settings-over-activity.png') });
+  await page.getByRole('button', { name: 'Close transcript', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Debate room' })).toBeVisible();
+});
+
 type Box = { x: number; y: number; width: number; height: number };
 function intersectionArea(a: Box, b: Box) {
   return Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) *

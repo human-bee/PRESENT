@@ -94,6 +94,12 @@ test('two people exchange synthetic LiveKit video and audio, then stop every cap
     await expect(alex.locator('.person-name', { hasText: 'River' })).toBeVisible();
     expect((await captureState(alex)).calls).toBe(0);
     expect((await captureState(river)).calls).toBe(0);
+    for (const page of [alex, river]) {
+      await page.getByRole('button', { name: 'Start listening', exact: true }).click({ button: 'right' });
+      await page.getByRole('button', { name: 'Microphone device', exact: true }).click();
+      await page.locator('.mic-picker-menu > button').first().click();
+      await page.keyboard.press('Escape');
+    }
     await alex.getByRole('button', { name: 'Turn camera on' }).click();
     await river.getByRole('button', { name: 'Turn camera on' }).click();
     await expect(alex.getByRole('button', { name: 'Turn camera off' })).toBeVisible({ timeout: 30_000 });
@@ -103,7 +109,9 @@ test('two people exchange synthetic LiveKit video and audio, then stop every cap
     await expect(alex.locator('.person video')).toHaveCount(2, { timeout: 30_000 });
     await expect(river.locator('.person video')).toHaveCount(2, { timeout: 30_000 });
     await alex.getByRole('button', { name: "Place Alex's camera on the canvas" }).click();
+    await alex.getByRole('button', { name: 'Show people previews', exact: true }).click();
     await alex.getByRole('button', { name: "Place River's camera on the canvas" }).click();
+    await alex.getByRole('button', { name: 'Show people previews', exact: true }).click();
     for (const page of [alex, river]) {
       await expect(page.locator('[data-media-capability="participant"] video')).toHaveCount(2);
       await expect.poll(async () => (await incomingStats(page)).some(s => s.kind === 'video' && s.framesDecoded > 10), { timeout: 30_000 }).toBe(true);
