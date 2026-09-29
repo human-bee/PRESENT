@@ -32,6 +32,8 @@ Obtain or reuse an appropriate license through https://tldraw.dev/community/lice
 
 Completed work flushes its canvas artifact before recording terminal success. Room snapshots use atomic replacement and file/directory fsync. Ordinary canvas edits still use a 150 ms debounce; the last debounce window can be lost on abrupt process death. This is not a zero-loss write-ahead journal.
 
+Widget state writes request compact HTTP receipts instead of downloading every widget's source on every keystroke. Canonical state and transaction receipts still arrive through native WebSocket sync; optimistic iframe edits are retired only by those native receipts. Other operation clients keep the full-room response by default. A `committed` receipt acknowledges the canonical transaction, not a disk flush. A hard reload can also discard a client edit that has not reached the server; reconnect tests establish a server-confirmed baseline before injecting a transport failure.
+
 The managed development preview uses an isolated signed profile, private disposable data and an exact development-only origin. That exception is rejected under `NODE_ENV=production`.
 
 ## What still blocks the complete hosted product
@@ -52,3 +54,5 @@ The realtime service lists existing OpenAI, Cerebras and LiveKit variable names.
 ## Release acceptance
 
 The provider-free browser commands and evidence are in the QA report. Repeat them against an isolated deployed staging room. Then verify reconnect after a process restart, durable assets, genuine spoken tool calls and received audible responses. Record click-to-visible, peer-visible and speech-to-result percentiles separately. Promote only after those checks are complete.
+
+For repeatable lower-level load testing, `PRESENT_BENCH_NOTES=100 PRESENT_BENCH_ROUNDS=1000 node --import tsx scripts/benchmarks/native-sync.ts` uses four real loopback WebSocket peers, 100 background notes, and 2,000 measured move/state updates plus 13 instrument creations. It uses its own temporary store and does not load-test the public staging project. It does not measure browser paint, real speech, provider reasoning or WAN delivery.

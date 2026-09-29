@@ -19,6 +19,13 @@ const directory = mkdtempSync(join(tmpdir(), 'present-sync-benchmark-'));
 const store = new RoomStore({ directory, debounceMs: 150 });
 const server = createServer();
 const roomId = 'c'.repeat(32), sockets: WebSocket[] = [];
+const boundedCount = (name: string, fallback: number, max: number) => {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isInteger(value) || value < 0 || value > max) throw new Error(`${name} must be an integer between 0 and ${max}.`);
+  return value;
+};
+const rounds = boundedCount('PRESENT_BENCH_ROUNDS', 200, 5000);
+const backgroundNotes = boundedCount('PRESENT_BENCH_NOTES', 0, 1000);
 const samples: Record<string, number[]> = { create: [], move: [], sharedState: [] };
 type Message = { type: string; diff?: Record<string, unknown> };
 function reader(socket: WebSocket) {
@@ -61,20 +68,24 @@ try {
     ...(['note', 'timer', 'teleprompter', 'poll', 'synth'] as const).map(kind => createStarter(kind, 'benchmark', { x: 0, y: 0 })),
     ...CAPABILITIES.map(item => createCapability(item.kind, 'benchmark', { x: 0, y: 0 })),
   ];
+  for (let index = 0; index < backgroundNotes; index++) {
+    const note = createStarter('note', 'benchmark-history', { x: index % 20 * 300, y: Math.floor(index / 20) * 250 });
+    store.applyOperation(roomId, { type: 'put', object: note }, 'benchmark-history');
+  }
   for (const object of objects) await apply('create', object.id, { type: 'put', object });
   const widget = objects.find(object => object.title === 'A room pulse')!;
-  for (let index = 1; index <= 200; index++) {
+  for (let index = 1; index <= rounds; index++) {
     const object = objects[index % objects.length];
     await apply('move', object.id, { type: 'patch', id: object.id, patch: { x: index * 3, y: index * 2 } });
     await apply('sharedState', widget.id, { type: 'patch', id: widget.id, patch: { data: { state: { benchmarkCounter: index } } } });
   }
-  assert.equal(store.getRoom(roomId).objects.length, objects.length);
-  assert.equal((store.getRoom(roomId).objects.find(object => object.id === widget.id)!.data.state as Record<string, unknown>).benchmarkCounter, 200);
+  assert.equal(store.getRoom(roomId).objects.length, objects.length + backgroundNotes);
+  if (rounds) assert.equal((store.getRoom(roomId).objects.find(object => object.id === widget.id)!.data.state as Record<string, unknown>).benchmarkCounter, rounds);
   const stats = (values: number[]) => {
     const sorted = [...values].sort((a, b) => a - b);
     return { actions: values.length, p50Ms: sorted[Math.floor(sorted.length * .5)], p95Ms: sorted[Math.floor(sorted.length * .95)], maxMs: sorted.at(-1), belowOneSecond: values.filter(ms => ms < 1000).length };
   };
-  console.log(JSON.stringify({ boundary: 'Server operation start through receipt of native WebSocket patch by all four loopback peers. No browser, acoustic audio or provider time.', peers: peers.length, objects: objects.length, categories: Object.fromEntries(Object.entries(samples).map(([name, values]) => [name, stats(values)])) }, null, 2));
+  console.log(JSON.stringify({ boundary: 'Server operation start through receipt of native WebSocket patch by all four loopback peers. No browser, acoustic audio or provider time.', peers: peers.length, objects: objects.length + backgroundNotes, rounds, categories: Object.fromEntries(Object.entries(samples).map(([name, values]) => [name, stats(values)])) }, null, 2));
 } finally {
   for (const socket of sockets) socket.terminate(); closeSockets();
   await new Promise<void>(resolve => server.close(() => resolve()));

@@ -7,6 +7,7 @@ import { createAppendTranscript } from '../../server/agents/transcript';
 import { makeObject } from '../../shared/room';
 import { CAPABILITIES } from '../../shared/capabilities';
 import { readTranscriptWindow } from '../../shared/transcript';
+import { armDocumentLatency, documentPropagation } from './document-latency';
 
 test('recorded long meeting: three participants, sprawling history, real widget actions and reconnects', async ({ browser, baseURL }, info) => {
   test.skip(!process.env.PRESENT_SOAK_SECONDS, 'Run the dedicated soak configuration with an explicit duration.');
@@ -39,8 +40,18 @@ test('recorded long meeting: three participants, sprawling history, real widget 
   const videos = pages.map(page => page.video()!);
   const errors: string[] = [], samples: { action: string; participant: number; atMs: number; localMs: number; peerMs: number }[] = [];
   const milestones: { event: string; atMs: number }[] = [];
+  const documentDOM: { cycle: number; participant: number; peers: { participant: number; afterLastInputMs: number }[]; allPeersAfterLastInputMs: number }[] = [];
+  const operationRequests: { participant: number; durationMs: number; responseBytes: number; minimal: boolean }[] = [];
   const started = performance.now();
   for (const [i, page] of pages.entries()) page.on('pageerror', error => errors.push(`${i}: ${error.message}`));
+  for (const [participant, page] of pages.entries()) page.on('requestfinished', request => {
+    if (!request.url().endsWith(`/api/room/${roomId}/operation`) || operationRequests.length >= 6000) return;
+    void request.sizes().then(async sizes => {
+      const response = await request.response(), timing = request.timing();
+      operationRequests.push({ participant, durationMs: timing.responseEnd, responseBytes: sizes.responseBodySize,
+        minimal: response?.headers()['preference-applied'] === 'return=minimal' });
+    }).catch(() => {}); // Teardown can close a request after all outcome assertions already completed.
+  });
   const read = async () => (await (await pages[0].request.get(`/api/room/${roomId}`)).json()).room.objects as { id: string; title: string; x: number }[];
   const focus = async (title: string) => {
     const object = (await read()).find(object => object.title === title); expect(object).toBeDefined();
@@ -69,15 +80,19 @@ test('recorded long meeting: three participants, sprawling history, real widget 
       if (lastFocus !== title) { await focus(title); lastFocus = title; }
       const participant = cycle % 2, peer = 1 - participant;
       const frames = pages.map(page => page.frameLocator(`iframe[title="${title}"]`));
-      const before = performance.now();
+      let before = performance.now();
       if (phase === 0) {
         const text = `Meeting decision ${cycle}: Maya owns ${topics[cycle % topics.length]}. Preserve this correction across all three participants.`;
-        const local = frames[participant].getByRole('textbox', { name: 'Document Markdown' });
+        const inputs = frames.map(frame => frame.getByRole('textbox', { name: 'Document Markdown' }));
+        await Promise.all(inputs.map(armDocumentLatency));
+        const local = inputs[participant];
+        before = performance.now();
         await local.fill(text); await local.press('End'); await local.pressSequentially(' Agreed.', { delay: 12 });
         await expect(local).toHaveValue(`${text} Agreed.`);
         const localMs = performance.now() - before;
         for (const other of [peer, 2]) await expect(frames[other].getByRole('textbox', { name: 'Document Markdown' })).toHaveValue(`${text} Agreed.`);
         samples.push({ action: 'document correction + typing', participant, atMs: before - started, localMs, peerMs: performance.now() - before });
+        documentDOM.push({ cycle, participant, ...await documentPropagation(inputs, participant, `${text} Agreed.`) });
       } else if (phase === 1) {
         await frames[participant].locator('#new-task').fill(`Follow-up ${cycle}`);
         await frames[participant].locator('#new-owner').fill('Maya');
@@ -129,12 +144,14 @@ test('recorded long meeting: three participants, sprawling history, real widget 
       await pages[0].waitForTimeout(1000); // Real wall-clock soak, not accelerated fake time.
     }
     expect(errors).toEqual([]); expect(samples.length).toBeGreaterThan(10);
+    expect(operationRequests.length).toBeGreaterThan(0);
+    expect(operationRequests.every(request => request.minimal), 'widget state writes must use compact receipts').toBe(true);
     milestones.push({ event: 'Soak complete', atMs: performance.now() - started });
   } finally {
     const percentile = (values: number[], fraction: number) => values.sort((a, b) => a - b)[Math.max(0, Math.ceil(values.length * fraction) - 1)];
     const summarize = (key: 'localMs' | 'peerMs') => ({ p50: percentile(samples.map(s => s[key]), .5), p95: percentile(samples.map(s => s[key]), .95), p99: percentile(samples.map(s => s[key]), .99), max: Math.max(0, ...samples.map(s => s[key])), underOneSecond: samples.filter(s => s[key] < 1000).length });
     const evidence = info.outputPath('meeting-soak-evidence.json');
-    await writeFile(evidence, JSON.stringify({ boundary: 'Real Chromium UI with synthetic preloaded history. No provider reasoning, real speech, TTS, WAN, or physical audio claim. Three independent contexts on one CI host.', wallClockMs: performance.now() - started, history: { retained: history.entries.length, omitted: history.omitted }, count: samples.length, local: summarize('localMs'), peer: summarize('peerMs'), errors, milestones, samples }, null, 2));
+    await writeFile(evidence, JSON.stringify({ boundary: 'Real Chromium UI with synthetic preloaded history. No provider reasoning, real speech, TTS, WAN, or physical audio claim. Three independent contexts on one CI host. local/peer summaries include Playwright polling; documentDOM observes the final real input to peer textarea update on the same browser clock, not compositor paint.', wallClockMs: performance.now() - started, history: { retained: history.entries.length, omitted: history.omitted }, count: samples.length, local: summarize('localMs'), peer: summarize('peerMs'), errors, milestones, samples, documentDOM, operationRequests }, null, 2));
     await info.attach('meeting-soak-evidence', { path: evidence, contentType: 'application/json' });
     await Promise.all(contexts.map(context => context.close()));
     for (const [i, video] of videos.entries()) await info.attach(`participant-${i}-recording`, { path: await video.path(), contentType: 'video/webm' });

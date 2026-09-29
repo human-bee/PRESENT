@@ -6,7 +6,7 @@ import type { RemoteTLStoreWithStatus } from '@tldraw/sync';
 import { getAssetUrls } from '@tldraw/assets/selfHosted';
 import { useState, useEffect, type ReactNode } from 'react';
 import { NativeControls, type CanvasUiMode } from './tldraw/native-controls';
-import type { Operation, RoomState } from '../shared/room';
+import type { Operation } from '../shared/room';
 import { PresentWidgetShapeUtil, WidgetRuntimeProvider } from './tldraw/PresentWidgetShapeUtil';
 import { CanvasToolbar, CanvasMenu } from './tldraw/canvas-chrome';
 import { ToolRail } from './tldraw/tool-rail';
@@ -19,7 +19,7 @@ const assetUrls = getAssetUrls({ baseUrl: '/tldraw-assets' });
 
 export function Canvas({ sync, roomId, selfId, onMount, act, onError, children }: {
   sync: RemoteTLStoreWithStatus; roomId: string; selfId: string;
-  onMount: (editor: Editor) => void; act: (op: Operation) => Promise<RoomState>;
+  onMount: (editor: Editor) => void; act: (op: Operation, requestId?: string) => Promise<unknown>;
   onError: (message: string) => void; children?: ReactNode;
 }) {
   const [mode, setMode] = useState<CanvasUiMode>(() => {

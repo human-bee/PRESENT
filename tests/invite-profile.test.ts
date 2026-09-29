@@ -112,6 +112,15 @@ test('invite HTTP/native sync: isolation, identity, assets, pending commits, med
     assert.equal((await call('/api/agents/generate', 'POST', viewer, { roomId: room.roomId, actor: room.userId })).status, 403);
     const renamed = await (await call(url + '/operation', 'POST', guest, { actor: room.userId, requestId: 'signed-rename', operation: { type: 'rename', title: 'Shared alpha' } })).json() as any;
     assert.equal(renamed.room.events.at(-1).actor, guestGrant.userId);
+    const compactResponse = await call(url + '/operation', 'POST', guest, { actor: room.userId, requestId: 'compact-widget-edit', operation: { type: 'patch', id: 'signed-shared-note', patch: { data: { text: 'Compact response, native state' } } } }, { Prefer: 'return=minimal' });
+    assert.equal(compactResponse.status, 200);
+    assert.equal(compactResponse.headers.get('Preference-Applied'), 'return=minimal');
+    const compact = await compactResponse.json() as { receipt: { status: string; revision: number; requestId: string }; room?: unknown };
+    assert.equal(compact.room, undefined);
+    assert.deepEqual(compact.receipt, { status: 'committed', revision: renamed.room.revision + 1, requestId: 'compact-widget-edit' });
+    await a.read(m => m.type === 'patch' && JSON.stringify(m.diff).includes('Compact response, native state'));
+    const compactRepeat = await (await call(url + '/operation', 'POST', guest, { actor: room.userId, requestId: 'compact-widget-edit', operation: { type: 'patch', id: 'signed-shared-note', patch: { data: { text: 'Compact response, native state' } } } }, { Prefer: 'return=minimal' })).json();
+    assert.deepEqual(compactRepeat, compact, 'minimal responses preserve idempotence and canonical receipts');
     assert.equal(JSON.parse(bindPresence(JSON.stringify({ type: 'push', presence: ['put', { userId: 'owner-spoof' }] }), guestGrant.userId)).presence[1].userId, `user:${guestGrant.userId}`);
     const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489', 'hex');
     const uploaded = await fetch(`${origin}/api/assets/${room.roomId}`, { method: 'POST', headers: { origin, cookie: owner, 'content-type': 'image/png' }, body: png });

@@ -10,6 +10,9 @@ test('signed canvas survives a closed event stream and transient access-check 50
   await note.dblclick({ position: { x: 90, y: 80 } });
   await note.locator('[contenteditable="true"]').fill('Keep this room through an outage');
   await page.keyboard.press('Escape');
+  // Establish a server-confirmed baseline before intentionally reloading the transport.
+  const savedText = async () => JSON.stringify((await (await page.request.get(`/api/room/${roomId}`)).json()).room.objects);
+  await expect.poll(savedText).toContain('Keep this room through an outage');
   const before = await (await page.request.get(`/api/access/rooms/${roomId}`)).json();
   let eventsStarted = false, checks = 0;
   const eventsURL = `**/api/access/rooms/${roomId}/events`, grantURL = `**/api/access/rooms/${roomId}`;
@@ -32,6 +35,7 @@ test('signed canvas survives a closed event stream and transient access-check 50
   await note.dblclick({ position: { x: 90, y: 80 } });
   await note.locator('[contenteditable="true"]').fill('Same signed participant after recovery');
   await page.keyboard.press('Escape');
+  await expect.poll(savedText).toContain('Same signed participant after recovery');
   await page.reload();
   await expect(note.locator('.tl-text-content')).toContainText('Same signed participant after recovery');
 });

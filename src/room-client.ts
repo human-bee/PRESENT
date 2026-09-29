@@ -46,19 +46,28 @@ export function useRoom(id: string, name: string, grant?: RoomGrant) {
     const camera = editor?.getCamera();
     return camera ? { x: camera.x * camera.z, y: camera.y * camera.z, zoom: camera.z } : { x: 0, y: 0, zoom: 1 };
   }, [editor]);
-  const act = useCallback(async (operation: Operation, requestId: string = crypto.randomUUID()): Promise<RoomState> => {
+  const perform = useCallback(async (operation: Operation, requestId: string, minimal: boolean): Promise<{ room?: RoomState }> => {
     if (grant?.role === 'viewer') throw new Error('This room is view only.');
     const next = operation.type === 'put' && operation.pageId === undefined && editor ? { ...operation, pageId: editor.getCurrentPageId() } : operation;
     const response = await fetch(`/api/room/${id}/operation`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(minimal ? { Prefer: 'return=minimal' } : {}) },
       body: JSON.stringify({ operation: next, actor: selfId, requestId }),
     });
     const result = await response.json();
     if (!response.ok) { setOperationError(result.error || 'The room could not save this change.'); throw new Error(result.error); }
+    if (result.receipt?.status !== 'committed' || result.receipt.requestId !== requestId) throw new Error('The room did not confirm this change.');
     setOperationError('');
-    return result.room;
+    return result;
   }, [id, selfId, editor, grant?.role]);
-  return { room, participants, selfId, editor, setEditor, sync, selected, viewport, act,
+  const act = useCallback(async (operation: Operation, requestId: string = crypto.randomUUID()): Promise<RoomState> => {
+    const result = await perform(operation, requestId, false);
+    if (!result.room) throw new Error('The room returned an incomplete result.');
+    return result.room;
+  }, [perform]);
+  const actWidget = useCallback(async (operation: Operation, requestId: string = crypto.randomUUID()): Promise<void> => {
+    await perform(operation, requestId, true);
+  }, [perform]);
+  return { room, participants, selfId, editor, setEditor, sync, selected, viewport, act, actWidget,
     connected: sync.status === 'synced-remote' && sync.connectionStatus === 'online',
     error: sync.error?.message || operationError };
 }
