@@ -6,11 +6,11 @@ import type { Editor } from 'tldraw';
 import { Icon } from './icons';
 import { downloadTldrawFile, importTldrawFile } from './tldraw/file-io';
 
-export function Settings({ editor, onError, name, setName, provider, setProvider, generationOptions, setGenerationOptions, webmcp, capabilities, room, close }: {
+export function Settings({ editor, onError, name, setName, provider, setProvider, generationOptions, setGenerationOptions, webmcp, capabilities, room, close, hosted = false }: {
   editor: Editor | null; onError: (message: string) => void;
   name: string; setName: (s: string) => void; provider: AgentProvider; setProvider: (s: AgentProvider) => void;
   generationOptions: GenerationOptions; setGenerationOptions: (s: GenerationOptions) => void;
-  webmcp: boolean; capabilities: Record<string, unknown>; room: RoomState; close: () => void;
+  webmcp: boolean; capabilities: Record<string, unknown>; room: RoomState; close: () => void; hosted?: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement>(null); const [fileBusy, setFileBusy] = useState(false);
   async function download() {
@@ -32,7 +32,7 @@ export function Settings({ editor, onError, name, setName, provider, setProvider
     <div className="connection-detail"><span className={`status-dot ${webmcp ? 'on' : ''}`}/><span>{webmcp ? 'Your browser agent can see this room' : 'Browser agent tools unavailable in this browser'}</span></div>
     <div className="settings-actions"><button type="button" disabled={!editor || fileBusy} onClick={download}><Icon name="download" size={16}/> Save this room</button><button type="button" disabled={!editor || fileBusy} onClick={() => fileInput.current?.click()}><Icon name="plus" size={16}/> Import a canvas</button><button type="button" onClick={() => location.assign('/')}><Icon name="plus" size={16}/> A fresh room</button></div>
     <input ref={fileInput} type="file" accept=".tldr,application/vnd.tldraw+json" aria-label="Import a .tldr file" hidden style={{ display: 'none' }} onChange={event => void importFile(event.target.files?.[0])}/>
-    <small className="settings-footnote">Camera and microphone are yours to switch on. Room links give access to everyone holding them. This room is running on your computer.</small>
+    <small className="settings-footnote">Camera and microphone are yours to switch on. {hosted ? 'This room is hosted in the cloud. Access is controlled by signed invitations and room permissions.' : 'Room links give access to everyone holding them. This room is running on your computer.'}</small>
     <span className="sr-only">Agent status {JSON.stringify(capabilities)}</span>
   </aside>;
 }

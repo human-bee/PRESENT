@@ -4,12 +4,19 @@ import { Playbook } from '../playbook/playbook';
 import type { RoomGrant } from '../../shared/room-access';
 import { JoinRoom, roomAccessClient, takeRoomInvite } from './room-access';
 import { setSignedParticipant } from '../identity';
+import { watchRoomAccess } from './watch-access';
 import './room-access.css';
 const initialInvite = takeRoomInvite();
 export function AccessApp() {
   const [profile, setProfile] = useState<'local' | 'invite'>(), [grant, setGrant] = useState<RoomGrant>();
   const [loading, setLoading] = useState(true), [error, setError] = useState('');
-  const admit = (value: RoomGrant) => { setSignedParticipant(value.userId); history.replaceState({}, '', `/r/${value.roomId}`); setGrant(value); setError(''); };
+  const admit = (value: RoomGrant) => {
+    const path = `/r/${value.roomId}`;
+    const focus = location.pathname === path ? new URLSearchParams(location.search).get('focus') : null;
+    setSignedParticipant(value.userId);
+    history.replaceState({}, '', `${path}${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`);
+    setGrant(value); setError('');
+  };
   useEffect(() => {
     let active = true;
     void (async () => {
@@ -31,11 +38,7 @@ export function AccessApp() {
   }, []);
   useEffect(() => {
     if (!grant) return;
-    const events = new EventSource(`/api/access/rooms/${grant.roomId}/events`);
-    const end = () => { events.close(); setGrant(undefined); setSignedParticipant(undefined); setError('Your room access has ended. Ask the owner for help.'); };
-    events.addEventListener('ended', end);
-    events.onerror = () => { void roomAccessClient.get(grant.roomId).catch(end); };
-    return () => events.close();
+    return watchRoomAccess(grant, () => { setGrant(undefined); setSignedParticipant(undefined); setError('Your room access has ended. Ask the owner for help.'); });
   }, [grant]);
   if (loading) return <main className="access-entry" role="status">Opening PRESENT…</main>;
   if (profile === 'local') return location.pathname === '/playbook' ? <Playbook/> : <App/>;

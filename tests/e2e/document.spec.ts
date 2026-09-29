@@ -110,3 +110,28 @@ test('fast shared-document typing preserves every character through delayed nati
     await Promise.all([a.close(), b.close()]);
   }
 });
+
+test('focused peers see alternating document edits and keep keyboard selection useful', async ({ browser, baseURL }) => {
+  const roomId = randomBytes(16).toString('hex');
+  const contexts = await Promise.all([browser.newContext({ baseURL }), browser.newContext({ baseURL })]);
+  const pages = await Promise.all(contexts.map(context => context.newPage()));
+  try {
+    await Promise.all(pages.map(page => page.goto(`/r/${roomId}`)));
+    for (const page of pages) await expect(page.locator('.room-status')).toHaveText('here, together');
+    await pages[0].getByRole('button', { name: 'Add to room', exact: true }).click();
+    await pages[0].getByRole('button', { name: 'Shared document Write Markdown, preview it and save versions.' }).click();
+    const fields = pages.map(page => page.frameLocator('iframe[title="Shared document"]').getByRole('textbox', { name: 'Document Markdown' }));
+    for (let i = 0; i < 10; i++) {
+      const actor = i % 2, other = 1 - actor, value = `Decision ${i}: preserve the shared correction.`;
+      await fields[other].click();
+      await fields[actor].fill(value);
+      await expect(fields[other]).toHaveValue(value);
+      await expect(fields[other]).toBeFocused();
+    }
+    await fields[0].fill('Hello world'); await expect(fields[1]).toHaveValue('Hello world');
+    await fields[1].press('Home'); await fields[1].press('ArrowRight');
+    await fields[0].press('End'); await fields[0].pressSequentially('!');
+    await expect(fields[1]).toHaveValue('Hello world!');
+    expect(await fields[1].evaluate(element => (element as HTMLTextAreaElement).selectionStart)).toBe(1);
+  } finally { await Promise.all(contexts.map(context => context.close())); }
+});

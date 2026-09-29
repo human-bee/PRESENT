@@ -1,22 +1,7 @@
 import { useState } from 'react';
 import type { RoomGrant, RoomInvite } from '../../shared/room-access';
-
-async function request<T>(path: string, method = 'POST', data?: unknown): Promise<T> {
-  const response = await fetch(`/api/access/${path}`, { method, credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: data === undefined ? undefined : JSON.stringify(data) });
-  const value = await response.json();
-  if (!response.ok) throw new Error(value.error ?? 'Room access failed.');
-  return value as T;
-}
-export const roomAccessClient = {
-  session: () => request<{ userId: string; expiresAt: number }>('session'),
-  create: () => request<RoomGrant>('rooms'),
-  join: (token: string) => request<RoomGrant>('join', 'POST', { token }),
-  get: (roomId: string) => request<RoomGrant>(`rooms/${roomId}`, 'GET'),
-  leave: (roomId: string) => request(`rooms/${roomId}/leave`),
-  invite: (roomId: string, role: 'editor' | 'viewer') => request<RoomInvite>(`rooms/${roomId}/invites`, 'POST', { role, ttlMs: 86400_000, maxUses: 1 }),
-  revokeInvite: (roomId: string, id: string) => request(`rooms/${roomId}/invites/${id}`, 'DELETE'),
-  revokeMember: (roomId: string, userId: string) => request(`rooms/${roomId}/members/${userId}`, 'DELETE'),
-};
+import { roomAccessClient } from './client';
+export { roomAccessClient } from './client';
 /** Call once before mounting analytics or the room app. Tokens stay out of server URLs and storage. */
 export function takeRoomInvite(location: Location = window.location, history: History = window.history): string {
   const token = new URLSearchParams(location.hash.slice(1)).get('invite') ?? '';
