@@ -4,8 +4,11 @@ import { useState } from 'react';
 import { Icon } from './icons';
 import { useVoice } from './voice/use-voice';
 import type { CanvasContextProvider } from '../shared/canvas-commands';
+import type { Editor } from 'tldraw';
+import { VoiceTranscriptView } from './voice/transcript-view';
 
-export function VoiceControl({ roomId, selfId, position, audioStreams, canvasContext, provider, generationOptions, open, setOpen }: {
+export function VoiceControl({ roomId, selfId, position, audioStreams, canvasContext, provider, generationOptions, open, setOpen, editor }: {
+  editor: Editor | null;
   roomId: string; selfId: string; position: () => { x: number; y: number }; audioStreams: MediaStream[];
   provider: AgentProvider; generationOptions: GenerationOptions;
   canvasContext?: CanvasContextProvider;
@@ -21,7 +24,7 @@ export function VoiceControl({ roomId, selfId, position, audioStreams, canvasCon
     {open && <aside className="popover voice-panel"><div className="popover-heading"><span className="popover-label">IN THE CONVERSATION</span><button type="button" aria-label="Close transcript" onClick={() => setOpen(false)}><Icon name="close" size={16}/></button></div><h2>Leave your hands free.</h2>
       <MicrophonePicker disabled={active}/><div className="voice-modes"><button type="button" className={mode === 'ambient' ? 'chosen' : ''} onClick={() => setMode('ambient')}>Listen quietly</button><button type="button" className={mode === 'conversation' ? 'chosen' : ''} onClick={() => setMode('conversation')}>Talk with me</button></div>
       <p className="voice-note">{mode === 'ambient' ? 'Ask to capture a thought, start a timer, or make something. Each person can join with their own microphone. A shared microphone keeps speakers unknown.' : 'You hear the agent here. Its canvas changes are shared with the room.'}</p>
-      <div className="voice-transcript" aria-live="polite">{voice.transcript.length ? voice.transcript.map(item => <p key={item.id} className={item.role}><small>{item.role === 'assistant' ? 'PRESENT' : 'In the room'}</small>{item.text}</p>) : <p className="voice-empty">Words appear here as the conversation unfolds.</p>}</div>
+      <VoiceTranscriptView editor={editor} live={voice.transcript}/>
       <label className="voice-capture-mode">Microphone identity<select aria-label="Microphone identity" value={capture} onChange={event => { void voice.stop(); setCapture(event.target.value as typeof capture); }}><option value="personal">My microphone: attribute speech to me</option><option value="shared">Shared microphone: speaker unknown</option></select></label>
       <small className="voice-provider">GPT-Live · your room model handles scenes</small>
     </aside>}

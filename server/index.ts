@@ -1,4 +1,5 @@
 import { closeVoiceAuthorizations } from './access/voice-lease';
+import { enableHostedWorkAuthorization } from './access/work-authorization';
 import { configuredAccess, AccessError, assertAccessOrigin } from './access';
 import { installNativeAccessGuard } from './access/native-guard';
 import { createInviteProfile } from './access/profile';
@@ -40,6 +41,7 @@ const alpha = configuredAccess();
 const host = process.env.PRESENT_HOST ?? '127.0.0.1';
 if (!['127.0.0.1', '0.0.0.0'].includes(host) || (host !== '127.0.0.1' && !alpha)) throw new Error('Network hosting requires the signed invitation profile.');
 if (alpha) installNativeAccessGuard();
+enableHostedWorkAuthorization();
 const inviteProfile = alpha ? createInviteProfile(alpha) : undefined;
 const localTemplates = createTemplateRequestHandler({ catalog: new TemplateCatalog(dataPath('templates', 'local')), readRoom: getCanvasRecords, installRoom: (id, records) => installTemplateRecords(getTldrawRoom(id), records) });
 let closing = false;

@@ -16,6 +16,7 @@ export type WorkspaceWire = Pick<CodexWire, 'request' | 'send' | 'listeners' | '
 export type WorkspaceRunInput = GenerationOptions & {
   prompt: string; provider: 'spark' | 'codex' | 'luna' | 'terra'; jobId: string; attempt: number; state: WorkExecutionState;
   onCheckpoint: (state: WorkExecutionState) => void; outputSchema?: object; project?: ProjectSnapshot;
+  assertAuthorized?: () => void;
 };
 export type WorkspaceRunResult = { output: string; execution: WorkExecution };
 export type WorkspaceRunner = (input: WorkspaceRunInput, signal: AbortSignal) => Promise<WorkspaceRunResult>;
@@ -33,13 +34,15 @@ export function workspaceThreadOptions(cwd: string, provider: 'spark' | 'codex' 
 export function createRunWorkspaceWork(options: Options = {}): WorkspaceRunner {
   const active = new Set<string>();
   return async (input, signal) => {
+    const check = () => { input.assertAuthorized?.(); if (signal.aborted) throw new AgentError('Local work was cancelled.', 408); };
+    check();
     let state = workExecutionStateSchema.parse(input.state), output = '';
     if (active.has(state.workspaceId)) throw new AgentError('This work card already has a running workspace.', 409);
     if (signal.aborted) throw new AgentError('Local work was cancelled.', 408);
     const base = options.directory ?? dataPath('workspaces');
     const workspace = prepareWorkspace(base, state.workspaceId), continued = state.threadId !== null;
     if (input.project) prepareProjectWorkspace(workspace.cwd, input.project, options.projects ?? new ProjectRegistry());
-    const checkpoint = (next: WorkExecutionState) => { state = workExecutionStateSchema.parse(next); input.onCheckpoint(structuredClone(state)); };
+    const checkpoint = (next: WorkExecutionState) => { check(); state = workExecutionStateSchema.parse(next); input.onCheckpoint(structuredClone(state)); };
     let wire: WorkspaceWire | undefined;
     active.add(state.workspaceId);
     try {
@@ -50,17 +53,21 @@ export function createRunWorkspaceWork(options: Options = {}): WorkspaceRunner {
         if (!options.wire && !command) throw new AgentError('The local Codex command is unavailable.', 503);
         wire = options.wire ? options.wire(workspace) : new CodexWire(command as string, workspace);
         await wire.request('initialize', { clientInfo: { name: 'present_workspace', version: '0.1.0' }, capabilities: { experimentalApi: true } });
+        check();
         wire.send({ method: 'initialized' });
         const account = await wire.request<{ account: { type: string } | null }>('account/read', { refreshToken: false });
+        check();
         if (account.account?.type !== 'chatgpt') throw new AgentError('Workspace work requires the ChatGPT Codex subscription.', 503);
         const model = agentModels[input.provider], common = { ...workspaceThreadOptions(workspace.cwd, input.provider), serviceTier: input.fast ? 'priority' : 'default' };
         const response = state.threadId
           ? await wire.request<ThreadResult>('thread/resume', { ...common, threadId: state.threadId, excludeTurns: true })
           : await wire.request<ThreadResult>('thread/start', { ...common, allowProviderModelFallback: false, ephemeral: false, historyMode: 'legacy', environments: [{ environmentId: 'local', cwd: workspace.cwd, runtimeWorkspaceRoots: [workspace.cwd] }], dynamicTools: [], selectedCapabilityRoots: [] });
+        check();
         if (response.model !== model || response.cwd !== workspace.cwd || response.runtimeWorkspaceRoots?.length !== 1 || response.runtimeWorkspaceRoots[0] !== workspace.cwd || response.activePermissionProfile?.id !== 'present-work') throw new AgentError('Codex did not confirm the isolated workspace profile. No work turn was started.', 503);
         if (state.threadId && response.thread.id !== state.threadId) throw new AgentError('Codex resumed a different task. No work turn was started.', 503);
         checkpoint({ ...state, threadId: response.thread.id });
         output = await runWorkspaceTurn(wire, { ...input, state, onCheckpoint: checkpoint, outputSchema: workOutputSchema }, workspace.cwd, signal);
+        check();
         if (Buffer.byteLength(output) > 24000) { checkpoint({ ...state, phase: 'failed' }); throw new AgentError('The work artifact exceeded its output limit.'); }
         try { workArtifactSchema.parse(JSON.parse(output)); }
         catch { checkpoint({ ...state, phase: 'failed' }); throw new AgentError('Codex did not return a valid work artifact. Its source files are retained.'); }
@@ -69,7 +76,7 @@ export function createRunWorkspaceWork(options: Options = {}): WorkspaceRunner {
     } finally {
       wire?.close(); await wire?.stopped; active.delete(state.workspaceId);
     }
-    if (signal.aborted) throw new AgentError('Local work was cancelled.', 408);
+    check();
     const files = readWorkspaceFiles(workspace.cwd);
     return { output, execution: { boundary: 'local-workspace', continued, commands: state.commands, files, ...(input.project ? { project: inspectProjectWorkspace(workspace.cwd, input.project) } : {}) } };
   };

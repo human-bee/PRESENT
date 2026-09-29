@@ -1,27 +1,30 @@
 import { dataPath } from '../data-path';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { getIndexAbove } from '@tldraw/utils';
 import type { TLShape } from '@tldraw/tlschema';
 import { makeObject } from '../../shared/room';
 import { objectToShape, patchNativeShape, shapeIdForObject } from '../../shared/tldraw-adapter';
 import { markdownArtifactHtml, storedWorkJobSchema, workArtifactSchema, workInstructions, workJobSchema, workOutputSchema, workRequestSchema, workSummary, type StoredWorkJob, type WorkJob } from '../../shared/work';
-import { applyOperation, getCanvasRecords, getRoom, transactCanvas, type RoomStore } from '../room-store';
+import { applyOperation, flushRoomStore, getCanvasRecords, getRoom, transactCanvas, type RoomStore } from '../room-store';
+import { writeDurableFile } from '../durable-file';
 import { requireCanvasPage } from '../tldraw-operations';
 import type { generateWithCodex } from './codex';
 import { AgentError, agentModels } from './contract';
 import { createRunWorkspaceWork, type WorkspaceRunner } from './workspace-work';
 import { ProjectRegistry, ProjectRegistryError } from '../projects/registry';
+import { captureRoomAuthorization, inviteAuthorizationEnforced, requireRoomAuthorization } from '../access/context';
+import { WorkAuthorizations } from '../access/work-authorization';
+import { AccessError } from '../access/store';
 
-type WorkStore = Pick<RoomStore, 'getRoom' | 'applyOperation' | 'transactCanvas'> & Partial<Pick<RoomStore, 'getCanvasRecords'>>;
+type WorkStore = Pick<RoomStore, 'getRoom' | 'applyOperation' | 'transactCanvas' | 'flush'> & Partial<Pick<RoomStore, 'getCanvasRecords'>>;
 type Options = { directory?: string; store?: WorkStore; run?: WorkspaceRunner; generate?: typeof generateWithCodex; now?: () => number; persist?: (path: string, content: string) => void; projects?: ProjectRegistry };
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const activeStatus = (status: WorkJob['status']) => status === 'queued' || status === 'running';
 const artifactId = (job: WorkJob) => `artifact-${job.jobId}`;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const ownerOf = (value: unknown, fallback: string) => typeof value === 'string' ? value.slice(0, 200) : fallback;
-const atomicWrite = (path: string, content: string) => { const temporary = `${path}.${randomUUID()}.tmp`; writeFileSync(temporary, content, { mode: 0o600 }); renameSync(temporary, path); };
 
 /** Single local server job pool. The native room remains the only canvas authority. */
 export class WorkJobs {
@@ -36,10 +39,11 @@ export class WorkJobs {
   private now: () => number;
   private persist: (path: string, content: string) => void;
   private projects: ProjectRegistry;
+  private authorizations = new WorkAuthorizations();
   constructor(options: Options = {}) {
     this.directory = options.directory ?? dataPath('work-jobs');
-    this.store = options.store ?? { getRoom, getCanvasRecords, applyOperation, transactCanvas };
-    this.now = options.now ?? Date.now; this.persist = options.persist ?? atomicWrite; this.projects = options.projects ?? new ProjectRegistry();
+    this.store = options.store ?? { getRoom, getCanvasRecords, applyOperation, transactCanvas, flush: flushRoomStore };
+    this.now = options.now ?? Date.now; this.persist = options.persist ?? writeDurableFile; this.projects = options.projects ?? new ProjectRegistry();
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     const generate = options.generate;
     this.run = options.run ?? (generate ? async (input, signal) => ({ output: await generate(input.prompt, signal, input.provider, { instructions: workInstructions, outputSchema: workOutputSchema }), execution: { boundary: 'local-workspace', continued: input.state.threadId !== null, commands: [], files: [] } }) : createRunWorkspaceWork({ directory: join(realpathSync(this.directory), 'workspaces'), projects: this.projects }));
@@ -50,6 +54,10 @@ export class WorkJobs {
       this.jobs.set(job.jobId, job);
       this.rememberHead(job);
       if (activeStatus(job.status)) {
+        if (inviteAuthorizationEnforced()) {
+          job.status = 'interrupted'; job.error = 'The server stopped before this job finished. Resume explicitly to continue.';
+          this.save(job); continue; // A restored job has no live signed authorization.
+        }
         const room = this.store.getRoom(job.roomId), artifact = room.objects.find(object => object.id === artifactId(job));
         const card = room.objects.find(object => object.id === job.objectId), work = record(card?.data.work);
         if (job.output && artifact?.data.sourceJobId === job.jobId && artifact.data.commitToken === job.commitToken && work.jobId === job.jobId && work.status === 'completed' && Array.isArray(work.artifactIds) && work.artifactIds.includes(artifact.id)) { job.status = 'completed'; job.artifactIds = [artifact.id]; job.completedAt = typeof work.completedAt === 'number' ? work.completedAt : this.now(); job.error = null; }
@@ -80,6 +88,14 @@ export class WorkJobs {
     job.owner = ownerOf(target.data.owner, job.owner); job.title = target.title;
     this.store.applyOperation(job.roomId, { type: 'patch', id: job.objectId, patch: { data: { work: workSummary(job) } } }, `agent:${job.provider}`);
   }
+  private publishIfAuthorized(job: StoredWorkJob) {
+    try { requireRoomAuthorization(job.roomId, 'tools'); this.publish(job); }
+    catch { /* The durable terminal state survives revoked access or a failed room write. */ }
+  }
+  private authorizeActor(roomId: string, actor: string) {
+    const grant = requireRoomAuthorization(roomId, 'tools');
+    if (grant && grant.userId !== actor) throw new AccessError('Work identity must match the signed room member.');
+  }
   private require(roomId: string, jobId: string, actor?: string) {
     const job = this.jobs.get(jobId) ?? this.readSaved(jobId);
     if (!job || job.roomId !== roomId) throw new AgentError('That work job does not exist in this room.', 404);
@@ -88,6 +104,7 @@ export class WorkJobs {
     return job;
   }
   get(roomId: string, jobId: string): WorkJob {
+    requireRoomAuthorization(roomId, 'read');
     const job = this.require(roomId, jobId), target = this.target(job);
     return structuredClone(workJobSchema.parse({ ...job, ...(target ? { title: target.title, owner: ownerOf(target.data.owner, job.owner) } : {}) }));
   }
@@ -96,6 +113,7 @@ export class WorkJobs {
     if (!parsed.success) throw new AgentError('Work needs a room, request ID, participant and deliverable request.', 400);
     if (this.closed) throw new AgentError('The work queue is stopping.', 503);
     const input = parsed.data, jobId = digest([input.roomId, input.requestId]).slice(0, 32), fingerprint = digest(input);
+    this.authorizeActor(input.roomId, input.actor);
     const previous = this.jobs.get(jobId) ?? this.readSaved(jobId);
     if (previous) { if (previous.fingerprint !== fingerprint) throw new AgentError('This request ID belongs to different work.', 409); return this.get(input.roomId, jobId); }
     if (this.queue.length >= 100) throw new AgentError('The work queue is full.', 429);
@@ -122,32 +140,39 @@ export class WorkJobs {
     }
     const job: StoredWorkJob = { jobId, fingerprint, commitToken: randomUUID().replaceAll('-', ''), roomId: input.roomId, requestId: input.requestId, objectId: existing?.id ?? `work-${jobId}`, actor: input.actor, owner: ownerOf(existing?.data.owner, input.owner ?? input.actor), title: existing?.title ?? input.title, prompt: input.prompt, provider: input.provider, reasoning: input.reasoning, fast: input.fast, ...(project ? { project } : {}), status: 'queued', attempt: 0, createdAt: this.now(), startedAt: null, completedAt: null, error: null, artifactIds: [] };
     job.executionState = { workspaceId: prior?.executionState?.workspaceId ?? digest([job.roomId, job.objectId]).slice(0, 32), threadId: prior?.executionState?.threadId ?? null, turnId: null, dispatchId: null, phase: 'ready', commands: [] };
-    this.save(job); this.jobs.set(jobId, job); this.rememberHead(job);
+    this.authorizations.capture(jobId, job.roomId, job.actor);
     try {
+      this.save(job); this.jobs.set(jobId, job); this.rememberHead(job);
       if (existing) this.store.applyOperation(job.roomId, { type: 'patch', id: job.objectId, patch: { data: { prompt: input.prompt, work: workSummary(job) } } }, input.actor);
       else {
         const card = { ...makeObject('widget', input.actor, input.position, { capability: 'work', owner: job.owner, prompt: job.prompt, work: workSummary(job) }), id: job.objectId, title: job.title, w: 390, h: 390 };
         this.store.applyOperation(job.roomId, { type: 'put', object: card, ...(input.pageId ? { pageId: input.pageId } : {}) }, input.actor, { requestId: `work:${jobId}:card` });
       }
-    } catch (error) { job.status = 'failed'; job.error = 'The work card could not be saved.'; this.save(job); throw error; }
+    } catch (error) { this.authorizations.forget(jobId); job.status = 'failed'; job.error = 'The work card could not be saved.'; this.save(job); throw error; }
     this.queue.push(jobId); queueMicrotask(() => this.drain()); return this.get(job.roomId, jobId);
   }
   cancel(roomId: string, jobId: string, actor: string): WorkJob {
+    this.authorizeActor(roomId, actor);
     const job = this.require(roomId, jobId, actor);
     if (activeStatus(job.status)) {
       job.status = 'cancelled'; job.completedAt = this.now(); job.error = null;
-      this.queue = this.queue.filter(id => id !== jobId); this.running.get(jobId)?.controller.abort(); this.publish(job); this.save(job);
+      this.queue = this.queue.filter(id => id !== jobId); this.running.get(jobId)?.controller.abort(); this.save(job); this.publishIfAuthorized(job);
+      if (!this.running.has(jobId)) this.authorizations.forget(jobId);
     }
     return this.get(roomId, jobId);
   }
   resume(roomId: string, jobId: string, actor: string): WorkJob {
+    this.authorizeActor(roomId, actor);
     const job = this.require(roomId, jobId, actor);
     if (this.closed) throw new AgentError('The work queue is stopping.', 503);
     if (activeStatus(job.status) || job.status === 'completed') return this.get(roomId, jobId);
     if (this.running.has(jobId)) throw new AgentError('Cancellation is still finishing. Try again shortly.', 409);
     if (record(this.target(job)?.data.work).jobId !== jobId || this.heads.get(`${roomId}:${job.objectId}`)?.jobId !== jobId) throw new AgentError('The original work card is missing or now belongs to another job.', 409);
     if (job.attempt >= 100 || this.queue.length >= 100) throw new AgentError('This work cannot be queued again yet.', 429);
-    const next = { ...job, status: 'queued' as const, error: null, completedAt: null }; this.save(next); Object.assign(job, next);
+    this.authorizations.capture(jobId, roomId, job.actor);
+    const next = { ...job, status: 'queued' as const, error: null, completedAt: null };
+    try { this.save(next); } catch (error) { this.authorizations.forget(jobId); throw error; }
+    Object.assign(job, next);
     this.queue.push(jobId); queueMicrotask(() => this.drain()); this.publish(job); return this.get(roomId, jobId);
   }
   private drain() {
@@ -155,11 +180,20 @@ export class WorkJobs {
       const id = this.queue.shift(), job = id ? this.jobs.get(id) : undefined;
       if (job?.status !== 'queued') continue;
       const controller = new AbortController();
-      const promise = Promise.resolve().then(() => this.execute(job, controller)).finally(() => { this.running.delete(job.jobId); this.trimCache(); this.drain(); });
+      const promise = Promise.resolve().then(() => this.authorizations.run(job.jobId, job.roomId, job.actor, controller, () => this.execute(job, controller)))
+        .catch(() => {
+          // Admission may expire while queued, before execute has any room authority.
+          if (activeStatus(job.status)) {
+            job.status = 'interrupted'; job.completedAt = this.now(); job.error = 'Room authorization ended. Resume explicitly with access.';
+            this.save(job);
+          }
+        })
+        .finally(() => { this.authorizations.forget(job.jobId); this.running.delete(job.jobId); this.trimCache(); this.drain(); });
       this.running.set(job.jobId, { controller, promise }); void promise.catch(() => {});
     }
   }
   private complete(job: StoredWorkJob) {
+    requireRoomAuthorization(job.roomId, 'tools');
     const output = job.output; if (!output) throw new AgentError('No work artifact was generated.');
     const finished = { ...job, status: 'completed' as const, completedAt: this.now(), error: null, artifactIds: [artifactId(job)] };
     this.store.transactCanvas(job.roomId, { jobId: job.jobId, output }, `agent:${job.provider}`, records => {
@@ -171,34 +205,50 @@ export class WorkJobs {
       const indices = records.filter((record): record is TLShape => record.typeName === 'shape' && record.parentId === target.parentId).map(shape => shape.index).sort();
       return { creates: [objectToShape(artifact, { parentId: target.parentId, index: getIndexAbove(indices.at(-1)) })], updates: [patchNativeShape(target, { data: { work: workSummary(finished) } })] };
     }, { requestId: `work:${job.jobId}:complete` });
+    // Do not durably claim completion while the artifact exists only in the room's debounce buffer.
+    this.store.flush();
     Object.assign(job, finished); this.save(job);
   }
   private async execute(job: StoredWorkJob, controller: AbortController) {
     const timer = setTimeout(() => controller.abort(), job.provider === 'spark' ? 90000 : 180000);
+    const inScope = captureRoomAuthorization();
+    // Shared provider event queues must use this job's captured capability, not their ambient context.
+    const assertAuthorized = () => inScope(() => {
+      requireRoomAuthorization(job.roomId, 'tools');
+      if (controller.signal.aborted || this.closed || !activeStatus(job.status)) throw new AgentError('Work was stopped.', 408);
+    });
     try {
       if (this.closed || job.status !== 'queued') return;
+      assertAuthorized();
       if (record(this.target(job)?.data.work).jobId !== job.jobId) throw new AgentError('The original work card is no longer available.', 409);
-      job.status = 'running'; job.attempt++; job.startedAt = this.now(); this.publish(job); this.save(job);
+      job.status = 'running'; job.attempt++; job.startedAt = this.now(); this.save(job); this.publish(job);
       if (!job.output) {
         const state = job.executionState ?? { workspaceId: digest([job.roomId, job.objectId]).slice(0, 32), threadId: null, turnId: null, dispatchId: null, phase: 'ready' as const, commands: [] };
-        const result = await this.run({ prompt: JSON.stringify({ deliverable: job.prompt, sourceCard: { id: job.objectId, title: job.title, humanOwner: job.owner }, selectedProject: job.project ? { id: job.project.id, name: job.project.name, snapshotId: job.project.snapshotId, commit: job.project.commit } : null, contextTrust: 'untrusted-meeting-data' }), provider: job.provider, reasoning: job.reasoning, fast: job.fast, jobId: job.jobId, attempt: job.attempt, state, project: job.project, onCheckpoint: next => { job.executionState = next; job.execution = { boundary: 'local-workspace', continued: state.threadId !== null, commands: next.commands, files: [] }; this.save(job); if (activeStatus(job.status)) this.publish(job); } }, controller.signal);
+        assertAuthorized();
+        const result = await this.run({ prompt: JSON.stringify({ deliverable: job.prompt, sourceCard: { id: job.objectId, title: job.title, humanOwner: job.owner }, selectedProject: job.project ? { id: job.project.id, name: job.project.name, snapshotId: job.project.snapshotId, commit: job.project.commit } : null, contextTrust: 'untrusted-meeting-data' }), provider: job.provider, reasoning: job.reasoning, fast: job.fast, jobId: job.jobId, attempt: job.attempt, state, project: job.project, assertAuthorized, onCheckpoint: next => inScope(() => { assertAuthorized(); job.executionState = next; job.execution = { boundary: 'local-workspace', continued: state.threadId !== null, commands: next.commands, files: [] }; this.save(job); this.publish(job); }) }, controller.signal);
         const output = result.output;
         if (job.status !== 'running' || this.closed) return;
+        assertAuthorized();
         if (controller.signal.aborted) throw new AgentError('Work generation timed out.', 504);
         if (Buffer.byteLength(output) > 24000) throw new AgentError('The generated artifact was too large. Narrow the request and try again.');
         job.output = workArtifactSchema.parse(JSON.parse(output)); job.execution = result.execution; this.save(job);
       }
-      if (!controller.signal.aborted && job.status === 'running' && !this.closed) this.complete(job);
+      assertAuthorized();
+      if (job.status === 'running') this.complete(job);
     } catch (error) {
       if (job.status === 'completed' || !activeStatus(job.status) || this.closed) return;
-      job.status = 'failed'; job.completedAt = this.now(); job.error = controller.signal.aborted ? 'This work timed out. Resume explicitly to try again.' : (error instanceof AgentError ? error.message : 'The agent did not return a valid artifact.').slice(0, 500);
-      this.publish(job); this.save(job);
+      let ended = error instanceof AccessError;
+      try { requireRoomAuthorization(job.roomId, 'tools'); } catch { ended = true; }
+      job.status = ended ? 'interrupted' : 'failed'; job.completedAt = this.now(); job.error = ended ? 'Room authorization ended. Resume explicitly with access.' : controller.signal.aborted ? 'This work timed out. Resume explicitly to try again.' : (error instanceof AgentError ? error.message : 'The agent did not return a valid artifact.').slice(0, 500);
+      this.save(job); this.publishIfAuthorized(job);
     } finally { clearTimeout(timer); }
   }
   async settled() { do { await Promise.resolve(); await Promise.allSettled([...this.running.values()].map(entry => entry.promise)); } while (this.queue.length || this.running.size); }
   close() {
     this.closed = true; this.queue = [];
-    for (const job of this.jobs.values()) if (activeStatus(job.status)) { job.status = 'interrupted'; job.error = 'The server stopped before this job finished. Resume explicitly to continue.'; this.running.get(job.jobId)?.controller.abort(); this.publish(job); this.save(job); }
+    try {
+      for (const job of this.jobs.values()) if (activeStatus(job.status)) { job.status = 'interrupted'; job.error = 'The server stopped before this job finished. Resume explicitly to continue.'; this.running.get(job.jobId)?.controller.abort(); this.save(job); this.publishIfAuthorized(job); }
+    } finally { this.authorizations.close(); }
   }
 }
 let jobs: WorkJobs | undefined;

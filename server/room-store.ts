@@ -1,6 +1,7 @@
 import { dataPath } from './data-path';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { writeDurableFile } from './durable-file';
 import { join } from 'node:path';
 import { TLSocketRoom, type RoomSnapshot, type TLSyncStorageTransaction } from '@tldraw/sync-core';
 import type { TLRecord } from '@tldraw/tlschema';
@@ -150,9 +151,8 @@ export class RoomStore {
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     for (const [id, entry] of this.rooms) {
       if (!entry.dirty && entry.savedClock === entry.storage.getClock()) continue;
-      const file = join(this.directory, `${id}.json`), temporary = `${file}.${process.pid}.tmp`;
-      writeFileSync(temporary, JSON.stringify(entry.storage.getSnapshot()), { mode: 0o600 });
-      renameSync(temporary, file); entry.dirty = false; entry.savedClock = entry.storage.getClock();
+      writeDurableFile(join(this.directory, `${id}.json`), JSON.stringify(entry.storage.getSnapshot()));
+      entry.dirty = false; entry.savedClock = entry.storage.getClock();
     }
   }
   close() {
@@ -174,3 +174,4 @@ export const transactCanvas = (id: string, input: unknown, actor: string, build:
 export const subscribeRoom = (id: string, listener: Listener) => store.subscribeRoom(id, listener);
 export const sweepExpired = () => store.sweepExpired();
 export const closeRoomStore = () => store.close();
+export const flushRoomStore = () => store.flush();
