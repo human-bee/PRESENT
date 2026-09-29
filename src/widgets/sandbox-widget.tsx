@@ -1,7 +1,7 @@
 import { useWidgetRuntime } from '../tldraw/widget-runtime';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ObjectPatch, RoomObject } from '../../shared/room';
-import { buildSandboxDocument, isWidgetState, readWidgetIncrement, readWidgetPatch, readWidgetLink, readWidgetRequestId } from './sandbox';
+import { buildSandboxDocument, isWidgetState, readWidgetIncrement, readWidgetPatch, readWidgetLink, readWidgetRequestId, readWidgetShortcut, WIDGET_SHORTCUT_EVENT } from './sandbox';
 
 const noReceipts: string[] = [];
 export function SandboxWidget({ object, patch, participantId, increment, receipts = noReceipts }: { object: RoomObject; patch: (value: ObjectPatch, requestId?: string) => unknown; participantId: string; increment: (key: string, by: number, requestId?: string) => unknown; receipts?: string[] }) {
@@ -21,6 +21,13 @@ export function SandboxWidget({ object, patch, participantId, increment, receipt
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const source = frame.current?.contentWindow ?? null;
+      const shortcut = readWidgetShortcut(event, source, channel, Boolean(frame.current && frame.current.ownerDocument.activeElement === frame.current));
+      if (shortcut) {
+        frame.current?.blur();
+        window.focus();
+        window.dispatchEvent(new CustomEvent(WIDGET_SHORTCUT_EVENT, { detail: shortcut }));
+        return;
+      }
       if (event.source === source && event.data?.channel === channel && event.data?.type === 'present:ready') {
         source?.postMessage({ type: 'present:state', channel, state: live.current.state, receipts: live.current.receipts }, '*');
       }

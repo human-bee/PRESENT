@@ -149,6 +149,7 @@ function browserFixture() {
   }
   class Peer {
     connectionState = 'connected'; onconnectionstatechange: (() => void) | null = null; ontrack: unknown;
+    iceGatheringState = 'complete'; localDescription = { type: 'offer', sdp: 'v=0 gathered-candidates' };
     channel = new Channel(); closed = false;
     constructor() { peers.push(this); }
     createDataChannel() { return this.channel; } addTrack() {} getReceivers() { return []; }
@@ -166,6 +167,7 @@ function browserFixture() {
   install('Audio', class { autoplay = false; muted = false; srcObject: unknown; async play() {} pause() {} });
   install('fetch', async (url: string, init: RequestInit) => {
     const path = String(url).split('?')[0], body = path === '/api/voice/session' ? Object.fromEntries(new URL(String(url), 'http://test').searchParams) : JSON.parse(String(init.body));
+    if (path === '/api/voice/session') assert.equal(init.body, 'v=0 gathered-candidates', 'send gathered localDescription, not the original offer');
     requests.push({ path, body, signal: init.signal });
     const gate = path === '/api/voice/tool' ? toolGate : path === '/api/voice/transcript' ? captionGate : undefined;
     if (gate) return new Promise<Response>((resolve, reject) => {

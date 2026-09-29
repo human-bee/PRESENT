@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { RoomStore } from '../../server/room-store';
@@ -126,7 +127,9 @@ test('recorded long meeting: three participants, sprawling history, real widget 
   } finally {
     const percentile = (values: number[], fraction: number) => values.sort((a, b) => a - b)[Math.max(0, Math.ceil(values.length * fraction) - 1)];
     const summarize = (key: 'localMs' | 'peerMs') => ({ p50: percentile(samples.map(s => s[key]), .5), p95: percentile(samples.map(s => s[key]), .95), p99: percentile(samples.map(s => s[key]), .99), max: Math.max(0, ...samples.map(s => s[key])), underOneSecond: samples.filter(s => s[key] < 1000).length });
-    await info.attach('meeting-soak-evidence', { body: JSON.stringify({ boundary: 'Real Chromium UI with synthetic preloaded history. No provider reasoning, real speech, TTS, WAN, or physical audio claim. Three independent contexts on one CI host.', wallClockMs: performance.now() - started, history: { retained: history.entries.length, omitted: history.omitted }, count: samples.length, local: summarize('localMs'), peer: summarize('peerMs'), errors, milestones, samples }, null, 2), contentType: 'application/json' });
+    const evidence = info.outputPath('meeting-soak-evidence.json');
+    await writeFile(evidence, JSON.stringify({ boundary: 'Real Chromium UI with synthetic preloaded history. No provider reasoning, real speech, TTS, WAN, or physical audio claim. Three independent contexts on one CI host.', wallClockMs: performance.now() - started, history: { retained: history.entries.length, omitted: history.omitted }, count: samples.length, local: summarize('localMs'), peer: summarize('peerMs'), errors, milestones, samples }, null, 2));
+    await info.attach('meeting-soak-evidence', { path: evidence, contentType: 'application/json' });
     await Promise.all(contexts.map(context => context.close()));
     for (const [i, video] of videos.entries()) await info.attach(`participant-${i}-recording`, { path: await video.path(), contentType: 'video/webm' });
   }

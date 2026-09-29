@@ -5,6 +5,7 @@ import { controlVideo } from '../widgets/youtube-controls';
 import { createAudioInput, type AudioInput } from './audio-input';
 import { createCanvasContextSender, readCanvasView } from './canvas-context';
 import { createCaptionQueue } from './caption-queue';
+import { waitForIceGathering } from './ice';
 import { createVoiceLifecycle, VoiceFailure, waitAtMost, pauseVoice } from './lifecycle';
 import { voicePlacement } from './placement';
 import { createRealtimeEvents, voiceError, type RealtimeEnvelope, type VoiceMode, type VoiceStatus, type VoiceTranscript } from './realtime-events';
@@ -183,13 +184,16 @@ export function createVoiceTransport(options: VoiceTransportOptions) {
         };
         const offer = await pc.createOffer(); if (!current()) return;
         await pc.setLocalDescription(offer); if (!current()) return;
+        await waitForIceGathering(pc, session.abort.signal); if (!current()) return;
+        const sdp = pc.localDescription?.sdp;
+        if (!sdp) throw new Error('The browser did not produce a voice connection offer.');
         const query = new URLSearchParams({ roomId, actor: selfId, sessionId: session.id, capture, name, mode: options.mode() });
         if (options.viewport()) query.set('viewport', JSON.stringify(options.viewport()));
         const previousSession = sessionStorage.getItem(ownershipKey);
         if (previousSession && previousSession !== session.id) await stopRemote(previousSession, session.abort.signal);
         if (!current()) return;
         sessionStorage.setItem(ownershipKey, session.id); session.requested = true;
-        const response = await fetch(`/api/voice/session?${query}`, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: offer.sdp, signal: session.abort.signal });
+        const response = await fetch(`/api/voice/session?${query}`, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: sdp, signal: session.abort.signal });
         const answer = await response.text();
         if (!response.ok) {
           let detail = 'Voice could not connect.';

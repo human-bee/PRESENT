@@ -4,7 +4,7 @@ const baseURL = process.env.PRESENT_E2E_URL ?? 'http://127.0.0.1:4320';
 
 export default defineConfig({
   testDir: './tests/e2e',
-  testIgnore: ['**/access-profile.spec.ts', '**/meeting-soak.spec.ts'],
+  testIgnore: ['**/access-profile.spec.ts', '**/meeting-soak.spec.ts', '**/cloud-smoke.spec.ts'],
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,

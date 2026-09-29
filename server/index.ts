@@ -48,6 +48,8 @@ let closing = false;
 const server = createServer(async (req, res) => {
   commonHeaders(res);
   if (closing) return json(res, 503, { error: 'The room is restarting. Reconnect in a moment.' });
+  // Platform probes may not use the public Host. This reveals no rooms, identity, or configuration.
+  if (req.method === 'GET' && req.url === '/healthz') return json(res, 200, { ok: true });
   const hostOrigin = `http://127.0.0.1:${port}`, sandboxOrigin = `http://localhost:${port}`;
   if (!alpha && handleMcpSandbox(req, res, { hostOrigin, sandboxOrigin })) return;
   // localhost is reserved for the cross-origin MCP sandbox. Only top-level UI

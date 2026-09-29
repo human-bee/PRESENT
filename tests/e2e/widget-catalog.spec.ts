@@ -84,4 +84,17 @@ test('composer keyboard shortcut and panel exclusivity survive repeated toggles'
   await expect(page.locator('.add-menu')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(page.locator('.popover')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Add to room', exact: true }).click();
+  const document = CAPABILITIES.find(item => item.title === 'Shared document')!;
+  await page.getByRole('button', { name: `${document.title} ${document.description}`, exact: true }).click();
+  const editor = page.frameLocator('iframe[title="Shared document"]').getByRole('textbox', { name: 'Document Markdown' });
+  await editor.fill('Keep ordinary typing inside this widget.');
+  await editor.press('ControlOrMeta+k');
+  await expect(page.getByRole('textbox', { name: 'Ask the room' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await editor.click();
+  await editor.press('Escape');
+  await page.keyboard.press('ControlOrMeta+k');
+  await expect(page.getByRole('textbox', { name: 'Ask the room' })).toBeFocused();
+  await expect(editor).toHaveValue('Keep ordinary typing inside this widget.');
 });

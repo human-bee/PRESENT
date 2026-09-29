@@ -6,7 +6,7 @@ This native application includes RoomOS activities and a signed invitation profi
 
 ## Run
 
-Requires Node 22.12+ and an installed, signed-in Codex CLI for subscription-backed model work.
+Requires Node 24+ and an installed, signed-in Codex CLI for subscription-backed model work.
 
 ```sh
 npm install
@@ -55,7 +55,7 @@ Browser tests use Playwright Chromium (`npx playwright install chromium`), or in
 
 ## Hosting boundary
 
-Local mode binds loopback and checks Host/Origin. Network hosting requires the signed invitation profile and one durable Node server that owns the native rooms. See [cloud readiness](docs/cloud-readiness.md) and [room access](docs/room-access.md). Shared room data is visible to participants; hiding a card does not make its content private. Hosted background work remains unavailable until its per-job authorization adapter is integrated.
+Local mode binds loopback and checks Host/Origin. Network hosting requires the signed invitation profile and one durable Node server that owns the native rooms. See [cloud readiness](docs/cloud-readiness.md) and [room access](docs/room-access.md). Shared room data is visible to participants; hiding a card does not make its content private. Hosted work captures per-job signed authorization, aborts on revocation, and requires explicit authorized resume after restart. A configured execution provider is still required.
 
 Voice uses `gpt-live-1` WebRTC with a delegated backend. Connection, tool execution and image delivery have saved live proof; the complete combined human conversation remains an acceptance target. Cerebras is optional and reports billing errors explicitly. Physical-device meetings, remote deployment, several older external integrations and universal latency improvement remain unproved. Read the capability report for the precise implemented and missing scope.
 

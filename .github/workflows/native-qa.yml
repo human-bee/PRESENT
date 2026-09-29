@@ -5,7 +5,12 @@ on:
     branches: ['codex/present-ui-qa-*']
   pull_request:
     branches: ['codex/present-cloud-base-20260921']
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      cloud_staging:
+        description: 'Also exercise the isolated signed Railway staging service'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -89,5 +94,47 @@ jobs:
         if: always()
         with:
           name: native-meeting-soak
-          path: test-results/
+          path: |
+            test-results/**/*.png
+            test-results/**/*.json
+            test-results/**/*.md
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-meeting-participant-0
+          path: test-results/**/participant-0/*.webm
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-meeting-participant-1
+          path: test-results/**/participant-1/*.webm
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-meeting-participant-2
+          path: test-results/**/participant-2/*.webm
+          retention-days: 7
+
+  cloud-staging:
+    if: github.event_name == 'workflow_dispatch' && inputs.cloud_staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Signed hosted room, real WebSocket peers and widget actions
+        run: npx playwright test --config tests/cloud-playwright.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-cloud-staging
+          path: test-results/cloud/**/*.json
           retention-days: 7

@@ -29,6 +29,8 @@ import { RoomMemory } from './room-memory';
 import { fitCanvas, focusResult } from './tldraw/focus';
 import { ActivityController } from './activities/activity-stage';
 import { savePendingGeneration, loadPendingGeneration, forgetPendingGeneration, type PendingGeneration } from './requests/pending-generation';
+import { WIDGET_SHORTCUT_EVENT } from './widgets/sandbox';
+import { findOpenPosition } from './tldraw/placement';
 
 export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: RoomGrant; onRoomOpen?: (id: string) => void | Promise<void>; onAccessLeave?: () => void } = {}) {
   const viewer = accessGrant?.role === 'viewer';
@@ -64,16 +66,18 @@ export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: 
   useEffect(() => { localStorage.setItem('present:name', name); }, [name]);
   useEffect(() => { if (!toast) return; const timeout = setTimeout(() => setToast(''), 6500); return () => clearTimeout(timeout); }, [toast]);
   const attempt = (op: Operation) => { void room.act(op).catch(error => setToast(error.message)); };
-  const position = () => {
-    const x = (innerWidth / 2 - viewport.x) / viewport.zoom - 180;
-    const y = (innerHeight / 2 - viewport.y) / viewport.zoom - 155;
-    const overlap = room.room.objects.filter(o => Math.abs(o.x - x) < 220 && Math.abs(o.y - y) < 180).length;
-    return { x: x + overlap * 38, y: y + overlap * 35 };
+  const position = (size = { w: 390, h: 390 }) => {
+    const editor = room.editor, view = editor?.getViewportPageBounds();
+    const x = (view ? view.x + view.w / 2 : (innerWidth / 2 - viewport.x) / viewport.zoom) - size.w / 2;
+    const y = (view ? view.y + view.h / 2 : (innerHeight / 2 - viewport.y) / viewport.zoom) - size.h / 2;
+    const occupied = editor?.getCurrentPageShapes().flatMap(shape => { const bounds = editor.getShapePageBounds(shape); return bounds ? [bounds] : []; }) ?? room.room.objects;
+    return findOpenPosition({ x, y, w: size.w, h: size.h }, occupied);
   };
   function add(kind: AddKind) {
     const editor = room.editor;
     if (!editor || viewer) return;
-    const object = isCapabilityKind(kind) ? createCapability(kind, room.selfId, position()) : createStarter(kind, room.selfId, position());
+    const object = isCapabilityKind(kind) ? createCapability(kind, room.selfId, { x: 0, y: 0 }) : createStarter(kind, room.selfId, { x: 0, y: 0 });
+    Object.assign(object, position(object));
     const index = getIndexAbove(editor.getCurrentPageShapesSorted().at(-1)?.index);
     editor.markHistoryStoppingPoint(`Add ${kind}`);
     editor.createShape(objectToShape(object, { parentId: editor.getCurrentPageId(), index }));
@@ -131,13 +135,18 @@ export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: 
     return () => clearInterval(timer);
   }, [busy, room.editor]);
   useEffect(() => {
+    const shortcut = (command: unknown) => {
+      if (command === 'composer') { setPanel(null); input.current?.focus(); }
+      if (command === 'escape') { setPanel(null); input.current?.blur(); }
+    };
     function key(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'k') { event.preventDefault(); input.current?.focus(); return; }
-      if (event.key === 'Escape') { setPanel(null); input.current?.blur(); }
-      if ((event.target as HTMLElement).closest('input,textarea,[contenteditable="true"],iframe')) return;
-
+      if (event.isComposing) return;
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') { event.preventDefault(); shortcut('composer'); }
+      if (event.key === 'Escape') shortcut('escape');
     }
-    window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
+    const widgetKey = (event: Event) => shortcut((event as CustomEvent).detail);
+    window.addEventListener('keydown', key); window.addEventListener(WIDGET_SHORTCUT_EVENT, widgetKey);
+    return () => { window.removeEventListener('keydown', key); window.removeEventListener(WIDGET_SHORTCUT_EVENT, widgetKey); };
   }, []);
   const toggle = (next: typeof panel) => setPanel(panel === next ? null : next);
   return <>

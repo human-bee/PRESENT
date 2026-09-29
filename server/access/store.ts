@@ -3,6 +3,7 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, re
 import { join } from 'node:path';
 import { z } from 'zod';
 import { roleAllows, type RoomGrant, type RoomInvite, type RoomPermission } from '../../shared/room-access';
+import { lockAccessDirectory } from './process-lock';
 
 const id = () => randomBytes(24).toString('hex');
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -21,16 +22,16 @@ export class RoomAccess {
   private ttl: number;
   private closed = false;
   private released = false;
+  private releaseLock: () => void;
   private listeners = new Set<() => void>();
   constructor(private options: AccessOptions) {
     if (Buffer.byteLength(options.secret) < 32) throw new Error('PRESENT_ACCESS_SECRET must contain at least 32 bytes supplied by the operator.');
     this.secret = options.secret; this.now = options.now ?? Date.now; this.ttl = options.sessionTtlMs ?? 7 * 86400_000;
     if (!Number.isSafeInteger(this.ttl) || this.ttl < 1000 || this.ttl > 30 * 86400_000) throw new Error('Invalid session lifetime.');
     mkdirSync(options.directory, { recursive: true, mode: 0o700 });
-    const lock = openSync(join(options.directory, 'access.lock'), 'wx', 0o600);
-    closeSync(lock);
+    this.releaseLock = lockAccessDirectory(options.directory);
     try { this.state = existsSync(this.path) ? schema.parse(JSON.parse(readFileSync(this.path, 'utf8'))) : { version: 1, sessions: {}, rooms: {} }; }
-    catch (error) { unlinkSync(join(options.directory, 'access.lock')); throw error; }
+    catch (error) { this.releaseLock(); throw error; }
   }
   private get path() { return join(this.options.directory, 'access.json'); }
   private commit(change: (draft: State) => void) {
@@ -56,7 +57,7 @@ export class RoomAccess {
   }
   private notify() { for (const listener of this.listeners) try { listener(); } catch { /* Other subscribers must still be invalidated. */ } }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-  close() { if (this.released) return; this.released = true; this.closed = true; this.notify(); this.listeners.clear(); if (existsSync(join(this.options.directory, 'access.lock'))) unlinkSync(join(this.options.directory, 'access.lock')); }
+  close() { if (this.released) return; this.released = true; this.closed = true; this.notify(); this.listeners.clear(); this.releaseLock(); }
   private sign(payload: string) { return createHmac('sha256', this.secret).update(`present-session-v1:${payload}`).digest('base64url'); }
   createSession() {
     const userId = id(), expiresAt = this.now() + this.ttl;
