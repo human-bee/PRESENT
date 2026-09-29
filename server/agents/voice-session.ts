@@ -24,7 +24,12 @@ export async function createVoiceSession(sdp: string, url: URL, signal: AbortSig
     method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ session, transport: { type: 'webrtc', sdp } }), signal,
   });
-  if (!response.ok) throw new AgentError(response.status === 429 ? 'GPT-Live voice is busy. Try again shortly.' : 'The GPT-Live connection could not start. Try again.', response.status === 429 ? 429 : 502);
+  if (!response.ok) {
+    // Never expose upstream bodies: they may contain account or credential details.
+    if (response.status === 401 || response.status === 403) throw new AgentError('The server cannot access GPT-Live. Ask the operator to verify its OpenAI key and model access.', 424);
+    if (response.status === 429) throw new AgentError('GPT-Live voice is busy or its usage limit has been reached. Try again shortly.', 429);
+    throw new AgentError('The GPT-Live connection could not start. Try again.', 502);
+  }
   const result = await response.json();
   if (typeof result.transport?.sdp !== 'string') throw new AgentError('GPT-Live returned no connection answer.', 502);
   return result.transport.sdp;

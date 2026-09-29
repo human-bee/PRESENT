@@ -1,6 +1,6 @@
 # Native PRESENT cloud readiness — 29 September 2026
 
-The native build, signed HTTP/WebSocket contracts and provider-free Chromium UI tests run locally and in GitHub Actions. An isolated Railway staging service and persistent volume are configured; deployment and hosted browser verification are still pending. The project remains a Node service, not a static website.
+The native build, signed HTTP/WebSocket contracts and provider-free Chromium UI tests run locally and in GitHub Actions. Isolated Railway staging is deployed at https://present-native-production.up.railway.app with a persistent 5 GB volume and a verified HTTP health response; hosted browser verification is still pending. The project remains a Node service, not a static website.
 
 ## Runtime contract
 
@@ -11,6 +11,7 @@ Use Node 24 or later and a single long-lived process. Build with `npm ci` and `n
 | `NODE_ENV` | `production` |
 | `PRESENT_HOST` | `0.0.0.0` for a container; loopback behind a local proxy |
 | `PRESENT_PORT` | Platform target port, e.g. `4317` |
+| `PORT` | On Railway, match `PRESENT_PORT` so the health probe reaches the listener |
 | `PRESENT_ACCESS_MODE` | `invite` |
 | `PRESENT_ACCESS_ORIGIN` | Exact external HTTPS origin, no trailing slash |
 | `PRESENT_ACCESS_SECRET` | Stable high-entropy operator secret, at least 32 bytes |

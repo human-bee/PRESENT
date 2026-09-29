@@ -23,8 +23,6 @@ export function SandboxWidget({ object, patch, participantId, increment, receipt
       const source = frame.current?.contentWindow ?? null;
       const shortcut = readWidgetShortcut(event, source, channel, Boolean(frame.current && frame.current.ownerDocument.activeElement === frame.current));
       if (shortcut) {
-        frame.current?.blur();
-        window.focus();
         window.dispatchEvent(new CustomEvent(WIDGET_SHORTCUT_EVENT, { detail: shortcut }));
         return;
       }

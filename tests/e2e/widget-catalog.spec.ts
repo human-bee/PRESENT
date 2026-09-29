@@ -44,6 +44,7 @@ test('every built-in instrument adds, shares, moves and survives reload', async 
     const peerWidget = peer.locator(`.tl-shape[data-shape-id="shape:${id}"]`);
     const peerStyleBefore = await peerWidget.getAttribute('style');
     const title = widget.locator('[title="Drag to move"]');
+    await title.hover(); // Wait for the visible overview camera to settle before grabbing.
     const box = await title.boundingBox();
     if (!box) throw new Error('Dice table is not visible for dragging');
     const startX = box.x + box.width / 2, startY = box.y + box.height / 2;

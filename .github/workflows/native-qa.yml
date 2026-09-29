@@ -119,7 +119,7 @@ jobs:
           retention-days: 7
 
   cloud-staging:
-    if: github.event_name == 'workflow_dispatch' && inputs.cloud_staging
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.cloud_staging)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -130,6 +130,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Wait for isolated staging health
+        run: curl --fail --retry 60 --retry-delay 5 --retry-all-errors https://present-native-production.up.railway.app/healthz
       - name: Signed hosted room, real WebSocket peers and widget actions
         run: npx playwright test --config tests/cloud-playwright.config.ts
       - uses: actions/upload-artifact@v4

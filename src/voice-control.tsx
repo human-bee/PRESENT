@@ -16,7 +16,8 @@ export function VoiceControl({ roomId, selfId, position, audioStreams, canvasCon
 }) {
   const [mode, setMode] = useState<'ambient' | 'conversation'>('ambient');
   const [capture, setCapture] = useState<'personal' | 'shared'>('personal');
-  const voice = useVoice(roomId, { selfId, viewport: position(), audioStreams, mode, capture, name: localStorage.getItem('present:name') || 'Participant', canvasContext, provider, generationOptions });
+  // Placement scans only when an actual voice action needs it, not on every caption render.
+  const voice = useVoice(roomId, { selfId, viewport: position, audioStreams, mode, capture, name: localStorage.getItem('present:name') || 'Participant', canvasContext, provider, generationOptions });
   const active = voice.status !== 'idle' && voice.status !== 'error';
   return <>
     <button type="button" className={`dock-button${active ? ' active' : ''}`} aria-label={active ? 'Stop listening' : 'Start listening'} aria-pressed={active} title={active ? 'Stop listening' : 'Let the agent listen'} onContextMenu={event => { event.preventDefault(); setOpen(true); }} disabled={!selfId} onClick={() => { if (active) void voice.stop(); else { setOpen(true); void voice.start(); } }}><Icon name="spark"/></button>

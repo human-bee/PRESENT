@@ -5,7 +5,7 @@ import type { VoiceMode, VoiceStatus, VoiceTranscript } from './realtime-events'
 import { createVoiceTransport } from './transport';
 export type { VoiceMode, VoiceStatus, VoiceTranscript } from './realtime-events';
 export { exportVoiceTiming } from './timing';
-export type VoiceOptions = { provider?: AgentProvider; generationOptions?: GenerationOptions; selfId: string; viewport?: { x: number; y: number }; audioStreams?: MediaStream[]; mode?: VoiceMode; capture?: 'personal' | 'shared'; name?: string; canvasContext?: CanvasContextProvider };
+export type VoiceOptions = { provider?: AgentProvider; generationOptions?: GenerationOptions; selfId: string; viewport?: { x: number; y: number } | (() => { x: number; y: number } | undefined); audioStreams?: MediaStream[]; mode?: VoiceMode; capture?: 'personal' | 'shared'; name?: string; canvasContext?: CanvasContextProvider };
 
 export function useVoice(roomId: string, { selfId, viewport, audioStreams = [], mode = 'ambient', capture = 'personal', name = 'Participant', canvasContext, provider = 'luna', generationOptions = {} }: VoiceOptions) {
   const [status, setStatus] = useState<VoiceStatus>('idle');
@@ -19,7 +19,7 @@ export function useVoice(roomId: string, { selfId, viewport, audioStreams = [], 
     // update the UI or dispose media belonging to a replacement.
     let visible = true;
     const voice = createVoiceTransport({ beforeConnect: () => retiring.current, roomId, selfId, capture, name,
-      viewport: () => latest.current.viewport, streams: () => latest.current.audioStreams,
+      viewport: () => typeof latest.current.viewport === 'function' ? latest.current.viewport() : latest.current.viewport, streams: () => latest.current.audioStreams,
       mode: () => latest.current.mode, context: () => latest.current.canvasContext,
       generation: () => ({ provider: latest.current.provider, ...latest.current.generationOptions }),
       status: value => { if (visible) setStatus(value); }, error: value => { if (visible) setError(value); },

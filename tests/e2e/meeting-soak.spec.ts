@@ -105,11 +105,13 @@ test('recorded long meeting: three participants, sprawling history, real widget 
         await pages[participant].keyboard.press('Escape');
         await pages[participant].getByRole('button', { name: 'Start listening', exact: true }).click({ button: 'right' });
         await expect(pages[participant].locator('.voice-panel')).toContainText('Synthetic meeting turn 899');
+        await expect(pages[participant].locator('.voice-transcript p').last()).toBeInViewport();
         await pages[participant].keyboard.press('Escape');
       }
       if (cycle % 36 === 0) {
         const target = (await read()).find(object => object.title === title)!;
         const header = pages[participant].locator(`.tl-shape[data-shape-id="shape:${target.id}"] [title="Drag to move"]`);
+        await header.hover();
         const box = await header.boundingBox(); expect(box).not.toBeNull();
         await pages[participant].mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
         await pages[participant].mouse.down();

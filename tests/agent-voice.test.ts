@@ -38,6 +38,25 @@ test('Live WebRTC sends JSON transport and separates voice from backend tools', 
   finally { globalThis.fetch = original; if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key; }
 });
 
+test('Live setup reports missing credentials and non-retryable access failures without leaking upstream details', async () => {
+  const original = fetch, key = process.env.OPENAI_API_KEY;
+  const url = new URL(`http://localhost/api/voice/session?roomId=${randomBytes(16).toString('hex')}`);
+  try {
+    delete process.env.OPENAI_API_KEY;
+    globalThis.fetch = async () => { throw new Error('No provider request is allowed without a key'); };
+    await assert.rejects(createVoiceSession('v=0', url, new AbortController().signal), { status: 503 });
+    process.env.OPENAI_API_KEY = 'test';
+    for (const status of [401, 403, 429, 500]) {
+      globalThis.fetch = async () => new Response('private upstream account details', { status });
+      await assert.rejects(createVoiceSession('v=0', url, new AbortController().signal), error => {
+        assert.doesNotMatch(String(error), /private upstream/);
+        assert.equal((error as { status: number }).status, status === 401 || status === 403 ? 424 : status === 429 ? 429 : 502);
+        return true;
+      });
+    }
+  } finally { globalThis.fetch = original; if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key; }
+});
+
  test('voice network errors explain server connectivity without blaming microphone or model', () => {
   assert.match(voiceError(new TypeError('Failed to fetch')), /room server.*start listening again/);
   assert.equal(voiceError(new Error('A concrete tool validation error')), 'A concrete tool validation error');

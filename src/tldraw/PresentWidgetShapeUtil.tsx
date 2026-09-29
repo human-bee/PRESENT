@@ -78,6 +78,9 @@ export class PresentWidgetShapeUtil extends BaseBoxShapeUtil<PresentWidgetShape>
   }
   override canEdit() { return false; }
   override canScroll() { return true; }
+  // At overview zoom, the native edge hit area covers the entire 34px title bar.
+  // Keep overview dragging unambiguous; resize handles return on zoom-in.
+  override hideResizeHandles() { return this.editor.getZoomLevel() < .6; }
   override getText(shape: PresentWidgetShape) { return shape.props.title; }
   override onResize(shape: PresentWidgetShape, info: TLResizeInfo<PresentWidgetShape>) {
     return resizeBox(shape, info, { minWidth: 220, minHeight: shape.props.data.capability === 'youtube' ? 234 : 160, maxWidth: 4000, maxHeight: 4000 });

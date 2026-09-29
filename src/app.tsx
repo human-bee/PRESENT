@@ -141,13 +141,18 @@ export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: 
     };
     function key(event: KeyboardEvent) {
       if (event.isComposing) return;
-      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') { event.preventDefault(); shortcut('composer'); }
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') { event.preventDefault(); event.stopPropagation(); shortcut('composer'); }
       if (event.key === 'Escape') shortcut('escape');
     }
-    const widgetKey = (event: Event) => shortcut((event as CustomEvent).detail);
-    window.addEventListener('keydown', key); window.addEventListener(WIDGET_SHORTCUT_EVENT, widgetKey);
-    return () => { window.removeEventListener('keydown', key); window.removeEventListener(WIDGET_SHORTCUT_EVENT, widgetKey); };
-  }, []);
+    const widgetKey = (event: Event) => {
+      const command = (event as CustomEvent).detail;
+      // Blurring an iframe alone can strand keyboard focus in its browsing context.
+      if (command === 'escape') room.editor?.focus();
+      shortcut(command);
+    };
+    window.addEventListener('keydown', key, true); window.addEventListener(WIDGET_SHORTCUT_EVENT, widgetKey);
+    return () => { window.removeEventListener('keydown', key, true); window.removeEventListener(WIDGET_SHORTCUT_EVENT, widgetKey); };
+  }, [room.editor]);
   const toggle = (next: typeof panel) => setPanel(panel === next ? null : next);
   return <>
     {!viewer && <ActivityController editor={room.editor} roomId={roomId} selfId={room.selfId} name={name} connected={room.connected}/>}

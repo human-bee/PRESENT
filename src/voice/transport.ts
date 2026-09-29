@@ -188,7 +188,8 @@ export function createVoiceTransport(options: VoiceTransportOptions) {
         const sdp = pc.localDescription?.sdp;
         if (!sdp) throw new Error('The browser did not produce a voice connection offer.');
         const query = new URLSearchParams({ roomId, actor: selfId, sessionId: session.id, capture, name, mode: options.mode() });
-        if (options.viewport()) query.set('viewport', JSON.stringify(options.viewport()));
+        const viewport = options.viewport();
+        if (viewport) query.set('viewport', JSON.stringify(viewport));
         const previousSession = sessionStorage.getItem(ownershipKey);
         if (previousSession && previousSession !== session.id) await stopRemote(previousSession, session.abort.signal);
         if (!current()) return;
