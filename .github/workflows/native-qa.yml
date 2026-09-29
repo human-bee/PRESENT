@@ -149,9 +149,13 @@ jobs:
   diagnostic-profile:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      matrix:
+        recording: ['on', 'off']
     env:
       PRESENT_SOAK_SECONDS: '45'
       PRESENT_CAPTURE_PROFILE: '1'
+      PRESENT_NO_RECORDING: ${{ matrix.recording == 'off' && '1' || '0' }}
       PRESENT_ENV_FILE: /tmp/present-no-provider-environment
     steps:
       - uses: actions/checkout@v4
@@ -166,7 +170,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: typing-profile
+          name: typing-profile-${{ matrix.recording }}
           path: |
             test-results/**/*.json
             test-results/**/*.png

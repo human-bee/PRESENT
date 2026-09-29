@@ -30,7 +30,7 @@ test('recorded long meeting: three participants, sprawling history, real widget 
   const history = readTranscriptWindow(fixture.getCanvasRecords(roomId)); fixture.close();
   expect(history.entries).toHaveLength(500); expect(history.omitted).toBe(400);
   const contexts = await Promise.all(['Maya', 'Alex', 'Observer'].map((name, i) => browser.newContext({ baseURL,
-    viewport: { width: 1440, height: 900 }, recordVideo: { dir: info.outputPath(`participant-${i}`), size: { width: 960, height: 600 } },
+    viewport: { width: 1440, height: 900 }, ...(process.env.PRESENT_NO_RECORDING === '1' ? {} : { recordVideo: { dir: info.outputPath(`participant-${i}`), size: { width: 960, height: 600 } } }),
   }).then(async context => {
     // Init scripts also run in sandboxed widget frames, which intentionally cannot access storage.
     await context.addInitScript(name => { if (window === window.top) localStorage.setItem('present:name', name); }, name);
@@ -163,6 +163,6 @@ test('recorded long meeting: three participants, sprawling history, real widget 
     await writeFile(evidence, JSON.stringify({ boundary: 'Real Chromium UI with synthetic preloaded history. No provider reasoning, real speech, TTS, WAN, or physical audio claim. Three independent contexts on one CI host. local/peer summaries include Playwright polling; documentDOM observes the final real input to peer textarea update on the same browser clock, not compositor paint.', wallClockMs: performance.now() - started, history: { retained: history.entries.length, omitted: history.omitted }, count: samples.length, local: summarize('localMs'), peer: summarize('peerMs'), errors, milestones, samples, documentDOM, operationRequests }, null, 2));
     await info.attach('meeting-soak-evidence', { path: evidence, contentType: 'application/json' });
     await Promise.all(contexts.map(context => context.close()));
-    for (const [i, video] of videos.entries()) await info.attach(`participant-${i}-recording`, { path: await video.path(), contentType: 'video/webm' });
+    for (const [i, video] of videos.entries()) if (video) await info.attach(`participant-${i}-recording`, { path: await video.path(), contentType: 'video/webm' });
   }
 });
