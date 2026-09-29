@@ -19,6 +19,12 @@ const directory = mkdtempSync(join(tmpdir(), 'present-sync-benchmark-'));
 const store = new RoomStore({ directory, debounceMs: 150 });
 const server = createServer();
 const roomId = 'c'.repeat(32), sockets: WebSocket[] = [];
+// Native sessions require protocol pings even while receiving server-side edits.
+// Mirror the real client so longer benchmarks do not measure idle-session expiry.
+const keepAlive = setInterval(() => {
+  for (const socket of sockets) if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'ping' }));
+}, 5000);
+keepAlive.unref();
 const boundedCount = (name: string, fallback: number, max: number) => {
   const value = Number(process.env[name] ?? fallback);
   if (!Number.isInteger(value) || value < 0 || value > max) throw new Error(`${name} must be an integer between 0 and ${max}.`);
@@ -32,6 +38,7 @@ function reader(socket: WebSocket) {
   const pending: Message[] = [], listeners = new Set<() => void>();
   socket.on('message', raw => {
     const value = JSON.parse(raw.toString());
+    if (value.type === 'pong') return;
     pending.push(...(value.type === 'data' ? value.data : [value]));
     for (const notify of listeners) notify();
   });
@@ -87,6 +94,7 @@ try {
   };
   console.log(JSON.stringify({ boundary: 'Server operation start through receipt of native WebSocket patch by all four loopback peers. No browser, acoustic audio or provider time.', peers: peers.length, objects: objects.length + backgroundNotes, rounds, categories: Object.fromEntries(Object.entries(samples).map(([name, values]) => [name, stats(values)])) }, null, 2));
 } finally {
+  clearInterval(keepAlive);
   for (const socket of sockets) socket.terminate(); closeSockets();
   await new Promise<void>(resolve => server.close(() => resolve()));
   store.close(); rmSync(directory, { recursive: true, force: true });
