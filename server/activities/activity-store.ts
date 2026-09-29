@@ -4,6 +4,7 @@ import {
   readRoomOS,
   retainActivity,
   makeActivity,
+  ACTIVITY_STAGE_SIZE,
   type RoomOS,
   type Activity,
   type ActivityKind,
@@ -72,8 +73,7 @@ export class NativeActivities {
       ...makeObject('widget', actor, position, { capability: 'activity-stage', activityId: id }),
       id,
       title: a.topic,
-      w: 1180,
-      h: 780,
+      ...ACTIVITY_STAGE_SIZE,
     };
     return { a, shape: objectToShape(object, { parentId: pageId, index: getIndexAbove(indices.at(-1)) }) };
   }

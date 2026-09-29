@@ -13,6 +13,7 @@ import { emptyAudience, retainAudience } from './audience';
 export * from './activity-records';
 export * from './activity-templates';
 export * from './activity-commands';
+export const ACTIVITY_STAGE_SIZE = { w: 1180, h: 780 } as const;
 export function readRoomOS(records: readonly TLRecord[]): RoomOS {
   const document = records.find((record) => record.typeName === 'document');
   const present = document?.meta.present;
