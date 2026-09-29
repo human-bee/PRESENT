@@ -17,6 +17,11 @@ const scenarios: Scenario[] = [
   { title: 'Meeting brief', button: button('brief'), exercise: async (a, b) => {
     await a.getByLabel('Meeting summary').fill('A shared demo plan');
     await expect(b.getByLabel('Meeting summary')).toHaveValue('A shared demo plan');
+    await b.getByLabel('Meeting summary').fill('A correction from the second participant');
+    await expect(a.getByLabel('Meeting summary')).toHaveValue('A correction from the second participant');
+    await expect(a.getByLabel('Meeting summary')).toBeFocused();
+    await a.getByLabel('Meeting summary').fill('A shared demo plan, with both corrections');
+    await expect(b.getByLabel('Meeting summary')).toHaveValue('A shared demo plan, with both corrections');
     await a.getByLabel('New decision', { exact: true }).fill('Keep it simple');
     await a.getByLabel('New decision', { exact: true }).press('Enter');
     await expect(b.getByLabel('Decision text')).toHaveValue('Keep it simple');

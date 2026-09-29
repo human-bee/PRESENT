@@ -30,7 +30,11 @@ test('recorded long meeting: three participants, sprawling history, real widget 
   expect(history.entries).toHaveLength(500); expect(history.omitted).toBe(400);
   const contexts = await Promise.all(['Maya', 'Alex', 'Observer'].map((name, i) => browser.newContext({ baseURL,
     viewport: { width: 1440, height: 900 }, recordVideo: { dir: info.outputPath(`participant-${i}`), size: { width: 960, height: 600 } },
-  }).then(async context => { await context.addInitScript(name => localStorage.setItem('present:name', name), name); return context; })));
+  }).then(async context => {
+    // Init scripts also run in sandboxed widget frames, which intentionally cannot access storage.
+    await context.addInitScript(name => { if (window === window.top) localStorage.setItem('present:name', name); }, name);
+    return context;
+  })));
   const pages = await Promise.all(contexts.map(context => context.newPage()));
   const videos = pages.map(page => page.video()!);
   const errors: string[] = [], samples: { action: string; participant: number; atMs: number; localMs: number; peerMs: number }[] = [];

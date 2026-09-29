@@ -5,6 +5,7 @@ import type { RoomGrant } from '../../shared/room-access';
 import { JoinRoom, roomAccessClient, takeRoomInvite } from './room-access';
 import { setSignedParticipant } from '../identity';
 import { watchRoomAccess } from './watch-access';
+import { missingProductionLicense } from './license-readiness';
 import './room-access.css';
 const initialInvite = takeRoomInvite();
 export function AccessApp() {
@@ -40,6 +41,7 @@ export function AccessApp() {
     if (!grant) return;
     return watchRoomAccess(grant, () => { setGrant(undefined); setSignedParticipant(undefined); setError('Your room access has ended. Ask the owner for help.'); });
   }, [grant]);
+  if (missingProductionLicense(import.meta.env.PROD, location.hostname, import.meta.env.VITE_TLDRAW_LICENSE_KEY)) return <main className="access-entry" data-testid="canvas-license-missing"><div className="access-card"><img src="/mark.svg" alt=""/><h1>PRESENT is online.</h1><p role="alert">Canvas setup is incomplete: this deployment needs a valid tldraw license.</p><p>The operator must configure <code>VITE_TLDRAW_LICENSE_KEY</code> and rebuild the app before this room can open.</p><a href="https://tldraw.dev/community/license" target="_blank" rel="noreferrer">License setup</a></div></main>;
   if (loading) return <main className="access-entry" role="status">Opening PRESENT…</main>;
   if (profile === 'local') return location.pathname === '/playbook' ? <Playbook/> : <App/>;
   if (profile === 'invite' && grant) return <App key={grant.roomId} accessGrant={grant} onAccessLeave={() => { setGrant(undefined); history.replaceState({}, '', '/'); }} onRoomOpen={async roomId => admit(await roomAccessClient.get(roomId))}/>;

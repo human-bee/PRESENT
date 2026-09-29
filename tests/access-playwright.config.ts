@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 const root = mkdtempSync(join(tmpdir(), 'present-access-browser-'));
 const baseURL = process.env.PRESENT_E2E_URL ?? 'http://127.0.0.1:4334';
 export default defineConfig({
-  testDir: './e2e', testMatch: 'access-profile.spec.ts', workers: 1, timeout: 60000,
+  testDir: './e2e', testMatch: ['access-profile.spec.ts', 'access-reconnect.spec.ts'], workers: 1, timeout: 60000,
   reporter: 'list', outputDir: join(root, 'results'),
   use: { baseURL, headless: true, actionTimeout: 10000, channel: process.env.PRESENT_E2E_BROWSER_CHANNEL || undefined, viewport: { width: 1440, height: 900 }, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   webServer: {

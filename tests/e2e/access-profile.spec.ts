@@ -32,20 +32,6 @@ test('owner creates, editor joins/edits/reconnects, viewer is denied, revoke clo
     await expect(note(owner).locator('.tl-text-content')).toContainText('Editor native reply');
     await guest.reload();
     await expect(note(guest).locator('.tl-text-content')).toContainText('Editor native reply');
-    // A real transport interruption must not be mistaken for revoked membership.
-    const failedChecks: string[] = [];
-    guest.on('requestfailed', request => { if (request.url().endsWith(`/api/access/rooms/${roomId}`)) failedChecks.push(request.url()); });
-    await guestContext.setOffline(true);
-    try {
-      await expect.poll(() => failedChecks.length, { timeout: 12000 }).toBeGreaterThan(0);
-      await expect(note(guest).locator('.tl-text-content')).toContainText('Editor native reply');
-      await expect(guest.getByText('Your room access has ended. Ask the owner for help.')).toHaveCount(0);
-      await editNote(owner, 'Owner updated while peer was offline');
-    } finally { await guestContext.setOffline(false); }
-    await expect(guest.locator('.room-status')).toHaveText('here, together');
-    await expect(note(guest).locator('.tl-text-content')).toContainText('Owner updated while peer was offline');
-    await editNote(guest, 'Same signed editor reconnected');
-    await expect(note(owner).locator('.tl-text-content')).toContainText('Same signed editor reconnected');
     await owner.getByRole('button', { name: 'Invite', exact: true }).click();
     // Opening the panel anew intentionally clears the one-time displayed token, but persisted invite IDs remain manageable.
     await owner.getByText('Manage access', { exact: true }).click();

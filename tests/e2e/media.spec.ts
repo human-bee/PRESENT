@@ -7,6 +7,7 @@ type ProofWindow = Window & { __mediaProof: CaptureProof };
 
 async function observeMedia(context: BrowserContext, name: string) {
   await context.addInitScript(({ name }) => {
+    if (window !== window.top) return;
     localStorage.setItem('present:name', name);
     const proof: CaptureProof = { calls: 0, tracks: [], peers: [], roomSockets: [] };
     (window as unknown as ProofWindow).__mediaProof = proof;

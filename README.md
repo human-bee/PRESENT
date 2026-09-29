@@ -2,7 +2,7 @@
 
 A room for people, their agents, and whatever they make together.
 
-This native application includes RoomOS activities and a signed invitation profile. The canvas uses real tldraw: human drawing, shared instruments, generated applets and agent changes live in the same native document. The September QA integration builds on `codex/present-cloud-base-20260921`; see [measured results and open checks](docs/QA-2026-09-28.md).
+This native application includes RoomOS activities and a signed invitation profile. The canvas uses real tldraw: human drawing, shared instruments, generated applets and agent changes live in the same native document. The September QA integration builds on `codex/present-cloud-base-20260921`; see [hosted readiness and required configuration](docs/cloud-readiness.md) and the [earlier baseline measurements](docs/QA-2026-09-28.md).
 
 ## Run
 
@@ -57,6 +57,6 @@ Browser tests use Playwright Chromium (`npx playwright install chromium`), or in
 
 Local mode binds loopback and checks Host/Origin. Network hosting requires the signed invitation profile and one durable Node server that owns the native rooms. See [cloud readiness](docs/cloud-readiness.md) and [room access](docs/room-access.md). Shared room data is visible to participants; hiding a card does not make its content private. Hosted work captures per-job signed authorization, aborts on revocation, and requires explicit authorized resume after restart. A configured execution provider is still required.
 
-Voice uses `gpt-live-1` WebRTC with a delegated backend. Connection, tool execution and image delivery have saved live proof; the complete combined human conversation remains an acceptance target. Cerebras is optional and reports billing errors explicitly. Physical-device meetings, remote deployment, several older external integrations and universal latency improvement remain unproved. Read the capability report for the precise implemented and missing scope.
+Voice uses `gpt-live-1` WebRTC with a delegated backend. Historical connection/tool/image evidence does not certify this deployment: genuine voice, TTS and complete multi-human conversations remain acceptance targets. `PRESENT_MODEL_TRANSPORT=openai` explicitly enables paid server-side Responses planning with `OPENAI_API_KEY`; it never silently replaces the local Codex subscription adapter. Cerebras is optional. Cloud staging is deployed, but its UI needs a valid `VITE_TLDRAW_LICENSE_KEY` at build time before hosted acceptance can pass. Physical-device meetings, several older external integrations and universal subsecond latency remain unproved.
 
 The Mini preview is owned by launchd through `node scripts/preview.mjs start|stop|restart|status`. Test runtimes use a separate `PRESENT_DATA_DIRECTORY`; ordinary browser tests default to port 4320, separate from the preview on 4318. See the contextual verification document for exact preview and SSH-forward instructions.

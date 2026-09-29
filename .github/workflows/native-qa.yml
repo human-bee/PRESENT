@@ -138,5 +138,7 @@ jobs:
         if: always()
         with:
           name: native-cloud-staging
-          path: test-results/cloud/**/*.json
+          path: |
+            test-results/cloud/**/*.json
+            test-results/cloud/licensing-blocker.png
           retention-days: 7

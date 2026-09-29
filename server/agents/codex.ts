@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { AgentError, agentModels, widgetInstructions, widgetOutputSchema } from './contract';
 import { CodexWire, record, type WireMessage } from './codex-wire';
+import { generateWithOpenAI, openAIAvailability, usesOpenAIResponses } from './openai-responses';
 
 import { agentNames, type CodexProvider, type GenerationOptions, type ProviderAvailability } from '../../shared/agent-models';
 type Model = { id: string; model: string; serviceTiers?: { id: string; name: string; description: string }[]; supportedReasoningEfforts: { reasoningEffort: string }[] };
@@ -62,6 +63,10 @@ export async function closeCodexSession() {
 process.once('exit', () => activeWire?.close());
 
 export async function codexAvailability(): Promise<{ spark: boolean; codex: boolean; providers: ProviderAvailability[]; reason?: string }> {
+  if (usesOpenAIResponses()) {
+    const result = await openAIAvailability();
+    return { ...result, spark: false, codex: result.providers.some(provider => provider.id === 'codex' && provider.configured) };
+  }
   const ids: CodexProvider[] = ['luna', 'terra', 'codex', 'spark'];
   let models: Model[] = [], reason: string | undefined;
   try { const current = await acquire(); models = current.models; release(current); }
@@ -77,6 +82,7 @@ export async function codexAvailability(): Promise<{ spark: boolean; codex: bool
 }
 
 export async function generateWithCodex(prompt: string, signal: AbortSignal, provider: CodexProvider = 'codex', profile?: StructuredProfile, options: GenerationOptions = {}): Promise<string> {
+  if (usesOpenAIResponses()) return generateWithOpenAI(prompt, signal, provider, profile, options);
   if (signal.aborted) throw new AgentError('Widget generation was cancelled.', 408);
   const current = await acquire(); const { wire } = current;
   let threadId: string | undefined; let turnId: string | undefined;

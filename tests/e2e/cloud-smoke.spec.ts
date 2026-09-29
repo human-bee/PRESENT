@@ -10,6 +10,7 @@ test('hosted signed room preserves real widget edits over the public WebSocket p
   try {
     expect((await owner.request.get('/healthz')).status()).toBe(200);
     await owner.goto('/');
+    await expect(owner.getByTestId('canvas-license-missing'), 'Staging needs VITE_TLDRAW_LICENSE_KEY before hosted UI acceptance can pass.').toHaveCount(0);
     await owner.getByRole('button', { name: 'Create a room', exact: true }).click();
     await expect(owner.locator('.room-status')).toHaveText('here, together');
     const roomURL = owner.url(), roomId = new URL(roomURL).pathname.split('/').pop()!;
@@ -22,8 +23,9 @@ test('hosted signed room preserves real widget edits over the public WebSocket p
     await owner.getByRole('button', { name: 'Add to room', exact: true }).click();
     const capability = CAPABILITIES.find(item => item.kind === 'document')!;
     await owner.getByRole('button', { name: `${capability.title} ${capability.description}`, exact: true }).click();
-    const objects = (await (await owner.request.get(`/api/room/${roomId}`)).json()).room.objects;
-    const document = objects.find((object: { title: string }) => object.title === 'Shared document');
+    const read = async () => (await (await owner.request.get(`/api/room/${roomId}`)).json()).room.objects;
+    await expect.poll(async () => (await read()).some((object: { title: string }) => object.title === 'Shared document')).toBe(true);
+    const document = (await read()).find((object: { title: string }) => object.title === 'Shared document');
     expect(document).toBeDefined();
     await peer.goto(`${roomURL}?focus=${document.id}`);
     const pages = [owner, peer], fields = pages.map(page => page.frameLocator('iframe[title="Shared document"]').getByRole('textbox', { name: 'Document Markdown' }));

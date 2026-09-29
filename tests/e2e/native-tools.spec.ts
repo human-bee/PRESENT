@@ -57,6 +57,7 @@ test('human native tools draw, erase, rotate, group, frame, copy, paste and undo
       blockedRequests.push(route.request().url()); return route.abort();
     });
     await context.addInitScript(() => {
+      if (window !== window.top) return;
       Object.assign(window, { __nativePhysicalRequests: Number(sessionStorage.getItem('native-device-requests') ?? 0) });
       navigator.mediaDevices.getUserMedia = async () => {
         (window as unknown as { __nativePhysicalRequests: number }).__nativePhysicalRequests++;

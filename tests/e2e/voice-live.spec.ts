@@ -9,16 +9,17 @@ type VoiceProof = {
   tracks: MediaStreamTrack[];
   peers: RTCPeerConnection[];
   audio: HTMLAudioElement[];
-  events: { type: string; elapsedMs: number; status?: string }[];
+  events: { type: string; elapsedMs: number; nestedType?: string; status?: string }[];
   providerModel?: string;
+  recording?: { recorder: MediaRecorder; chunks: Blob[] };
 };
 type ProofWindow = Window & { __voiceProof: VoiceProof };
 const command = 'Present, add a sticky note saying the dragon likes tea, then briefly confirm';
 const expectedWords = /dragon likes tea/i;
 
 test.describe.configure({ retries: 0 });
-test('real Realtime speech creates a native note from a synthetic microphone', async ({ baseURL }, info) => {
-  test.skip(process.env.LIVE_VOICE !== '1', 'Opt in with LIVE_VOICE=1; this test makes a real paid Realtime call.');
+test('real GPT Live speech creates a native note from a synthetic microphone', async ({ baseURL }, info) => {
+  test.skip(process.env.LIVE_VOICE !== '1', 'Opt in with LIVE_VOICE=1; this test makes a real paid GPT Live call.');
   const conversation = process.env.LIVE_VOICE_MODE === 'conversation';
   test.skip(!process.env.PRESENT_VOICE_FIXTURE && process.platform !== 'darwin', 'Provide PRESENT_VOICE_FIXTURE with the documented phrase on non-macOS hosts.');
   test.setTimeout(100_000);
@@ -36,14 +37,15 @@ test('real Realtime speech creates a native note from a synthetic microphone', a
     '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
     `--use-file-for-fake-audio-capture=${wav}`, '--autoplay-policy=no-user-gesture-required',
   ] });
-  const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, permissions: ['microphone'] });
+  const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, permissions: ['microphone'], recordVideo: { dir: info.outputPath('voice-video'), size: { width: 960, height: 600 } } });
   const roomId = randomBytes(16).toString('hex');
   const report: Record<string, unknown> = {
     at: new Date().toISOString(), roomId, command, browser: process.env.PRESENT_E2E_BROWSER_CHANNEL || 'Playwright Chromium', mode: conversation ? 'conversation' : 'ambient',
     input: { synthetic: true, generator: process.env.PRESENT_VOICE_FIXTURE ? 'operator-supplied WAV' : 'macOS say → ffmpeg', expectedInitialSilenceMs: 3000, expectedSampleRate: 48000, expectedChannels: 1 },
-    provider: 'OpenAI Realtime', mockedModelResponses: false, outcome: 'failed',
+    provider: 'OpenAI GPT Live', requestedModel: 'gpt-live-1', mockedModelResponses: false, outcome: 'failed',
   };
   await context.addInitScript(() => {
+    if (window !== window.top) return;
     localStorage.setItem('present:name', 'Synthetic voice proof');
     const proof: VoiceProof = { startedAt: 0, tracks: [], peers: [], audio: [], events: [] };
     (window as unknown as ProofWindow).__voiceProof = proof;
@@ -62,6 +64,12 @@ test('real Realtime speech creates a native note from a synthetic microphone', a
       construct(target, args) {
         const peer = new target(...args);
         proof.peers.push(peer);
+        peer.addEventListener('track', event => {
+          if (event.track.kind !== 'audio' || proof.recording || !MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) return;
+          const recorder = new MediaRecorder(new MediaStream([event.track]), { mimeType: 'audio/webm;codecs=opus' });
+          const chunks: Blob[] = []; recorder.addEventListener('dataavailable', event => { if (event.data.size) chunks.push(event.data); });
+          proof.recording = { recorder, chunks }; recorder.start(1000);
+        });
         const createChannel = peer.createDataChannel.bind(peer);
         peer.createDataChannel = (label, options) => {
           const channel = createChannel(label, options);
@@ -69,8 +77,8 @@ test('real Realtime speech creates a native note from a synthetic microphone', a
             try {
               const event = JSON.parse(String(message.data));
               if (typeof event.type !== 'string') return;
-              proof.events.push({ type: event.type, elapsedMs: Math.round(performance.now() - proof.startedAt), status: event.response?.status });
-              if (event.type === 'session.created') proof.providerModel = event.session?.model;
+              if (proof.events.length < 2000) proof.events.push({ type: event.type, elapsedMs: Math.round(performance.now() - proof.startedAt), nestedType: event.type === 'response.event' ? event.event?.type : undefined, status: event.event?.response?.status });
+              if (event.type === 'session.started') proof.providerModel = event.session?.model;
             } catch { /* Ignore non-JSON packets; never alter a provider response. */ }
           });
           return channel;
@@ -112,6 +120,7 @@ test('real Realtime speech creates a native note from a synthetic microphone', a
     await page.getByRole('button', { name: 'Start listening', exact: true }).click();
     expect((await sessionResponse).status()).toBe(200);
     report.sessionResponseMs = Date.now() - startedAt;
+    await expect.poll(() => page.evaluate(() => (window as unknown as ProofWindow).__voiceProof.providerModel)).toBe('gpt-live-1');
     await expect(page.locator('.voice-panel')).toBeVisible();
     await page.waitForFunction(() => {
       const notes = [...document.querySelectorAll('.tl-note__container .tl-text-content')];
@@ -124,7 +133,9 @@ test('real Realtime speech creates a native note from a synthetic microphone', a
     await expect(page.locator('.voice-transcript')).toContainText(expectedWords);
     await expect(page.locator('.tl-note__container .tl-text-content')).toContainText(expectedWords);
     expect(requests.some(request => request.route === '/api/voice/tool' && request.tool === 'add_note' && request.status === 200)).toBe(true);
-    await expect.poll(() => page.evaluate(() => (window as unknown as ProofWindow).__voiceProof.events.some(event => event.type === 'response.done')), { timeout: 5000 }).toBe(true);
+    // GPT Live has no legacy response.done spoken-turn event. Backend completion
+    // arrives nested; actual TTS playback is checked separately below.
+    await expect.poll(() => page.evaluate(() => (window as unknown as ProofWindow).__voiceProof.events.some(event => event.type === 'response.event' && event.nestedType === 'response.completed' && event.status === 'completed')), { timeout: 5000 }).toBe(true);
     if (conversation) {
       await expect.poll(() => page.evaluate(async () => {
         const proof = (window as unknown as ProofWindow).__voiceProof;
@@ -133,6 +144,7 @@ test('real Realtime speech creates a native note from a synthetic microphone', a
         const playback = proof.audio.some(audio => audio.srcObject && !audio.muted && !audio.paused && audio.currentTime > 0);
         return inbound && playback;
       }), { timeout: 10000 }).toBe(true);
+      await expect.poll(() => page.evaluate(() => (window as unknown as ProofWindow).__voiceProof.events.some(event => event.type === 'session.output_transcript.delta'))).toBe(true);
       report.tts = 'Nonzero received audio energy and active unmuted browser playback; no physical-speaker or intelligibility claim.';
     }
     report.outcome = 'passed';
@@ -149,6 +161,15 @@ test('real Realtime speech creates a native note from a synthetic microphone', a
             const { events, providerModel } = (window as unknown as ProofWindow).__voiceProof;
             return { events, providerModel };
           });
+          const recording = await page.evaluate(async () => {
+            const recording = (window as unknown as ProofWindow).__voiceProof.recording;
+            if (!recording) return null;
+            if (recording.recorder.state !== 'inactive') await new Promise<void>(resolve => { recording.recorder.addEventListener('stop', () => resolve(), { once: true }); recording.recorder.stop(); });
+            const bytes = new Uint8Array(await new Blob(recording.chunks, { type: 'audio/webm' }).arrayBuffer());
+            let binary = ''; for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+            return btoa(binary);
+          });
+          if (recording) await info.attach('received-tts-audio', { body: Buffer.from(recording, 'base64'), contentType: 'audio/webm' });
           await page.screenshot({ path: resolve(evidence, 'voice-live.png'), timeout: 5000 });
         } finally {
           const stop = page.getByRole('button', { name: 'Stop listening', exact: true });
@@ -166,6 +187,8 @@ test('real Realtime speech creates a native note from a synthetic microphone', a
     } finally {
       clearTimeout(safetyTimer);
       await browser.close();
+      const video = page.video();
+      if (video) await info.attach('gpt-live-session-video', { path: await video.path(), contentType: 'video/webm' });
       report.ownBrowserClosed = true;
       report.requests = requests;
       const body = JSON.stringify(report, null, 2);

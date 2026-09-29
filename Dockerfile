@@ -4,6 +4,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+# This is a public client license, not an API secret. Railway passes declared build arguments.
+ARG VITE_TLDRAW_LICENSE_KEY
 RUN npm run build
 ENV NODE_ENV=production
 EXPOSE 4317

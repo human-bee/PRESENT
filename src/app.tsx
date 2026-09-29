@@ -46,10 +46,14 @@ export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: 
   const setViewport = (v: Viewport) => room.editor?.setCamera({ x: v.x / v.zoom, y: v.y / v.zoom, z: v.zoom });
   const [panel, setPanel] = useState<'add' | 'settings' | 'history' | 'room' | 'voice' | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [capabilities, setCapabilities] = useState<Record<string, unknown>>({});
   const providerStorageKey = accessGrant ? 'present:invite-provider' : 'present:provider';
-  const [provider, setProvider] = useState<AgentProvider>(() => { const fallback = accessGrant ? 'cerebras' : 'luna'; try { const saved = providerSchema.safeParse(localStorage.getItem(providerStorageKey)); return saved.success && saved.data !== 'spark' ? saved.data : fallback; } catch { return fallback; } });
+  const [providerPreference, setProvider] = useState<AgentProvider | undefined>(() => { try { const saved = providerSchema.safeParse(localStorage.getItem(providerStorageKey)); return saved.success && saved.data !== 'spark' ? saved.data : undefined; } catch { return undefined; } });
+  const serverProvider = providerSchema.safeParse(capabilities.defaultProvider);
+  // An explicit preference always wins. Only an unconfigured first visit uses the operator's transport choice.
+  const provider = providerPreference ?? (serverProvider.success ? serverProvider.data : accessGrant ? 'cerebras' : 'luna');
   const [generationOptions, setGenerationOptions] = useState<GenerationOptions>(() => { try { return generationOptionsSchema.parse(JSON.parse(localStorage.getItem('present:generation-options') ?? '{"reasoning":"low","fast":false}')); } catch { return { reasoning: 'low', fast: false }; } });
-  useEffect(() => { try { localStorage.setItem(providerStorageKey, provider); localStorage.setItem('present:generation-options', JSON.stringify(generationOptions)); } catch { /* Session-only if storage is blocked. */ } }, [providerStorageKey, provider, generationOptions]);
+  useEffect(() => { try { if (providerPreference) localStorage.setItem(providerStorageKey, providerPreference); localStorage.setItem('present:generation-options', JSON.stringify(generationOptions)); } catch { /* Session-only if storage is blocked. */ } }, [providerStorageKey, providerPreference, generationOptions]);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
   const [lastGeneration, setLastGeneration] = useState('');
@@ -61,7 +65,6 @@ export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: 
     if (saved) setPrompt(saved.prompt);
   }, [roomId, room.selfId]);
   const input = useRef<HTMLInputElement>(null);
-  const [capabilities, setCapabilities] = useState<Record<string, unknown>>({});
   useEffect(() => { fetch('/api/agents').then(r => r.json()).then(setCapabilities).catch(() => {}); }, []);
   useEffect(() => { localStorage.setItem('present:name', name); }, [name]);
   useEffect(() => { if (!toast) return; const timeout = setTimeout(() => setToast(''), 6500); return () => clearTimeout(timeout); }, [toast]);

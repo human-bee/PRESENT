@@ -32,8 +32,8 @@ test('fast shared-document typing preserves every character through delayed nati
   const roomId = randomBytes(16).toString('hex');
   const a = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
   const b = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
-  await a.addInitScript(() => localStorage.setItem('present:name', 'Document writer'));
-  await b.addInitScript(() => localStorage.setItem('present:name', 'Document reader'));
+  await a.addInitScript(() => { if (window === window.top) localStorage.setItem('present:name', 'Document writer'); });
+  await b.addInitScript(() => { if (window === window.top) localStorage.setItem('present:name', 'Document reader'); });
   const [writer, reader] = await Promise.all([a.newPage(), b.newPage()]);
   const [writerLag, readerLag] = await Promise.all([delayNativeMessages(writer), delayNativeMessages(reader)]);
   const report: Record<string, unknown> = { roomId, at: new Date().toISOString(), sentence, nativeMessageDelayMs: delayMs, typingDelayMs: 15 };

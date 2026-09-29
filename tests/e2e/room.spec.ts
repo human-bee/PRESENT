@@ -45,8 +45,8 @@ test('two people natively edit, drag, resize, undo, time, roll, and reload the s
   const room = randomBytes(16).toString('hex');
   const a = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
   const b = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
-  await a.addInitScript(() => localStorage.setItem('present:name', 'Alex'));
-  await b.addInitScript(() => localStorage.setItem('present:name', 'River'));
+  await a.addInitScript(() => { if (window === window.top) localStorage.setItem('present:name', 'Alex'); });
+  await b.addInitScript(() => { if (window === window.top) localStorage.setItem('present:name', 'River'); });
   const [alex, river] = await Promise.all([a.newPage(), b.newPage()]);
   try {
     await Promise.all([alex.goto(`/r/${room}`), river.goto(`/r/${room}`)]);

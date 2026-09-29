@@ -1,6 +1,6 @@
 # Native PRESENT cloud readiness — 29 September 2026
 
-The native build, signed HTTP/WebSocket contracts and provider-free Chromium UI tests run locally and in GitHub Actions. Isolated Railway staging is deployed at https://present-native-production.up.railway.app with a persistent 5 GB volume and a verified HTTP health response; hosted browser verification is still pending. The project remains a Node service, not a static website.
+The native build, signed HTTP/WebSocket contracts and provider-free Chromium UI tests run locally and in GitHub Actions. Isolated Railway staging is deployed at https://present-native-production.up.railway.app with a persistent 5 GB volume and a verified HTTP health response. **Hosted UI acceptance is blocked by the missing tldraw production license, not certified ready for demonstrations.** The installed SDK hides an unlicensed production editor after five seconds; PRESENT now explains the missing input instead of opening a disappearing canvas. The project remains a Node service, not a static website.
 
 ## Runtime contract
 
@@ -17,12 +17,18 @@ Use Node 24 or later and a single long-lived process. Build with `npm ci` and `n
 | `PRESENT_ACCESS_SECRET` | Stable high-entropy operator secret, at least 32 bytes |
 | `PRESENT_DATA_DIRECTORY` | Private durable mount, outside static roots |
 | `PRESENT_ACCESS_DIRECTORY` | Private durable access-record directory |
-| `CEREBRAS_API_KEY` | Hosted room generation |
-| `OPENAI_API_KEY` | Realtime voice and image functionality |
+| `VITE_TLDRAW_LICENSE_KEY` | Valid public tldraw license, supplied at build time; Docker declares this build argument |
+| `PRESENT_MODEL_TRANSPORT` | Set explicitly to `openai` for paid OpenAI Responses planning; otherwise preserve the local Codex subscription adapter |
+| `CEREBRAS_API_KEY` | Optional Cerebras room generation |
+| `OPENAI_API_KEY` | GPT Live, images, and Responses planning when explicitly enabled |
 | `TYPESAFE_API_KEY` | Optional JEV routing |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Human calls |
 
-The proxy must pass the canonical Host/Origin, WebSocket upgrades and unbuffered SSE. Use `GET /healthz` for platform probes: it returns only liveness and needs no canonical Host. `GET /api/health` retains the canonical Host restriction. There is one writer per data directory; horizontal replicas and a shared network filesystem are unsupported. An OS-backed SQLite lock releases automatically after a crash. A legacy `access.lock` is never bypassed: stop and verify the old writer before migrating. Back up access records, room snapshots and assets together. Secrets and private room data must never enter a frontend bundle.
+The proxy must pass the canonical Host/Origin, WebSocket upgrades and unbuffered SSE. Use `GET /healthz` for platform probes: it returns liveness and, on Railway, the public source revision; it needs no canonical Host. CI waits for the requested revision, not an older healthy deployment. `GET /api/health` retains the canonical Host restriction. There is one writer per data directory; horizontal replicas and a shared network filesystem are unsupported. An OS-backed SQLite lock releases automatically after a crash. A legacy `access.lock` is never bypassed: stop and verify the old writer before migrating. Back up access records, room snapshots and assets together. API secrets and private room data must never enter a frontend bundle. The tldraw license is intentionally a public client-side key.
+
+With `PRESENT_MODEL_TRANSPORT=openai`, Luna, Terra and Astra use server-side Responses with the existing strict output contracts. Settings discover actual project-visible model IDs and never launch a local Codex process in hosted mode. A fresh visitor defaults to the operator-selected transport (Luna for OpenAI); an existing saved preference is not silently replaced. Select an available model in Room settings if needed. API responses have bounded size, duration and output-token budgets, no model host tools, no stored Responses, explicit cancellation and terminal-completion validation. Fast mode is an explicit paid tier choice. Spark and workspace execution still require an authenticated Codex app-server; this planning adapter does not create a hosted code-execution environment. Provider contract tests use controlled responses and do not establish real model quality or account access.
+
+Obtain or reuse an appropriate license through https://tldraw.dev/community/license. No license checks, watermarks, production detection, or domain restrictions are bypassed. A key requires rebuilding the frontend. Live voice additionally needs a securely supplied `OPENAI_API_KEY`; no key was created or recovered from another service during this work.
 
 Completed work flushes its canvas artifact before recording terminal success. Room snapshots use atomic replacement and file/directory fsync. Ordinary canvas edits still use a 150 ms debounce; the last debounce window can be lost on abrupt process death. This is not a zero-loss write-ahead journal.
 
