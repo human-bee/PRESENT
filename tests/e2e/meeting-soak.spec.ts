@@ -43,6 +43,11 @@ test('recorded long meeting: three participants, sprawling history, real widget 
   const documentDOM: { cycle: number; participant: number; peers: { participant: number; afterLastInputMs: number }[]; allPeersAfterLastInputMs: number }[] = [];
   const operationRequests: { participant: number; durationMs: number; responseBytes: number; minimal: boolean }[] = [];
   const started = performance.now();
+  const profilers = process.env.PRESENT_CAPTURE_PROFILE === '1' ? await Promise.all(pages.map(async page => {
+    const session = await page.context().newCDPSession(page);
+    await session.send('Profiler.enable'); await session.send('Profiler.setSamplingInterval', { interval: 1000 });
+    await session.send('Profiler.start'); return session;
+  })) : [];
   for (const [i, page] of pages.entries()) page.on('pageerror', error => errors.push(`${i}: ${error.message}`));
   for (const [participant, page] of pages.entries()) page.on('requestfinished', request => {
     if (!request.url().endsWith(`/api/room/${roomId}/operation`) || operationRequests.length >= 6000) return;
@@ -148,6 +153,10 @@ test('recorded long meeting: three participants, sprawling history, real widget 
     expect(operationRequests.every(request => request.minimal), 'widget state writes must use compact receipts').toBe(true);
     milestones.push({ event: 'Soak complete', atMs: performance.now() - started });
   } finally {
+    for (const [i, session] of profilers.entries()) {
+      const { profile } = await session.send('Profiler.stop');
+      await writeFile(info.outputPath(`participant-${i}-cpu.json`), JSON.stringify(profile));
+    }
     const percentile = (values: number[], fraction: number) => values.sort((a, b) => a - b)[Math.max(0, Math.ceil(values.length * fraction) - 1)];
     const summarize = (key: 'localMs' | 'peerMs') => ({ p50: percentile(samples.map(s => s[key]), .5), p95: percentile(samples.map(s => s[key]), .95), p99: percentile(samples.map(s => s[key]), .99), max: Math.max(0, ...samples.map(s => s[key])), underOneSecond: samples.filter(s => s[key] < 1000).length });
     const evidence = info.outputPath('meeting-soak-evidence.json');

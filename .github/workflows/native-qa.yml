@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   contracts:
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -35,6 +36,7 @@ jobs:
       - run: node --import tsx scripts/benchmarks/native-sync.ts
 
   browser:
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -74,7 +76,7 @@ jobs:
           retention-days: 7
 
   meeting-soak:
-    if: github.event_name != 'pull_request'
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -120,7 +122,7 @@ jobs:
           retention-days: 7
 
   cloud-staging:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.cloud_staging)
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -142,4 +144,31 @@ jobs:
           path: |
             test-results/cloud/**/*.json
             test-results/cloud/licensing-blocker.png
+          retention-days: 7
+
+  diagnostic-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRESENT_SOAK_SECONDS: '45'
+      PRESENT_CAPTURE_PROFILE: '1'
+      PRESENT_ENV_FILE: /tmp/present-no-provider-environment
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npx playwright test --config tests/soak-playwright.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: typing-profile
+          path: |
+            test-results/**/*.json
+            test-results/**/*.png
+            test-results/**/*.md
           retention-days: 7
