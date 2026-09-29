@@ -70,3 +70,8 @@
 .canvas-tools-button:hover, .canvas-tools-button[aria-pressed="true"] { background: #e9edde; color: #526447; }
 .canvas-tools-button:focus-visible { outline: 2px solid #879d64; outline-offset: 3px; }
 .canvas-menu { left: 60px; }
+
+@media (max-width: 650px) {
+  /* The activity buttons occupy this row on phones. Keep canvas controls reachable below them. */
+  .canvas-ui-toggle, .canvas-menu { top: 126px; }
+}

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { ObjectPatch, RoomObject } from '../../shared/room';
 import { workExecutionSchema, type WorkExecution } from '../../shared/work-execution';
 import { projectSummarySchema, type ProjectSummary } from '../../shared/project-work';
+import { agentNames } from '../../shared/agent-models';
 
 type WorkStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
 type Work = {
@@ -179,7 +180,9 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
               objectId: object.id,
               requestId: startRequest.current?.requestId,
               prompt: nextPrompt.trim(),
-              provider: work?.provider ?? 'spark',
+              ...(work ? { provider: work.provider } : {}),
+              reasoning: 'low',
+              fast: true,
               ...(projectId ? { projectId } : {}),
             }
           : { roomId, actor: selfId, jobId: work?.jobId };
@@ -227,7 +230,7 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
           {work?.status ?? 'Ready to start'}
         </span>
         {work && (
-          <span style={{ color: '#85907c', fontSize: 11 }}>{work.provider === 'spark' ? 'Spark' : 'Codex'}</span>
+          <span style={{ color: '#85907c', fontSize: 11 }}>{agentNames[work.provider]}</span>
         )}
       </div>
       <label style={label}>

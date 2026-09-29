@@ -12,7 +12,7 @@ export function ModelPicker({ provider, setProvider, options, setOptions, capabi
   };
   return <>
     <label>Who’s making things?<select value={provider} onChange={event => change(event.target.value as AgentProvider)}>
-      {(['luna', 'terra', 'codex', 'cerebras', 'spark'] as AgentProvider[]).map(id => {
+      {(['luna', 'terra', 'codex', 'cerebras'] as AgentProvider[]).map(id => {
         const item = providers.find(p => p.id === id);
         return <option key={id} value={id} disabled={!item?.configured}>{agentNames[id]}{id === 'luna' ? ' · quick ideas' : id === 'terra' ? ' · balanced' : ''}{item && !item.configured ? ' · unavailable' : ''}</option>;
       })}
