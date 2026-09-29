@@ -37,6 +37,10 @@ export async function handleRoomRequest(req: IncomingMessage, res: ServerRespons
     if (controller.signal.aborted) return true;
   }
   const room = applyOperation(roomId, parsed.data, input.actor, { requestId: input.requestId });
-  json(res, 200, { room, receipt: { status: 'committed', revision: room.revision, requestId: input.requestId } });
+  const receipt = { status: 'committed', revision: room.revision, requestId: input.requestId };
+  // Native WebSocket sync already delivers state. Typing must not download every widget's HTML per key.
+  const minimal = req.headers.prefer === 'return=minimal';
+  if (minimal) res.setHeader('Preference-Applied', 'return=minimal');
+  json(res, 200, minimal ? { receipt } : { room, receipt });
   return true;
 }

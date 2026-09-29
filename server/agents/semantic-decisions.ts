@@ -8,6 +8,11 @@ export const criteria = {
   brief: 'Create an empty meeting brief. No summary or actions to seed.',
   cards: 'Create a shared deck of playing cards.',
   dice: 'Create a shared dice roller.',
+  document: 'Create an empty shared Markdown document. No text to seed.',
+  captions: 'Create a viewer of existing room captions. Does not start a microphone or voice session.',
+  poll: 'Create the standard room pulse poll: Where do we go next? Options are Explore a little, Make something, Take a breath. No custom question or choices.',
+  teleprompter: 'Create the standard editable teleprompter. No script or custom behavior to seed.',
+  synth: 'Create the standard playable sound synthesizer. No custom behavior or tune.',
   note: 'An explicit request to create a sticky note or Post-it containing one quoted text span. Ordinary writing, text or captured notes without an explicit sticky request do not match this route. Copy the quoted words verbatim; do not interpret their meaning as a separate task.',
   defer: 'Other requests, discussion, negations, multiple actions, existing-object edits, custom UI, populated tools, research or ambiguous arguments.',
 };

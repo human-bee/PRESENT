@@ -19,6 +19,7 @@ export function reduceMeeting(
   requestId: string,
   authority: ActivityAuthority,
   confirm: (room: string, a: Activity, b: Blocker, actor: string, text: string, utterance: string | null) => void,
+  validateProject?: (projectId: string) => void,
 ): boolean {
   const m = a.meeting;
   if (command.type === 'profile-strengths') {
@@ -124,6 +125,7 @@ export function reduceMeeting(
       authorizedBy: null,
       authorizedAt: null,
       authorization: '',
+      projectId: null,
       status: 'blocked',
       jobId: null,
       objectId: null,
@@ -154,6 +156,8 @@ export function reduceMeeting(
       c.error = null;
       return true;
     }
+    if (command.projectId) validateProject?.(command.projectId);
+    c.projectId = command.projectId ?? null;
     c.authorizedDependencies = c.blockedBy.map((id) => {
       const b = m.blockers.find((b) => b.id === id) ?? fail('A required blocker is missing.');
       return { id: b.id, title: b.title, ownerId: b.ownerId };

@@ -1,0 +1,76 @@
+{
+  "workload": {
+    "sessions": 40,
+    "bursts": 1000,
+    "toolsPerBurst": 4,
+    "duplicateDeliveries": 4000,
+    "overlappingBursts": 520,
+    "executions": 4000,
+    "outputs": 4000,
+    "continuations": 480,
+    "warnings": 2080
+  },
+  "timingScope": "Local synthetic provider-speech-stopped receipt to dispatch/result. No acoustic, provider, HTTP or rendered latency.",
+  "receiptToDispatch": {
+    "count": 4000,
+    "p50Ms": 0.01306,
+    "p95Ms": 0.052104
+  },
+  "receiptToResult": {
+    "count": 4000,
+    "p50Ms": 0.016833,
+    "p95Ms": 0.063965
+  },
+  "burstProcessing": {
+    "count": 1000,
+    "p50Ms": 0.025778,
+    "p95Ms": 0.085221
+  },
+  "totalMs": 72.755,
+  "memory": {
+    "startHeapBytes": 16183224,
+    "sampledPeakHeapBytes": 23911064,
+    "endHeapBytes": 17649144,
+    "gcControlled": false,
+    "peakEventCacheEntries": {
+      "calls": 100,
+      "responses": 64,
+      "captions": 0,
+      "fingerprintChars": 3700
+    },
+    "serverReceiptCache": {
+      "listeners": 1,
+      "cachedResultBytes": 163890,
+      "calls": 1000,
+      "maxListeners": 100,
+      "maxCallsPerListener": 1000
+    },
+    "serverCacheAfterStop": {
+      "listeners": 0,
+      "cachedResultBytes": 0,
+      "calls": 0,
+      "maxListeners": 100,
+      "maxCallsPerListener": 1000
+    }
+  },
+  "bounds": {
+    "client": {
+      "calls": 1000,
+      "responses": 2000,
+      "captions": 8000,
+      "idChars": 100,
+      "argumentChars": 65536,
+      "fingerprintChars": 1048576
+    },
+    "timingMarks": 512,
+    "captionGroups": 2,
+    "pendingCaptionWrites": 128,
+    "server": {
+      "resultBytes": 262144,
+      "listenerBytes": 4194304,
+      "totalBytes": 33554432
+    },
+    "serverListeners": 100,
+    "serverCallsPerListener": 1000
+  }
+}

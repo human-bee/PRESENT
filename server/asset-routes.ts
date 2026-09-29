@@ -1,3 +1,6 @@
+import { roomAuthorization, requireRoomAuthorization } from './access/context';
+import { storedAssetURL } from './access/assets';
+import { AccessError } from './access/store';
 import { dataPath } from './data-path';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
@@ -54,9 +57,18 @@ export function createAssetHandler(options: Options = {}) {
   const maxStorageBytes = options.maxStorageBytes ?? 512 * 1024 * 1024;
   const maxFiles = options.maxFiles ?? 1000;
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-    const path = (req.url ?? '').split('?')[0];
+    let path = (req.url ?? '').split('?')[0];
+    const scope = roomAuthorization();
+    let roomDirectory = directory;
+    if (scope) {
+      const prefix = `/api/assets/${scope.roomId}`;
+      if (path !== prefix && !path.startsWith(prefix + '/')) return false;
+      requireRoomAuthorization(scope.roomId, req.method === 'POST' ? 'asset:write' : 'asset:read');
+      roomDirectory = join(directory, 'rooms', scope.roomId);
+      path = '/api/assets' + path.slice(prefix.length);
+    }
     if (path !== '/api/assets' && !path.startsWith('/api/assets/')) return false;
-    if (!isLocalRequest(req, req.socket.localPort ?? 0)) { json(res, 403, { error: 'Assets require a same-origin local request.' }); return true; }
+    if (!scope && !isLocalRequest(req, req.socket.localPort ?? 0)) { json(res, 403, { error: 'Assets require a same-origin local request.' }); return true; }
     try {
       if (path === '/api/assets') {
         if (req.method !== 'POST') { json(res, 405, { error: 'Upload a file with POST.' }); return true; }
@@ -66,37 +78,43 @@ export function createAssetHandler(options: Options = {}) {
         if (Number(req.headers['content-length'] ?? 0) > maxBytes) throw new AssetError('Images and videos can be up to 25 MB.', 413);
         const bytes = await readFileBody(req, maxBytes);
         if (!bytes.length || !validSignature(bytes, mime)) throw new AssetError('The file does not match its image or video type.', 415);
-        mkdirSync(directory, { recursive: true, mode: 0o700 });
+        if (scope) requireRoomAuthorization(scope.roomId, 'asset:write');
+        mkdirSync(roomDirectory, { recursive: true, mode: 0o700 });
         const name = `${createHash('sha256').update(bytes).digest('hex')}.${extension}`;
-        const file = join(directory, name);
+        const file = join(roomDirectory, name);
         if (!existsSync(file)) {
-          const files = readdirSync(directory).filter(entry => names.test(entry));
-          const used = files.reduce((total, entry) => total + lstatSync(join(directory, entry)).size, 0);
+          const files = readdirSync(roomDirectory).filter(entry => names.test(entry));
+          const used = files.reduce((total, entry) => total + lstatSync(join(roomDirectory, entry)).size, 0);
           if (files.length >= maxFiles || used + bytes.length > maxStorageBytes) throw new AssetError('Local asset storage is full.', 507);
           writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
         } else if (!lstatSync(file).isFile()) throw new AssetError('This asset cannot be stored.', 500);
-        json(res, 201, { src: `/api/assets/${name}` }); return true;
+        json(res, 201, { src: storedAssetURL(name) }); return true;
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') { json(res, 405, { error: 'Method not allowed.' }); return true; }
       const name = path.slice('/api/assets/'.length);
       if (!names.test(name)) throw new AssetError('Asset not found.', 404);
-      const file = join(directory, name);
+      const file = join(roomDirectory, name);
       if (!existsSync(file) || !lstatSync(file).isFile()) throw new AssetError('Asset not found.', 404);
       const size = lstatSync(file).size;
       const range = req.headers.range ? byteRange(req.headers.range, size) : undefined;
       if (range === null) { res.setHeader('content-range', `bytes */${size}`); throw new AssetError('This byte range is not available.', 416); }
       res.writeHead(range ? 206 : 200, {
         'content-type': types[name.split('.').pop() ?? ''], 'content-length': range ? range.end - range.start + 1 : size,
-        'accept-ranges': 'bytes', 'cache-control': 'private, max-age=31536000, immutable',
+        'accept-ranges': 'bytes', 'cache-control': scope ? 'private, no-store' : 'private, max-age=31536000, immutable',
         'x-content-type-options': 'nosniff', 'cross-origin-resource-policy': 'same-origin',
         'content-security-policy': "default-src 'none'; sandbox",
         ...(range ? { 'content-range': `bytes ${range.start}-${range.end}/${size}` } : {}),
       });
       if (req.method === 'HEAD') res.end();
-      else createReadStream(file, range ?? undefined).on('error', () => res.destroy()).pipe(res);
+      else {
+        const stream = createReadStream(file, range ?? undefined);
+        const stop = scope?.watch(() => { stream.destroy(); res.destroy(); });
+        res.once('close', () => { stop?.(); stream.destroy(); });
+        stream.on('error', () => res.destroy()).pipe(res);
+      }
     } catch (cause) {
       req.resume();
-      if (!res.headersSent && !res.destroyed) json(res, cause instanceof AssetError ? cause.status : 500, { error: cause instanceof AssetError ? cause.message : 'The asset request could not finish.' });
+      if (!res.headersSent && !res.destroyed) json(res, (cause instanceof AssetError || cause instanceof AccessError) ? cause.status : 500, { error: (cause instanceof AssetError || cause instanceof AccessError) ? cause.message : 'The asset request could not finish.' });
     }
     return true;
   };

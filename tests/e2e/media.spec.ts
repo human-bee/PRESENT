@@ -2,13 +2,12 @@ import { randomBytes } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
 
-test.use({ baseURL: process.env.PRESENT_E2E_URL ?? 'http://127.0.0.1:4318' });
-
 type CaptureProof = { calls: number; tracks: MediaStreamTrack[]; peers: RTCPeerConnection[]; roomSockets: WebSocket[] };
 type ProofWindow = Window & { __mediaProof: CaptureProof };
 
 async function observeMedia(context: BrowserContext, name: string) {
   await context.addInitScript(({ name }) => {
+    if (window !== window.top) return;
     localStorage.setItem('present:name', name);
     const proof: CaptureProof = { calls: 0, tracks: [], peers: [], roomSockets: [] };
     (window as unknown as ProofWindow).__mediaProof = proof;

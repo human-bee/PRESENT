@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { projectExecutionSchema } from './project-work';
 
 const commandReceiptSchema = z.object({
   id: z.string().min(1).max(100), command: z.string().max(300), truncated: z.boolean().optional(), commandSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
@@ -12,6 +13,7 @@ const workspaceFileSchema = z.object({
 export const workExecutionSchema = z.object({
   boundary: z.literal('local-workspace'), continued: z.boolean(),
   commands: z.array(commandReceiptSchema).max(12), files: z.array(workspaceFileSchema).max(100),
+  project: projectExecutionSchema.optional(),
 }).strict();
 export type WorkExecution = z.infer<typeof workExecutionSchema>;
 export type WorkCommandReceipt = z.infer<typeof commandReceiptSchema>;

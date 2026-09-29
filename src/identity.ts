@@ -1,7 +1,10 @@
+let signedParticipant: string | undefined;
+export function setSignedParticipant(id: string | undefined) { signedParticipant = id; }
 const MEMBER_STORAGE_KEY = 'present:member-id';
 let fallbackMemberId: string | undefined;
 
 export function getParticipantId(storage?: Pick<Storage, 'getItem' | 'setItem'>): string {
+  if (signedParticipant) return signedParticipant;
   try {
     const target = storage ?? sessionStorage;
     const saved = target.getItem(MEMBER_STORAGE_KEY);

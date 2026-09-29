@@ -2,7 +2,6 @@ import { randomBytes } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 
-test.use({ baseURL: process.env.PRESENT_E2E_URL ?? 'http://127.0.0.1:4318' });
 const delayMs = 120;
 const sentence = 'Every shared thought deserves every character, even when the network takes its time. The dragon still likes tea.';
 type Sample = { event: string; atMs: number; expected: string; actual: string; shared: unknown; focused: boolean };
@@ -33,8 +32,8 @@ test('fast shared-document typing preserves every character through delayed nati
   const roomId = randomBytes(16).toString('hex');
   const a = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
   const b = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
-  await a.addInitScript(() => localStorage.setItem('present:name', 'Document writer'));
-  await b.addInitScript(() => localStorage.setItem('present:name', 'Document reader'));
+  await a.addInitScript(() => { if (window === window.top) localStorage.setItem('present:name', 'Document writer'); });
+  await b.addInitScript(() => { if (window === window.top) localStorage.setItem('present:name', 'Document reader'); });
   const [writer, reader] = await Promise.all([a.newPage(), b.newPage()]);
   const [writerLag, readerLag] = await Promise.all([delayNativeMessages(writer), delayNativeMessages(reader)]);
   const report: Record<string, unknown> = { roomId, at: new Date().toISOString(), sentence, nativeMessageDelayMs: delayMs, typingDelayMs: 15 };
@@ -110,4 +109,29 @@ test('fast shared-document typing preserves every character through delayed nati
     await info.attach('native-document-typing-proof', { path, contentType: 'application/json' });
     await Promise.all([a.close(), b.close()]);
   }
+});
+
+test('focused peers see alternating document edits and keep keyboard selection useful', async ({ browser, baseURL }) => {
+  const roomId = randomBytes(16).toString('hex');
+  const contexts = await Promise.all([browser.newContext({ baseURL }), browser.newContext({ baseURL })]);
+  const pages = await Promise.all(contexts.map(context => context.newPage()));
+  try {
+    await Promise.all(pages.map(page => page.goto(`/r/${roomId}`)));
+    for (const page of pages) await expect(page.locator('.room-status')).toHaveText('here, together');
+    await pages[0].getByRole('button', { name: 'Add to room', exact: true }).click();
+    await pages[0].getByRole('button', { name: 'Shared document Write Markdown, preview it and save versions.' }).click();
+    const fields = pages.map(page => page.frameLocator('iframe[title="Shared document"]').getByRole('textbox', { name: 'Document Markdown' }));
+    for (let i = 0; i < 10; i++) {
+      const actor = i % 2, other = 1 - actor, value = `Decision ${i}: preserve the shared correction.`;
+      await fields[other].click();
+      await fields[actor].fill(value);
+      await expect(fields[other]).toHaveValue(value);
+      await expect(fields[other]).toBeFocused();
+    }
+    await fields[0].fill('Hello world'); await expect(fields[1]).toHaveValue('Hello world');
+    await fields[1].press('Home'); await fields[1].press('ArrowRight');
+    await fields[0].press('End'); await fields[0].pressSequentially('!');
+    await expect(fields[1]).toHaveValue('Hello world!');
+    expect(await fields[1].evaluate(element => (element as HTMLTextAreaElement).selectionStart)).toBe(1);
+  } finally { await Promise.all(contexts.map(context => context.close())); }
 });

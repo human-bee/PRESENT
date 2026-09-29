@@ -86,7 +86,7 @@ export function readWorkspaceFiles(cwd: string): WorkspaceFile[] {
       try {
         for (let entry = handle.readSync(); entry; entry = handle.readSync()) {
           if (++entries > MAX_ENTRIES) fail('Workspace exceeds the 1000-entry inspection limit.');
-          if (entry.name === '.tmp' && !prefix) continue;
+          if ((entry.name === '.tmp' || entry.name === '.git') && !prefix) continue;
           const name = prefix ? `${prefix}/${entry.name}` : entry.name;
           safePath(name);
           const absolute = join(path, entry.name), stat = lstatSync(absolute);

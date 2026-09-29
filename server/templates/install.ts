@@ -4,8 +4,9 @@ import type { TLSocketRoom } from '@tldraw/sync-core';
 import type { TLRecord } from '@tldraw/tlschema';
 
 /** Host reserves a fresh room ID before calling this. Never installs into a used room. */
-export async function installTemplateRecords(room: TLSocketRoom<TLRecord>, records: TLRecord[]): Promise<void> {
+export async function installTemplateRecords(room: TLSocketRoom<TLRecord>, records: TLRecord[], check: () => void = () => {}): Promise<void> {
   await room.updateStore(store => {
+    check();
     const existing = store.getAll();
     const initial = initialSnapshot().documents.map(d => d.state);
     if (existing.length !== initial.length || existing.some(r => !initial.some(i => isDeepStrictEqual(i, r)))) throw new Error('Destination room is not empty.');

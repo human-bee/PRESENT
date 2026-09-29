@@ -62,6 +62,19 @@ test('human title and ownership edits survive generation and the initiating acto
   } finally { pending.resolve(artifact); await f.close(); }
 });
 
+test('completed work is readable from durable canvas files before the original store closes', async () => {
+  const f = fixture(async () => artifact);
+  let recovered: RoomStore | undefined;
+  try {
+    const job = f.jobs.start(input('durable-completion')); await f.jobs.settled();
+    assert.equal(f.jobs.get(roomId, job.jobId).status, 'completed');
+    recovered = new RoomStore({ directory: join(f.jobsDirectory, '..', 'rooms'), legacyDirectory: join(f.jobsDirectory, '..', 'legacy') });
+    const room = recovered.getRoom(roomId);
+    assert.equal(room.objects.filter(object => object.data.sourceJobId === job.jobId).length, 1);
+    assert.equal((room.objects.find(object => object.id === job.objectId)?.data.work as { status: string }).status, 'completed');
+  } finally { recovered?.close(); await f.close(); }
+});
+
 test('pool runs at most two jobs, queued cancellation calls no model, and controls require initiating actor', async () => {
   const pending: ReturnType<typeof deferred>[] = []; let active = 0, maximum = 0;
   const f = fixture(async (_prompt, signal) => { const work = deferred(); pending.push(work); active++; maximum = Math.max(maximum, active); signal.addEventListener('abort', () => work.reject(new Error('aborted')), { once: true }); try { return await work.promise; } finally { active--; } });

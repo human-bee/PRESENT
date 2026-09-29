@@ -8,6 +8,7 @@ export function configuredAccess(env: NodeJS.ProcessEnv = process.env) {
   if (env.PRESENT_ACCESS_MODE !== 'invite') throw new Error('Unknown PRESENT_ACCESS_MODE.');
   const secret = env.PRESENT_ACCESS_SECRET, origin = env.PRESENT_ACCESS_ORIGIN, directory = env.PRESENT_ACCESS_DIRECTORY;
   if (!secret || !origin || !directory) throw new Error('Invite mode requires PRESENT_ACCESS_SECRET, PRESENT_ACCESS_ORIGIN and PRESENT_ACCESS_DIRECTORY.');
+  if (origin.startsWith('https:') && env.NODE_ENV !== 'production') throw new Error('HTTPS invite hosting requires the production build, never the Vite source server.');
   const access = new RoomAccess({ secret, directory });
   try { return { access, origin, handleRequest: createAccessHandler(access, origin) }; }
   catch (error) { access.close(); throw error; }

@@ -1,3 +1,6 @@
+import { retainVoiceAuthorization, releaseVoiceAuthorization } from './access/voice-lease';
+import { authorizedActivityEngine } from './access/activities';
+import { AccessError } from './access/store';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -11,7 +14,6 @@ import { createVoiceSession } from './agents/voice-session';
 import { executeVoiceTool } from './agents/voice-tools';
 import { voiceOwnership } from './agents/voice-ownership';
 import { RoomError } from './room-store';
-import { activityEngine } from './activities/engine';
 
 const requests = new Set<AbortController>();
 const voiceTranscriptRequestSchema = z.object({ roomId: z.string(), sessionId: z.string(), actor: z.string(), arguments: transcriptEntrySchema.omit({ at: true, source: true }) });
@@ -52,6 +54,7 @@ export async function handleAgentRequest(req: IncomingMessage, res: ServerRespon
           const answer = await createVoiceSession(raw, url, controller.signal);
           if (controller.signal.aborted || res.destroyed) { voiceOwnership.stop(roomId, sessionId); return true; }
           voiceOwnership.activate(roomId, sessionId);
+          retainVoiceAuthorization(roomId, sessionId, () => voiceOwnership.stop(roomId, sessionId));
           res.writeHead(200, { 'Content-Type': 'application/sdp', 'Cache-Control': 'no-store' }); res.end(answer);
         } catch (error) { voiceOwnership.stop(roomId, sessionId); throw error; }
         finally { clearTimeout(timeout); }
@@ -60,7 +63,7 @@ export async function handleAgentRequest(req: IncomingMessage, res: ServerRespon
         if (url.pathname === '/api/voice/heartbeat' || url.pathname === '/api/voice/stop') {
           if (!input || typeof input !== 'object' || !('roomId' in input) || !('sessionId' in input) || typeof input.roomId !== 'string' || typeof input.sessionId !== 'string') throw new AgentError('Invalid voice session.', 400);
           if (url.pathname === '/api/voice/heartbeat') voiceOwnership.heartbeat(input.roomId, input.sessionId);
-          else voiceOwnership.stop(input.roomId, input.sessionId);
+          else { releaseVoiceAuthorization(input.roomId, input.sessionId); voiceOwnership.stop(input.roomId, input.sessionId); }
           reply(res, 200, { ok: true });
         } else if (url.pathname === '/api/voice/transcript') {
           const result = voiceTranscriptRequestSchema.safeParse(input);
@@ -68,14 +71,14 @@ export async function handleAgentRequest(req: IncomingMessage, res: ServerRespon
           const parsed = result.data;
           reply(res, 200, await voiceOwnership.runTool({ ...parsed, name: 'save_transcript', callId: `caption_${createHash('sha256').update(parsed.arguments.id).digest('hex')}` }, async () => {
             const saved = appendTranscript(parsed.roomId, parsed.actor, parsed.sessionId, parsed.arguments);
-            activityEngine.ingestVoice(parsed.roomId, parsed.sessionId, parsed.arguments, voiceOwnership.provenance(parsed.roomId, parsed.sessionId));
+            authorizedActivityEngine().ingestVoice(parsed.roomId, parsed.sessionId, parsed.arguments, voiceOwnership.provenance(parsed.roomId, parsed.sessionId));
             return saved;
           }));
-        } else reply(res, 200, await (url.pathname === '/api/agents/contribute' ? contribute(input, controller.signal) : url.pathname === '/api/agents/generate' ? fulfillRoomRequest(input, controller.signal) : voiceOwnership.runTool(input, () => executeVoiceTool(input, controller.signal))));
+        } else reply(res, 200, await (url.pathname === '/api/agents/contribute' ? contribute(input, controller.signal) : url.pathname === '/api/agents/generate' ? fulfillRoomRequest(input, controller.signal) : voiceOwnership.runTool(input, ownerSignal => executeVoiceTool(input, AbortSignal.any([controller.signal, ownerSignal])))));
       }
     }
   } catch (error) {
-    if (error instanceof AgentError || error instanceof RoomError) reply(res, error.status, { error: error.message });
+    if (error instanceof AgentError || error instanceof RoomError || error instanceof AccessError) reply(res, error.status, { error: error.message });
     else reply(res, 502, { error: controller.signal.aborted ? 'The request was cancelled or timed out.' : 'The agent could not complete this request. Please try again.' });
   } finally { res.off('close', disconnect); requests.delete(controller); }
   return true;

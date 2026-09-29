@@ -1,3 +1,5 @@
+import { dataPath } from '../data-path';
+import { scopedAssetDirectory, storedAssetURL } from '../access/assets';
 import { cachedWebImage, searchGeneralImages, imageDimensions } from './general-images';
 import { publicFetch } from './public-fetch';
 import { createHash } from 'node:crypto';
@@ -57,14 +59,14 @@ export async function importWebImage(raw: unknown, imageId: number, signal?: Abo
   const extension = image.mime === 'image/png' && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) ? 'png' : image.mime === 'image/jpeg' && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? 'jpg' : image.mime === 'image/webp' && bytes.toString('ascii',0,4) === 'RIFF' && bytes.toString('ascii',8,12) === 'WEBP' ? 'webp' : null;
   if (!extension) throw new AgentError('The source did not return a supported image.');
   combined.throwIfAborted();
-  const directory = join(process.cwd(), '.data', 'assets'); mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const directory = scopedAssetDirectory(dataPath('assets'), input.roomId); mkdirSync(directory, { recursive: true, mode: 0o700 });
   const name = `${createHash('sha256').update(bytes).digest('hex')}.${extension}`, file = join(directory, name);
   if (!existsSync(file)) {
     const files = readdirSync(directory);
     if (files.length >= 1000 || files.reduce((n, f) => n + lstatSync(join(directory, f)).size, 0) + bytes.length > 512 * 1024 * 1024) throw new AgentError('Local image storage is full.');
     writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
   } else if (!lstatSync(file).isFile()) throw new AgentError('The image could not be stored.');
-  const src = `/api/assets/${name}`;
+  const src = storedAssetURL(name, input.roomId);
   const object = makeObject('image', 'agent:web-images', input.position, { src, mimeType: image.mime, imageWidth: image.width, imageHeight: image.height,
     provenance: { kind: 'web-image', sourceUrl: image.source, originalUrl: image.url, author: image.author, license: image.license, retrievedAt: Date.now(), requestId: input.requestId } });
   object.title = image.title.slice(0, 100); const scale = 512 / Math.max(image.width, image.height); object.w = Math.max(80, Math.round(image.width * scale)); object.h = Math.max(60, Math.round(image.height * scale));

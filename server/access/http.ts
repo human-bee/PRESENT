@@ -1,3 +1,4 @@
+import { AccessRateLimit } from './rate-limit';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 import type { RoomPermission } from '../../shared/room-access';
@@ -10,7 +11,8 @@ export function sessionToken(req: Pick<IncomingMessage, 'headers'>): string {
 /** Call in addition to existing sandbox isolation, before *any* protected route/upgrade. */
 export function assertAccessOrigin(req: Pick<IncomingMessage, 'headers' | 'method'>, configuredOrigin: string, mutation = false) {
   const origin = new URL(configuredOrigin);
-  if (origin.origin !== configuredOrigin || (origin.protocol !== 'https:' && !(origin.protocol === 'http:' && origin.hostname === '127.0.0.1'))) throw new Error('Use an exact HTTPS origin or the explicit HTTP loopback origin.');
+  const managedPreview = process.env.NODE_ENV !== 'production' && process.env.PRESENT_MANAGED_PREVIEW === '1' && configuredOrigin === 'http://terminal.local:4173';
+  if (origin.origin !== configuredOrigin || (origin.protocol !== 'https:' && !(origin.protocol === 'http:' && origin.hostname === '127.0.0.1') && !managedPreview)) throw new Error('Use an exact HTTPS origin or the explicit HTTP loopback origin.');
   if (req.headers.host !== origin.host || (req.headers.origin !== undefined && req.headers.origin !== origin.origin) || req.headers['sec-fetch-site'] === 'cross-site' || (mutation && req.headers.origin !== origin.origin)) throw new AccessError('Same-origin request required.');
 }
 export function authorizeRequest(access: RoomAccess, req: Pick<IncomingMessage, 'headers'>, roomId: string, permission: RoomPermission) {
@@ -51,6 +53,7 @@ function respond(res: ServerResponse, status: number, value: unknown) {
 export function createAccessHandler(access: RoomAccess, origin: string) {
   // Validate configuration eagerly, before accepting traffic.
   assertAccessOrigin({ headers: { host: new URL(origin).host } }, origin);
+  const sessionLimit = new AccessRateLimit(12), joinLimit = new AccessRateLimit(30);
   const cookie = (token: string, maxAge: number) => `present_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${origin.startsWith('https:') ? '; Secure' : ''}`;
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', origin);
@@ -61,6 +64,7 @@ export function createAccessHandler(access: RoomAccess, origin: string) {
       if (req.method === 'POST' && url.pathname === '/api/access/session') {
         // Never silently replace an existing invalid identity (which might own rooms).
         if (token) { respond(res, 200, access.identity(token)); return true; }
+        sessionLimit.take(req.socket.remoteAddress ?? 'unknown');
         const session = access.createSession();
         res.setHeader('set-cookie', cookie(session.token, Math.floor((session.expiresAt - Date.now()) / 1000)));
         respond(res, 201, { userId: session.userId, expiresAt: session.expiresAt }); return true;
@@ -71,6 +75,7 @@ export function createAccessHandler(access: RoomAccess, origin: string) {
       }
       if (req.method === 'POST' && url.pathname === '/api/access/rooms') { respond(res, 201, access.createRoom(token)); return true; }
       if (req.method === 'POST' && url.pathname === '/api/access/join') {
+        joinLimit.take(req.socket.remoteAddress ?? 'unknown');
         const input = z.object({ token: z.string().max(200) }).strict().parse(await body(req));
         respond(res, 200, access.join(token, input.token)); return true;
       }
@@ -78,6 +83,8 @@ export function createAccessHandler(access: RoomAccess, origin: string) {
       if (match) {
         const [, roomId, action, target] = match;
         if (!action && req.method === 'GET') { respond(res, 200, access.authorize(token, roomId, 'read')); return true; }
+        if (action === 'members' && !target && req.method === 'GET') { respond(res, 200, access.members(token, roomId)); return true; }
+        if (action === 'invites' && !target && req.method === 'GET') { respond(res, 200, access.invites(token, roomId)); return true; }
         if (action === 'invites' && !target && req.method === 'POST') { respond(res, 201, access.invite(token, roomId, inviteInput.parse(await body(req)))); return true; }
         if (action === 'leave' && !target && req.method === 'POST') { access.leave(token, roomId); respond(res, 200, { ok: true }); return true; }
         if (action === 'invites' && target && req.method === 'DELETE') { access.revokeInvite(token, roomId, target); respond(res, 200, { ok: true }); return true; }

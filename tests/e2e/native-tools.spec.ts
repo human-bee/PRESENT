@@ -16,6 +16,15 @@ async function bounds(page: Page, id: string) {
       screen: { x: screen.x, y: screen.y } };
   }, id);
 }
+// The full tldraw toolbar can place tools in its overflow menu.
+async function tool(page: Page, id: string) {
+  const button = page.getByTestId(`tools.${id}`);
+  if (await button.isVisible()) await button.click();
+  else {
+    await page.getByTestId('tools.more-button').click();
+    await page.getByTestId(`tools.more.${id}`).click();
+  }
+}
 async function gesture(page: Page, points: number[][]) {
   await page.mouse.move(points[0][0], points[0][1]);
   await page.mouse.down();
@@ -48,6 +57,7 @@ test('human native tools draw, erase, rotate, group, frame, copy, paste and undo
       blockedRequests.push(route.request().url()); return route.abort();
     });
     await context.addInitScript(() => {
+      if (window !== window.top) return;
       Object.assign(window, { __nativePhysicalRequests: Number(sessionStorage.getItem('native-device-requests') ?? 0) });
       navigator.mediaDevices.getUserMedia = async () => {
         (window as unknown as { __nativePhysicalRequests: number }).__nativePhysicalRequests++;
@@ -74,22 +84,22 @@ test('human native tools draw, erase, rotate, group, frame, copy, paste and undo
     await Promise.all([writer.goto(`/r/${roomId}`), reader.goto(`/r/${roomId}`)]);
     await expect(writer.locator('.room-status')).toHaveText('here, together');
     await expect(reader.locator('.room-status')).toHaveText('here, together');
-    await writer.getByRole('button', { name: 'Draw · D', exact: true }).click();
+    await tool(writer, 'draw');
     await gesture(writer, [[360, 280], [420, 315], [490, 280], [565, 310]]);
     await expect.poll(async () => (await shapes(writer)).map(shape => shape.type)).toEqual(['draw']);
     proof.pen = await sync();
-    await writer.getByRole('button', { name: 'Erase · E', exact: true }).click();
+    await tool(writer, 'eraser');
     await gesture(writer, [[415, 280], [425, 335]]);
     await expect.poll(() => shapes(writer)).toEqual([]);
     await sync();
-    await writer.getByRole('button', { name: 'Undo', exact: true }).click();
+    await writer.keyboard.press('ControlOrMeta+z');
     await expect.poll(() => shapes(writer)).toEqual(proof.pen);
     await sync();
-    await writer.getByRole('button', { name: 'Redo', exact: true }).click();
+    await writer.keyboard.press('ControlOrMeta+Shift+z');
     await expect.poll(() => shapes(writer)).toEqual([]);
     proof.erased = await sync();
 
-    await writer.getByRole('button', { name: 'Rectangle · R', exact: true }).click();
+    await tool(writer, 'rectangle');
     await gesture(writer, [[350, 300], [550, 430]]);
     const rectangle = (await shapes(writer)).find(shape => shape.type === 'geo');
     if (!rectangle) throw new Error('Pointer-created rectangle missing');
@@ -115,34 +125,34 @@ test('human native tools draw, erase, rotate, group, frame, copy, paste and undo
     expect((await bounds(writer, rectangle.id)).center.y).toBeCloseTo(beforeRotation.center.y, 2);
     proof.rotated = await sync();
 
-    await writer.getByRole('button', { name: 'Text · T', exact: true }).click();
+    await tool(writer, 'text');
     await writer.mouse.click(680, 340);
     await writer.locator('.tl-text-input [contenteditable="true"]').pressSequentially('Native tools stay shared', { delay: 8 });
     await writer.keyboard.press('Escape');
     const textShape = (await shapes(writer)).find(shape => shape.type === 'text');
     if (!textShape) throw new Error('Keyboard-created native text missing');
     await expect(writer.locator('.tl-shape[data-shape-type="text"]')).toContainText('Native tools stay shared');
-    await writer.getByRole('button', { name: 'Select · V', exact: true }).click();
+    await tool(writer, 'select');
     await writer.keyboard.press('ControlOrMeta+a');
     await expect.poll(async () => (await selected(writer)).length).toBe(2);
     const beforeGroup = await Promise.all([bounds(writer, rectangle.id), bounds(writer, textShape.id)]);
-    await writer.getByRole('button', { name: 'Group', exact: true }).click();
+    await writer.keyboard.press('ControlOrMeta+g');
     const group = (await shapes(writer)).find(shape => shape.type === 'group');
     if (!group) throw new Error('UI grouping did not create a native group');
     for (const id of [rectangle.id, textShape.id]) expect((await shapes(writer)).find(shape => shape.id === id)?.parentId).toBe(group.id);
     proof.grouped = await sync();
-    await writer.getByRole('button', { name: 'Select · V', exact: true }).click();
+    await tool(writer, 'select');
     await writer.keyboard.press('ControlOrMeta+Shift+g');
     await expect.poll(async () => (await shapes(writer)).map(shape => shape.type).sort()).toEqual(['geo', 'text']);
     for (const id of [rectangle.id, textShape.id]) expect((await shapes(writer)).find(shape => shape.id === id)?.parentId).toBe(group.parentId);
     expectSameBounds(await bounds(writer, rectangle.id), beforeGroup[0]);
     expectSameBounds(await bounds(writer, textShape.id), beforeGroup[1]);
     proof.ungrouped = await sync();
-    await writer.getByRole('button', { name: 'Group', exact: true }).click();
+    await writer.keyboard.press('ControlOrMeta+g');
     const regrouped = (await shapes(writer)).find(shape => shape.type === 'group');
     if (!regrouped) throw new Error('UI regrouping did not create a native group');
     const beforeFrame = await bounds(writer, regrouped.id);
-    await writer.getByRole('button', { name: 'Frame · F', exact: true }).click();
+    await tool(writer, 'frame');
     await gesture(writer, [[280, 210], [1130, 590]]);
     const frame = (await shapes(writer)).find(shape => shape.type === 'frame');
     if (!frame) throw new Error('Pointer-created native frame missing');
@@ -152,7 +162,7 @@ test('human native tools draw, erase, rotate, group, frame, copy, paste and undo
     expect(originals).toHaveLength(4);
     proof.framed = originals;
     await expect.poll(() => selected(writer)).toEqual([frame.id]);
-    await writer.getByRole('button', { name: 'Select · V', exact: true }).click();
+    await tool(writer, 'select');
     const previousClipboard = await clipboardFingerprint(writer);
     await writer.keyboard.press('ControlOrMeta+c');
     await expect.poll(async () => { const current = await clipboardFingerprint(writer); return current !== null && current !== previousClipboard; }).toBe(true);
@@ -170,10 +180,10 @@ test('human native tools draw, erase, rotate, group, frame, copy, paste and undo
     }
     expect(pasted.filter(shape => originals.some(original => original.id === shape.id))).toEqual(originals);
     proof.pasted = pasted;
-    await writer.getByRole('button', { name: 'Undo', exact: true }).click();
+    await writer.keyboard.press('ControlOrMeta+z');
     await expect.poll(() => shapes(writer)).toEqual(originals);
     await sync();
-    await writer.getByRole('button', { name: 'Redo', exact: true }).click();
+    await writer.keyboard.press('ControlOrMeta+Shift+z');
     await expect.poll(() => shapes(writer)).toEqual(pasted);
     proof.redone = await sync();
     await writer.getByRole('button', { name: 'Fit everything' }).click();

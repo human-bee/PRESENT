@@ -1,0 +1,28 @@
+{
+  "boundary": "Server operation start through receipt of native WebSocket patch by all four loopback peers. No browser, acoustic audio or provider time.",
+  "peers": 4,
+  "objects": 13,
+  "categories": {
+    "create": {
+      "actions": 13,
+      "p50Ms": 5.949460000000045,
+      "p95Ms": 16.534851000000003,
+      "maxMs": 16.534851000000003,
+      "belowOneSecond": 13
+    },
+    "move": {
+      "actions": 200,
+      "p50Ms": 16.47654799999964,
+      "p95Ms": 17.520044000000098,
+      "maxMs": 19.934531000000334,
+      "belowOneSecond": 200
+    },
+    "sharedState": {
+      "actions": 200,
+      "p50Ms": 1.8456089999999676,
+      "p95Ms": 3.3804410000002463,
+      "maxMs": 5.584348999999975,
+      "belowOneSecond": 200
+    }
+  }
+}

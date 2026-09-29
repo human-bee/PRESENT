@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
-import { buildSandboxDocument, isWidgetState, MAX_STATE_BYTES, readWidgetIncrement, readWidgetPatch, readWidgetRequestId } from '../src/widgets/sandbox';
+import { buildSandboxDocument, isWidgetState, MAX_STATE_BYTES, readWidgetIncrement, readWidgetPatch, readWidgetRequestId, readWidgetShortcut } from '../src/widgets/sandbox';
 import { createStarter } from '../src/widgets/presets';
 
 test('widget bridge accepts bounded JSON and rejects unsafe state trees', () => {
@@ -79,6 +79,19 @@ test('iframe API sends partial updates, exposes stable participant identity and 
   frames.shift()?.(); frames.shift()?.();
   assert.equal(posted.at(-1)?.type, 'present:rendered');
   assert.deepEqual(posted.at(-1)?.receipts, ['channel:1', 'channel:2']);
+  handlers.message({ source: parent, data: { channel: 'channel', type: 'present:state', state: { left: 1, right: 2, score: 3 }, receipts: ['channel:1', 'channel:2', 'other-widget:1'] } });
+  assert.equal(stateEvents, 3, 'another widget receipt must not rebuild this unchanged widget');
+  frames.shift()?.(); frames.shift()?.();
+  assert.deepEqual(posted.at(-1)?.receipts, ['channel:1', 'channel:2', 'other-widget:1'], 'render acknowledgement remains available');
+  present.increment('score');
+  assert.equal(stateEvents, 4);
+  handlers.message({ source: parent, data: { channel: 'channel', type: 'present:state', state: { left: 1, right: 2, score: 4 }, receipts: ['channel:1', 'channel:2', 'channel:3'] } });
+  assert.equal(stateEvents, 4, 'canonical confirmation of the optimistic view is not a visible change');
+  present.increment('score');
+  assert.equal(stateEvents, 5);
+  handlers.message({ source: parent, data: { channel: 'channel', type: 'present:rejected', requestId: 'channel:4' } });
+  assert.equal(stateEvents, 6, 'rejection must still render the rollback');
+  assert.deepEqual(present.getState(), { left: 1, right: 2, score: 4 });
 });
 
 test('widget request receipts cannot be forged for another iframe channel', () => {
@@ -89,6 +102,38 @@ test('widget request receipts cannot be forged for another iframe channel', () =
     assert.equal(readWidgetRequestId({ source, data: { ...data, requestId } }, source, 'private'), null);
   }
   assert.equal(readWidgetRequestId({ source: {} as Window, data }, source, 'private'), null);
+});
+
+test('widget shortcuts require the focused frame, exact source/channel and an allowlisted command', () => {
+  const source = {} as Window;
+  const data = { channel: 'private', type: 'present:shortcut', shortcut: 'composer' };
+  assert.equal(readWidgetShortcut({ source, data }, source, 'private', true), 'composer');
+  assert.equal(readWidgetShortcut({ source, data: { ...data, shortcut: 'escape' } }, source, 'private', true), 'escape');
+  assert.equal(readWidgetShortcut({ source, data }, source, 'private', false), null);
+  assert.equal(readWidgetShortcut({ source: {} as Window, data }, source, 'private', true), null);
+  assert.equal(readWidgetShortcut({ source, data }, source, 'other', true), null);
+  for (const shortcut of ['delete', 'save', 'x', { command: 'composer' }]) {
+    assert.equal(readWidgetShortcut({ source, data: { ...data, shortcut } }, source, 'private', true), null);
+  }
+});
+
+test('sandbox forwards only trusted app shortcuts, never ordinary typing or composition', () => {
+  const posted: unknown[] = [], handlers: Record<string, (event: unknown) => void> = {};
+  const bridge = buildSandboxDocument('', 'channel', {}).match(/<script>([\s\S]*?)<\/script>/)![1];
+  runInNewContext(bridge, { structuredClone, parent: { postMessage: (value: unknown) => posted.push(structuredClone(value)) },
+    document: { addEventListener: (name: string, handler: (event: unknown) => void) => { handlers[name] = handler; } },
+    window: { addEventListener() {} },
+  });
+  posted.length = 0;
+  const key = (extra: Record<string, unknown>) => handlers.keydown({ key: 'k', isTrusted: true, preventDefault() {}, stopImmediatePropagation() {}, ...extra });
+  for (const extra of [{}, { ctrlKey: true, isTrusted: false }, { metaKey: true, isComposing: true }, { ctrlKey: true, altKey: true }, { ctrlKey: true, repeat: true }, { key: 'a' }]) key(extra);
+  assert.deepEqual(posted, []);
+  key({ ctrlKey: true }); key({ key: 'K', metaKey: true }); key({ key: 'Escape' });
+  assert.deepEqual(posted, [
+    { type: 'present:shortcut', channel: 'channel', shortcut: 'composer' },
+    { type: 'present:shortcut', channel: 'channel', shortcut: 'composer' },
+    { type: 'present:shortcut', channel: 'channel', shortcut: 'escape' },
+  ]);
 });
 
 test('quick-add presets have independent object identities and explicit shared widget state', () => {

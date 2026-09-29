@@ -1,0 +1,145 @@
+name: Native RoomOS QA
+
+on:
+  push:
+    branches: ['codex/present-ui-qa-*']
+  pull_request:
+    branches: ['codex/present-cloud-base-20260921']
+  workflow_dispatch:
+    inputs:
+      cloud_staging:
+        description: 'Also exercise the isolated signed Railway staging service'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: node --import tsx scripts/benchmarks/native-sync.ts
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [local, invite, production]
+    env:
+      PRESENT_ENV_FILE: /tmp/present-no-provider-environment
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Local UI, widgets, keyboard and two-person scenarios
+        if: matrix.profile == 'local'
+        run: npm run test:e2e -- --max-failures=5
+      - name: Signed owner, editor, viewer and revocation
+        if: matrix.profile == 'invite'
+        run: npx playwright test --config tests/access-playwright.config.ts
+      - name: Production bundle and UI latency
+        if: matrix.profile == 'production'
+        run: |
+          npm run build
+          npx playwright test --config tests/production-playwright.config.ts
+          PRESENT_SOAK_SECONDS=30 npx playwright test --config tests/soak-playwright.config.ts --output test-results/short-meeting
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-browser-${{ matrix.profile }}
+          path: |
+            test-results/
+            playwright-report/
+            /tmp/present-access-browser-*/results/
+          retention-days: 7
+
+  meeting-soak:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PRESENT_SOAK_SECONDS: '1200'
+      PRESENT_ENV_FILE: /tmp/present-no-provider-environment
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Twenty-minute, three-participant recorded meeting QA
+        run: npx playwright test --config tests/soak-playwright.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-meeting-soak
+          path: |
+            test-results/**/*.png
+            test-results/**/*.json
+            test-results/**/*.md
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-meeting-participant-0
+          path: test-results/**/participant-0/*.webm
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-meeting-participant-1
+          path: test-results/**/participant-1/*.webm
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-meeting-participant-2
+          path: test-results/**/participant-2/*.webm
+          retention-days: 7
+
+  cloud-staging:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.cloud_staging)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Wait for isolated staging health
+        run: node scripts/wait-staging.mjs
+      - name: Signed hosted room, real WebSocket peers and widget actions
+        run: npx playwright test --config tests/cloud-playwright.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-cloud-staging
+          path: |
+            test-results/cloud/**/*.json
+            test-results/cloud/licensing-blocker.png
+          retention-days: 7

@@ -162,3 +162,22 @@ test('room recall searches full saved content and pages beyond bounded summaries
     assert.equal(missing.totalMatches, 0);
   } finally { f.close(); }
 });
+
+test('standard interactive instruments create working shared widgets without model generation', async () => {
+  const f = fixture();
+  let generations = 0;
+  f.dependencies.widget = async () => { generations++; throw new Error('Unexpected generation'); };
+  try {
+    for (const starter of ['poll', 'teleprompter', 'synth']) {
+      const result = await executeVoiceTool(request('add_starter', { starter }, `starter_${starter}`), undefined, f.dependencies) as { objectId: string; committed: boolean };
+      const object = f.store.getRoom(roomId).objects.find(item => item.id === result.objectId);
+      assert.equal(result.committed, true);
+      assert.equal(object?.kind, 'widget');
+      assert.match(String(object?.data.html), /<(button|input|textarea)/);
+      assert.equal(typeof object?.data.state, 'object');
+    }
+    assert.equal(generations, 0);
+    await assert.rejects(f.run('add_starter', { starter: 'unlisted' }), /precise details/);
+    assert.equal(f.store.getRoom(roomId).objects.length, 3);
+  } finally { f.close(); }
+});

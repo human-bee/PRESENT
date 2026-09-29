@@ -45,8 +45,8 @@ test('two people natively edit, drag, resize, undo, time, roll, and reload the s
   const room = randomBytes(16).toString('hex');
   const a = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
   const b = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
-  await a.addInitScript(() => localStorage.setItem('present:name', 'Alex'));
-  await b.addInitScript(() => localStorage.setItem('present:name', 'River'));
+  await a.addInitScript(() => { if (window === window.top) localStorage.setItem('present:name', 'Alex'); });
+  await b.addInitScript(() => { if (window === window.top) localStorage.setItem('present:name', 'River'); });
   const [alex, river] = await Promise.all([a.newPage(), b.newPage()]);
   try {
     await Promise.all([alex.goto(`/r/${room}`), river.goto(`/r/${room}`)]);
@@ -65,10 +65,10 @@ test('two people natively edit, drag, resize, undo, time, roll, and reload the s
     await expect.poll(async () => (await geometry(alex, thought.id))?.x).not.toBe(original?.x);
     const moved = await geometry(alex, thought.id);
     await expect.poll(() => geometry(river, thought.id)).toEqual(moved);
-    await alex.getByRole('button', { name: 'Undo', exact: true }).click();
+    await alex.keyboard.press('ControlOrMeta+z');
     await expect.poll(() => geometry(alex, thought.id)).toEqual(original);
     await expect.poll(() => geometry(river, thought.id)).toEqual(original);
-    await alex.getByRole('button', { name: 'Redo', exact: true }).click();
+    await alex.keyboard.press('ControlOrMeta+Shift+z');
     await expect.poll(() => geometry(river, thought.id)).toEqual(moved);
     await expect(note(alex).locator('.tl-text-content')).toContainText(sentence);
 

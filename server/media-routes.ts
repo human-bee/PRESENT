@@ -1,5 +1,7 @@
+import { roomAuthorization } from './access/context';
+import { MediaRevocations } from './access/media';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AccessToken } from 'livekit-server-sdk';
+import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 
 function reply(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -18,7 +20,14 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-/** Room links are capabilities. Possession permits joining only that exact room. */
+export const mediaRevocations = new MediaRevocations(async (roomId, userId) => {
+  const raw = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL;
+  const key = process.env.LIVEKIT_API_KEY, secret = process.env.LIVEKIT_API_SECRET;
+  if (!raw || !key || !secret) throw new Error('Media removal is not configured.');
+  const url = new URL(raw); url.protocol = url.protocol === 'wss:' ? 'https:' : url.protocol === 'ws:' ? 'http:' : url.protocol;
+  await new RoomServiceClient(url.toString(), key, secret, { requestTimeout: 5, failover: false }).removeParticipant(roomId, userId);
+});
+/** In invite mode the dispatcher supplies a live signed membership. */
 export async function handleMediaRequest(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   if (req.url?.split('?')[0] !== '/api/media/token') return false;
   if (req.method !== 'POST') {
@@ -33,7 +42,10 @@ export async function handleMediaRequest(req: IncomingMessage, res: ServerRespon
     reply(res, 400, { error: 'Invalid call request.' });
     return true;
   }
-  const { roomId, identity, name } = input as Record<string, unknown>;
+  const { roomId, identity: suppliedIdentity, name } = input as Record<string, unknown>;
+  const scope = roomAuthorization();
+  const identity = scope?.check('read').userId ?? suppliedIdentity;
+  if (scope && roomId !== scope.roomId) throw new Error('Room scope mismatch.');
   if (typeof roomId !== 'string' || !/^[a-f0-9]{24,64}$/.test(roomId)
     || typeof identity !== 'string' || !/^[\w-]{3,80}$/.test(identity)
     || typeof name !== 'string' || !name.trim() || name.length > 60 || /\p{Cc}/u.test(name)) {
@@ -52,9 +64,14 @@ export async function handleMediaRequest(req: IncomingMessage, res: ServerRespon
     return true;
   }
   try {
-    const token = new AccessToken(key, secret, { identity, name: name.trim(), ttl: '15m' });
-    token.addGrant({ roomJoin: true, room: roomId, canPublish: true, canSubscribe: true, canPublishData: false });
-    reply(res, 200, { url: url.toString(), token: await token.toJwt() });
+    const grant = scope?.check('read');
+    const ttl = grant ? Math.max(1, Math.min(60, Math.floor((grant.expiresAt - Date.now()) / 1000))) : 900;
+    const token = new AccessToken(key, secret, { identity, name: name.trim(), ttl });
+    token.addGrant({ roomJoin: true, room: roomId, canPublish: !grant || grant.role !== 'viewer', canSubscribe: true, canPublishData: false });
+    const jwt = await token.toJwt();
+    scope?.check('read');
+    if (scope) mediaRevocations.track(scope, Date.now() + ttl * 1000);
+    reply(res, 200, { url: url.toString(), token: jwt, canPublish: !grant || grant.role !== 'viewer' });
   } catch {
     reply(res, 503, { error: 'The call could not be started. Try again shortly.' });
   }

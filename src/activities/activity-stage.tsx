@@ -1,7 +1,7 @@
 import { ActivitySettings } from './activity-config';
 import { ActivityHeader } from './activity-header';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useEditor, useValue } from 'tldraw';
+import { TLDOCUMENT_ID, useEditor, useValue } from 'tldraw';
 import { activityTemplates, readRoomOS, type Activity } from '../../shared/activity';
 import { useWidgetRuntime } from '../tldraw/widget-runtime';
 import { useActions } from './activity-api';
@@ -16,7 +16,10 @@ export { ActivityController } from './activity-controller';
 export function ActivityWidget({ activityId }: { activityId: string }) {
   const editor = useEditor(),
     runtime = useWidgetRuntime();
-  const os = useValue('native-activity', () => readRoomOS(editor.store.allRecords()), [editor]);
+  const os = useValue('native-activity', () => {
+    const document = editor.store.get(TLDOCUMENT_ID);
+    return readRoomOS(document ? [document] : []);
+  }, [editor]);
   const a = os.activities.find((a) => a.id === activityId);
   return a ? (
     <ActivityStage

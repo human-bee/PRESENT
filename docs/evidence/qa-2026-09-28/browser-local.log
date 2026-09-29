@@ -1,0 +1,30 @@
+2026-09-28T19:32:42.8088443Z Running 27 tests using 1 worker
+2026-09-28T19:32:50.9754604Z   ✓   1 tests/e2e/activity.spec.ts:4:1 › audience suggestions are moderated, voted, brought on air and retained across reconnects (6.2s)
+2026-09-28T19:32:59.5552219Z   ✓   2 tests/e2e/activity.spec.ts:71:1 › two participants instantly launch, take opposing seats, correct claims and reload the same native activity (8.6s)
+2026-09-28T19:33:11.4553185Z   ✓   3 tests/e2e/document.spec.ts:31:1 › fast shared-document typing preserves every character through delayed native sync and reload (11.9s)
+2026-09-28T19:33:13.8294721Z   ✓   4 tests/e2e/media.spec.ts:54:1 › joining and using the canvas does not capture any device or start a call (2.4s)
+2026-09-28T19:33:13.8475114Z   -   5 tests/e2e/media.spec.ts:78:1 › two people exchange synthetic LiveKit video and audio, then stop every captured track
+2026-09-28T19:33:28.2667992Z   ✓   6 tests/e2e/native-tools.spec.ts:50:1 › human native tools draw, erase, rotate, group, frame, copy, paste and undo across peers and reload (14.4s)
+2026-09-28T19:33:33.3432790Z   ✓   7 tests/e2e/poll.spec.ts:4:1 › each participant has one shared vote and keeps their choice after reloading (5.1s)
+2026-09-28T19:33:36.4187035Z   ✓   8 tests/e2e/request-recovery.spec.ts:4:1 › a reload restores the original request identity and recovers its result (3.1s)
+2026-09-28T19:33:50.4582256Z   ✓   9 tests/e2e/room.spec.ts:44:1 › two people natively edit, drag, resize, undo, time, roll, and reload the same room (14.0s)
+2026-09-28T19:33:55.8156585Z   ✓  10 tests/e2e/room.spec.ts:148:1 › native rich text keeps every character while prior server acknowledgements arrive late (5.3s)
+2026-09-28T19:33:55.8340215Z   -  11 tests/e2e/roomos-live.spec.ts:6:1 › contextual RoomOS speech acceptance with real providers
+2026-09-28T19:34:00.2617752Z   ✓  12 tests/e2e/sandbox.spec.ts:31:1 › different state keys survive concurrent changes from two stale iframe clients (4.4s)
+2026-09-28T19:34:02.1098826Z   ✓  13 tests/e2e/sandbox.spec.ts:69:1 › generated iframe cannot directly read its parent, send requests, open windows, or navigate the room (1.8s)
+2026-09-28T19:34:03.9242870Z   ✓  14 tests/e2e/sandbox.spec.ts:107:1 › an explicit source-link click opens a separate tab through the parent bridge (1.8s)
+2026-09-28T19:34:11.4423023Z   ✓  15 tests/e2e/voice-layout.spec.ts:12:1 › @layout voice controls stay inside a mobile viewport after a failed connection (7.5s)
+2026-09-28T19:34:11.4575441Z   -  16 tests/e2e/voice-live.spec.ts:20:1 › real Realtime speech creates a native note from a synthetic microphone
+2026-09-28T19:34:26.7042215Z   ✓  17 tests/e2e/widget-catalog.spec.ts:7:1 › every built-in instrument adds, shares, moves and survives reload (15.2s)
+2026-09-28T19:34:28.6143170Z   ✓  18 tests/e2e/widget-catalog.spec.ts:70:1 › composer keyboard shortcut and panel exclusivity survive repeated toggles (1.9s)
+2026-09-28T19:34:31.7812873Z   ✓  19 tests/e2e/widget-interactions.spec.ts:83:35 › Task board works through two people's real controls (3.1s)
+2026-09-28T19:34:35.0543535Z   ✓  20 tests/e2e/widget-interactions.spec.ts:83:35 › Meeting brief works through two people's real controls (3.3s)
+2026-09-28T19:34:38.4690067Z   ✓  21 tests/e2e/widget-interactions.spec.ts:83:35 › Audience Q&A works through two people's real controls (3.4s)
+2026-09-28T19:34:42.2300591Z   ✓  22 tests/e2e/widget-interactions.spec.ts:83:35 › Shared deck works through two people's real controls (3.7s)
+2026-09-28T19:34:45.5886574Z   ✓  23 tests/e2e/widget-interactions.spec.ts:83:35 › Debate desk works through two people's real controls (3.3s)
+2026-09-28T19:34:48.9262241Z   ✓  24 tests/e2e/widget-interactions.spec.ts:83:35 › Find your words works through two people's real controls (3.3s)
+2026-09-28T19:34:52.0434044Z   ✓  25 tests/e2e/widget-interactions.spec.ts:83:35 › A shared frequency works through two people's real controls (3.1s)
+2026-09-28T19:34:53.9217511Z   ✓  26 tests/e2e/widget-interactions.spec.ts:105:1 › a tall new instrument stays clear of mobile room controls (1.9s)
+2026-09-28T19:35:05.8350415Z   ✓  27 tests/e2e/widget-latency.spec.ts:5:1 › 60 alternating participant actions retain shared dice history and measure UI latency (11.9s)
+2026-09-28T19:35:06.0481951Z   3 skipped
+2026-09-28T19:35:06.0482360Z   24 passed (2.4m)

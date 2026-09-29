@@ -1,122 +1,95 @@
-# Room access: milestone 3 integration handoff
+# Invite profile: application integration
 
-Baseline: `2cd569fca3c4363ca2dfa37c9327faa59d5f5d8f`, branch `codex/present-cloud-base-20260921`. This contribution adds only the access lane. **It is not mounted and does not make the current server safe to expose remotely.** No bind address, settings, main application, room persistence, media wiring, or existing routes are changed.
+Based on `99fd64bd357caded31fd2d1a8b8195c31119bab8` from `codex/present-cloud-base-20260921`. This patch mounts the previously integrated access foundation. It preserves native tldraw sync, RoomOS, request recovery, room projection caching and the loopback developer profile. No deployment or provider calls are part of validation.
 
-## Configuration and developer loop
+## Run profiles
 
-`configuredAccess()` from `server/access/index.ts` returns undefined when `PRESENT_ACCESS_MODE` is absent or `local`. Keep today's loopback-only developer behavior in that case. Explicit `invite` mode requires all of:
+With `PRESENT_ACCESS_MODE` unset or `local`, use the existing `npm run dev` loop at `http://127.0.0.1:4317`. Room links and local templates work. `localhost` remains the separate MCP sandbox origin; its APIs/assets/sockets cannot access the application. Hosted MCP, playbook and development benchmark routes are unavailable, with explicit errors.
 
-- `PRESENT_ACCESS_SECRET`: operator-supplied high-entropy secret, at least 32 bytes. No generated deployment fallback; no committed credential. Keep stable across restarts. Rotation invalidates every session.
-- `PRESENT_ACCESS_ORIGIN`: exact canonical HTTPS origin (no path/trailing slash). Explicit `http://127.0.0.1:PORT` is supported for local integration testing.
-- `PRESENT_ACCESS_DIRECTORY`: private durable directory outside public/static serving roots, on a filesystem supporting atomic rename and directory fsync.
+For the invite profile, supply these values through the operator's environment or private environment file; no deployment secret is generated or included:
 
-This module does not read forwarded headers, listen on a network address, enable CORS, or relax the existing sandbox policy. Remote transport/proxy configuration is coordinator-owned. Preserve exact Host/Origin checking at HTTP entry and every websocket upgrade listener, and retain separation of the MCP sandbox origin. Never treat an arbitrary forwarded host as trusted. Public hosting remains blocked until every access path below is wired. Rate-limit session creation and invite attempts at the HTTP edge before alpha exposure; these endpoints are unauthenticated capability entry points. Core state has fixed limits of 1,000 sessions/rooms and 1,000 members/invites per room to bound disk growth; this is not a substitute for edge rate limiting.
-
-## Exact HTTP mounting
-
-Initialize once after dotenv configuration:
-
-```ts
-import { configuredAccess, assertAccessOrigin, authorizeRequest, AccessError } from './access';
-const alpha = configuredAccess();
-```
-
-In the coordinator's request handler, after the existing sandbox isolation but before dispatch:
-
-```ts
-if (alpha) {
-  assertAccessOrigin(req, alpha.origin, !['GET', 'HEAD'].includes(req.method ?? ''));
-  if (await alpha.handleRequest(req, res)) return;
-}
-```
-
-`assertAccessOrigin` augments the explicit invite-mode host policy; simply placing this behind today's unconditional loopback Host rejection will intentionally still reject remote traffic. Preserve the current local branch unchanged. The coordinator must explicitly select the canonical invite-mode transport policy; this contribution does not choose one. Errors from protected routes should map `AccessError.status/message` in the coordinator's error handler, without exposing internal exceptions. Call `alpha?.access.close()` on orderly shutdown.
-
-| Method | Path | Input/result |
-| --- | --- | --- |
-| POST | `/api/access/session` | Server chooses identity; HttpOnly, SameSite=Strict cookie, Secure over HTTPS. Existing valid cookie reuses identity. |
-| DELETE | `/api/access/session` | Revoke session, clear cookie. An expired cookie can also be cleared. |
-| POST | `/api/access/rooms` | Authenticated session creates server-selected room ID and owner grant. No arbitrary ID claiming. |
-| POST | `/api/access/join` | `{token}` → membership grant, role chosen from persisted invite only. |
-| GET | `/api/access/rooms/:roomId` | Own membership grant, including role and session expiry. |
-| POST | `/api/access/rooms/:roomId/invites` | Owner only: `{role: 'editor'|'viewer', ttlMs, maxUses}` → invite ID/token. |
-| DELETE | `/api/access/rooms/:roomId/invites/:inviteId` | Owner revokes invite and every membership derived from it. |
-| DELETE | `/api/access/rooms/:roomId/members/:userId` | Owner revokes a non-owner member. |
-| POST | `/api/access/rooms/:roomId/leave` | Non-owner permanently gives up this identity's membership. |
-
-All mutation requests require the exact Origin header, including cookie/session endpoints. JSON request bodies are limited to 4 KiB and validated strictly. Session tokens are never accepted in request bodies, URL parameters, or actor fields. Invite tokens are bearer capabilities, SHA-256 hashed at rest, bounded to 1–10 uses and 1 second–7 days. UI defaults: one use, 24 hours. Expiry limits redemption; joined membership continues until revoked, left, or session expiry. A viewer redeeming an editor invite remains a viewer; invitations do not alter existing roles.
-
-## Authorization hooks — deny before room-store access
-
-```ts
-const grant = authorizeRequest(alpha.access, req, roomId, 'write');
-// Server identity replaces every client-supplied actor/user ID.
-applyOperation(roomId, input.operation, grant.userId, options);
-```
-
-For code that awaits work, capture the cookie token using `sessionToken(req)`, construct `authorizationPath(access, token, roomId, permission)`, and call the resulting function immediately before each sensitive read/commit. Do not cache a grant as continuing authorization. RoomStore creates missing rooms lazily: never call it before access authorization. Creating an access room reserves an ID; native state may initialize lazily afterward. Existing baseline rooms have no access records and are denied in invite mode; this is intentional. No auto-claim migration from room-ID knowledge.
-
-| Surface | Required permission / integration |
+| Variable | Required value |
 | --- | --- |
-| Room snapshot, document, subscriptions, read canvas | `read` before loading, reading, or streaming the room |
-| Operations, canvas mutations, scene/playbook changes | `write` before commit; server-issued actor |
-| Agent/provider/work/MCP tools, costly remote execution | `tools` before starting and again before each eventual mutation; bind scope to authorized room server-side |
-| Asset upload | `asset:write`; persist asset → authorized room association before returning URL |
-| Asset GET/HEAD/range | `asset:read` on actual persisted asset room association before opening file; use private/no-store caching |
-| Media joins/tokens/recordings | `read` for receive, `write` for publish; mint bounded provider grants using authenticated identity; coordinator owns wiring |
-| Invite/member revocation | `invite` / `revoke`, owner only |
+| `PRESENT_ACCESS_MODE` | `invite` |
+| `PRESENT_ACCESS_SECRET` | Stable, operator-supplied high-entropy secret of at least 32 bytes |
+| `PRESENT_ACCESS_ORIGIN` | Exact canonical HTTPS origin, e.g. `https://present.example.com`; no path/trailing slash |
+| `PRESENT_ACCESS_DIRECTORY` | Absolute private durable directory for access records, outside static roots |
+| `PRESENT_DATA_DIRECTORY` | Absolute private durable directory for native rooms, assets, jobs and templates |
+| `NODE_ENV` | `production` for HTTPS hosting |
+| `PRESENT_PORT` | Internal port, default `4317` |
+| `PRESENT_HOST` | `127.0.0.1` by default; `0.0.0.0` is admitted only with the invite profile |
 
-**Assets currently have global `/api/assets/:name` URLs and no room association.** A room query parameter alone is insufficient: an attacker with access to their own room could substitute another asset name. Coordinator must add a durable association or room-specific namespace and enforce it on upload and every read. Do not expose the old global asset handler in invite mode before that exists. Inventory non-room endpoints (benchmarks, embeddings/proxies, work, scenes, MCP, providers) explicitly; unknown/unscoped APIs must default-deny in invite mode. The access handler only owns `/api/access/*`; it is not a catch-all firewall.
+Build with `npm ci --ignore-scripts`, `node scripts/sync-assets.mjs`, then `npm run build`. With the environment above supplied, run `node --import tsx server/index.ts`. Container hosting can set `PRESENT_HOST=0.0.0.0`; local mode cannot. The operator's HTTPS reverse proxy must preserve the exact configured `Host` and browser `Origin`, support websocket upgrades and SSE, and disable buffering of the membership event stream. Forwarded host/origin headers are ignored. Do not route the private data directories as static content. HTTPS invite mode refuses to run the Vite source server.
 
-## Websocket integration (server/room-socket.ts, coordinator)
+For an isolated local invite check, the only supported HTTP origin is explicit `http://127.0.0.1:PORT`; omit `NODE_ENV=production` for the development UI. Set both data directories to disposable locations and provide a test-only secret. The browser smoke config does this automatically, clears provider configuration and never loads `.env.local`.
 
-Before `getTldrawRoom` and `handleUpgrade`, require `assertAccessOrigin(request, alpha.origin, true)` and `authorizeRequest(access, request, roomId, 'read')`. Session IDs provided by tldraw are transport IDs, never auth identities. Namespace them with the authenticated `grant.userId` before peer lookup so a guest cannot replace another participant's connection.
+The bounded application limits are 12 new sessions/minute and 30 invite redemptions/minute per socket peer, with at most 2,048 rate-limit keys. Behind a single proxy these are intentionally aggregate limits; forwarded addresses do not bypass them. Existing valid sessions do not consume session-creation capacity. The access store additionally bounds sessions/rooms to 1,000 and members/invites per room to 1,000.
+
+## User flow
+
+The entry screen creates an anonymous, server-signed HttpOnly session, then creates a new owner room or explicitly redeems an invite. Visiting `/r/:roomId` verifies membership before mounting the canvas; room-ID knowledge cannot claim an existing room. The owner opens **Invite** to create a bounded editor/viewer link, review memberships/invitations and revoke either. Non-owners can leave. Invitation secrets are in `#invite=...`, removed before the app loads; GET/prefetch never consumes them.
+
+The room panel contains built-ins and the current signed user's saved templates. Only the source room owner can export a layout. The existing privacy whitelist remains authoritative: no room history, transcripts, workspaces, private assets or membership data are copied. Instantiating creates a fresh access-owned room, checks again inside the native install transaction and navigates into its editable canvas. There is no shared global user catalog.
+
+Viewers get native readonly sync, a view-only banner, canvas navigation and receive-only call joining. Edit/composer/voice/activity controls are hidden, embedded widget forms are disabled, and HTTP/socket enforcement remains authoritative. Display names remain user-chosen; identity and authority come from the signed session.
+
+## Mounted security boundaries
+
+`server/index.ts` selects the profile after environment loading. `createInviteProfile` wraps existing dispatch; `installNativeAccessGuard` decorates the application's public `RoomStore` boundary without changing the coordinator-owned store/cache implementation. `src/main.tsx` mounts `AccessApp`, which supplies signed identity to `App` and `useRoom`. Existing native canvas and request-recovery flows are retained.
+
+- HTTP: exact Host, exact Origin for all mutations, no cross-site requests, bounded input, explicit API allowlist. Unknown/unscoped APIs deny access. Actors and voice/media participant identities are overwritten before existing handlers parse input. JSON room IDs must agree with path scopes.
+- Room data: `RoomAuthorization.check(permission)` revalidates the signed session, current membership and role each time. Public store reads/writes/subscription deliveries check it; mutation audit actors use the signed member. System persistence/expiry sweeps retain their existing implementation. Do not retain a raw `TLSocketRoom` across an await without checking again before `updateStore`; the template installer does so inside its callback.
+- Native sockets: authorization before room load/upgrade, transport IDs namespaced by signed user, signed presence IDs, native `isReadonly`/`objectAccess`, live checks before every inbound message and outbound send, and idle expiry/revocation watchers. Chunked native protocol messages still work, with bounded assembly. Revocation closes sockets with code 1008.
+- Pending HTTP/provider operations: revocation destroys the response, triggering existing abort controllers; store/asset commits recheck current access after awaits. Request recovery is still keyed by its existing journal. It does not substitute for authorization.
+- Activities: schedulers are isolated by room **and initiating identity** and closed on revocation. Scene playback creates a timer per control invocation and its frame commits cross the guarded store boundary. The separate shared WorkJobs queue requires the adapter described below.
+- Browser lifecycle: a checked membership SSE stream unmounts canvas/media/voice on revocation or session expiry; SSE is bounded to 128 connections. Server checks remain effective if the browser ignores the event.
+
+API exceptions are deliberate: `GET /api/profile` and `GET /api/health` are public metadata; session creation is rate-limited. `GET /api/agents`, `/api/activity/connectors`, and `/api/projects` require a valid signed session. The projects route grants catalog metadata only, **not** project execution or workspace access. Its coordinator-owned handler still needs mounting (below). Other room reads require membership; writes/tools require editor or owner; invites/revocation require owner.
+
+## Assets
+
+Invite assets have actual durable namespaces: `<PRESENT_DATA_DIRECTORY>/assets/rooms/<roomId>/<sha256>.<ext>` and `/api/assets/<roomId>/<sha256>.<ext>`. Browser uploads, generated images and imported web images use the same policy. GET, HEAD and range requests authorize that namespace before opening the file and use private/no-store caching. Upload checks again after receiving bytes; live streams close on revocation. Substituting another room ID only addresses that room's own directory; a room query cannot authorize arbitrary global hashes. Provider image references reject cross-room or legacy unassociated assets.
+
+Existing global/local assets and old local rooms are not automatically claimed or published in invite mode. There is no migration based on a supplied room ID or hash. Asset limits remain per directory (25 MB upload, 512 MB/1,000 files for uploads); external generated-image routines retain their existing limits. Private storage requires operator capacity planning, not a public object-store fallback.
+
+## Media revocation and its limits
+
+`server/media-routes.ts` signs LiveKit tokens locally using the existing operator-supplied `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. Participant identity is the signed member. Viewers have `canPublish=false`, `canSubscribe=true`; data publishing is disabled. Admission tokens last at most 60 seconds and never beyond session expiry, with access checked again after signing.
+
+`MediaRevocations` injects a `(roomId, userId) => Promise<void>` removal hook. The mounted implementation uses LiveKit `removeParticipant`, a five-second SDK timeout and no region failover. Revocation/expiry attempts immediate removal, then another sweep after the latest issued admission token expires plus a two-second clock margin. Each sweep has at most three attempts, five seconds per attempt and one-second backoff. At most 256 identities are tracked. Owner **Check call removal** reads the bounded state via `GET /api/access/rooms/:roomId/media`.
+
+The UI intentionally reports **pending** through the admission window and **failed** if the final removal fails. A copied external JWT may reconnect during its remaining admission window. Immediate irreversible JWT revocation is not promised. Existing calls do not necessarily end merely because a JWT expires. Successful removal requires reachable provider service credentials and clocks consistent with the token issuer. A process restart loses in-memory leases; provider-level termination and monitoring remain necessary if an external call outlives the server. Session/room HTTP and native sync revocation remain effective independently.
+
+Voice ownership leases are stopped server-side, and the browser unmount stops its realtime client. This patch does not add an OpenAI call-ID hangup mechanism or modify the separately owned voice transport/ownership modules; a malicious client retaining a direct external peer connection needs that provider-specific termination integration. It cannot continue using PRESENT tools, room reads or commits after revocation.
+
+## Coordinator integration (required only for selected-project work)
+
+The patch does not edit `server/agents/work-jobs.ts`, workspace modules, work contracts, voice transport or Luna's client media files. See [work-authorization-integration.md](work-authorization-integration.md) for exact start/resume/drain/checkpoint/commit hooks. Until those hooks are installed, hosted `/api/work/*` and work initiation through composer/voice/activities return a clear unavailable error. Local work behavior is unchanged. Do not call `enableHostedWorkAuthorization()` early.
+
+Terra's `server/projects/routes.ts` is absent from this base, so it is not imported here. After applying onto the coordinator's combined tree, add its existing import and dispatch call:
 
 ```ts
-const token = sessionToken(request);
-const check = authorizationPath(access, token, roomId, 'read');
-const grant = check();
-const nativeSessionId = `${grant.userId}:${clientSessionId}`;
-room.handleSocketConnect({
-  sessionId: nativeSessionId,
-  isReadonly: grant.role === 'viewer',
-  objectAccess: grant.role === 'viewer' ? 'read' : 'write',
-  socket: guardedSocket,
-});
-const unwatch = watchAuthorization(access, token, roomId,
-  () => connection.close(1008, 'Room access ended.'));
-connection.once('close', unwatch);
+import { handleProjectRequest } from './projects/routes';
+// Inside server/index.ts dispatch, before the unknown-API response:
+if (await handleProjectRequest(req, res)) return;
 ```
 
-Use `check()` before each inbound frame is passed to `handleSocketMessage`, and before **each outbound** `guardedSocket.send`; close on failure. Native readonly + objectAccess enforce viewer permissions while allowing legitimate presence/protocol traffic. Do not allow client claims/presence metadata to authorize tools. `watchAuthorization` closes idle connections on persisted revocation or expiry; its timer rechecks at most every minute and at the expiry deadline. Unsubscribe on connection/stream close. Streams and pending agent work need the same cancellation/invalidation pattern. Provider media revocation must additionally remove participants/revoke provider grants; this hook alone cannot revoke a previously minted external token.
+The invite profile already checks the signed session for **GET only** `/api/projects` before this dispatch. Keep the response restricted to `id/name/description`; workspace snapshots and diff evidence stay under their job's authorized room and initiating identity.
 
-## Compact UI mounting (src/app.tsx, coordinator)
+## Persistence and alpha lifecycle
 
-Exports in `src/access/room-access.tsx`: `JoinRoom`, `InviteRoom`, `roomAccessClient`, `takeRoomInvite`. Before the app's old `getRoomId()` runs, capture the invitation once at application bootstrap:
+Access mutations write a private temporary file, fsync it, rename atomically, fsync the directory and only then publish state. Failed/corrupt storage fails closed. The exclusive access lock requires one Node process and a local durable filesystem; do not run multiple writers or use shared NFS. Following an unclean exit, verify no writer is alive before removing only the stale `access.lock`. Back up access records alongside native room/assets/templates data.
 
-```ts
-const initialInvite = takeRoomInvite(); // strips #invite from history, before analytics
-```
+Sessions expire after seven days by default. There is no account recovery/renewal/ownership transfer. Clearing the owner's cookie or rotating the deployment secret loses that identity's room management; plan the alpha within this window. Owners cannot leave. Leave/revoke creates permanent membership tombstones for that signed identity; consumed/revoked invites cannot replay. A newly created anonymous session is a new identity and needs another valid invite. Invite expiry bounds redemption, not already-joined membership; existing roles cannot be escalated by redeeming another invite.
 
-Render `<JoinRoom initialInvite={initialInvite} onJoined={grant => { history.replaceState({}, '', `/r/${grant.roomId}`); /* store grant, then mount room */ }} />` when not admitted. On `/r/:roomId`, fetch `roomAccessClient.get(roomId)` and mount the existing room only after success. Failure displays the join screen, never creates access for that URL. On successful membership, use `grant.userId` for actor/presence identity and mount `<InviteRoom key={grant.roomId} grant={grant} />` beside room controls. Owner-only UI is convenience; server checks are authoritative. A non-owner Leave button calls `roomAccessClient.leave(grant.roomId)`, tears down sync/media, and returns to the join screen. Display server errors and session expiry; don't silently replace an invalid owner identity.
-
-Invite links use `/#invite=...` so redemption secrets never enter HTTP request URLs or Referer headers. The user explicitly clicks Join; GET/prefetch never consumes an invite. Tokens are not put in localStorage. The UI allows selecting/copying a new link and revoking it during the mounted session. For later revocation, retain the returned non-secret invite ID in coordinator-owned room UI state, or revoke a member by the server-issued user ID; there is no admin/account system or invite-list screen in this lane.
-
-## Persistence, lifecycle and intentional alpha limits
-
-Synchronous copy-on-write mutations serialize redemption counts within one Node process. Write private temporary file → file fsync → atomic rename → directory fsync → publish memory → notify listeners. A failed pre-rename write leaves the old state; an ambiguous post-rename durability failure disables the store and notifies active access watchers. Corrupt records fail startup; never silently recreate an empty store. The exclusive `access.lock` blocks a second writer. **Single process, local durable filesystem only**; not cluster/shared-NFS storage. After an unclean process exit, verify no writer is alive and remove only the stale lock before restart. Do not remove the access JSON or automate lock stealing. Back up the access directory with room data.
-
-Sessions last seven days by default (constructor supports up to 30). This minimal alpha has no account recovery or renewal: clearing cookies, expiry, or secret rotation loses the owner's ability to manage that room. Plan the two-person test within this window and retain the browser session; recovery/ownership transfer is a follow-up, not an insecure room-ID claim endpoint. Owners cannot leave or be revoked via member APIs. Leaving or revoking membership creates a tombstone: another invite cannot restore that same identity. A newly created anonymous session is a different identity and may redeem a different valid invitation; this system is capability access, not person-level banning. Do not distribute another invite to someone whose access should remain revoked.
-
-## Local validation
+## Validation commands
 
 ```sh
-npm ci --ignore-scripts
-node --import tsx --test tests/room-access.test.ts
 npm run typecheck
-node --import tsx server/access/benchmark.ts 100000
+node --import tsx --test tests/invite-profile.test.ts
+node --import tsx server/access/integration-benchmark.ts 20000
+# Mac with installed Chrome; uses two isolated browser contexts and no providers:
+PRESENT_E2E_BROWSER_CHANNEL=chrome node --import tsx node_modules/@playwright/test/cli.js test --config tests/access-playwright.config.ts
 ```
 
-The focused contract suite exercises real local HTTP handlers and cookie/Origin behavior plus role checks, single-use redemption, privilege escalation attempts, tampering, expiry, live watcher invalidation, durable replay denial, member/session revocation, exclusive writer and failed persistence. Benchmark excludes network and writes: warmed HMAC/session/membership/permission checks, random ephemeral test secret, temporary directory removed afterward. No live provider tests, deployment, or external messages are needed.
-
-Validation on the cloud baseline: all 3 focused contract tests passed; `npm run typecheck` passed. The local authorization benchmark measured 100,000 checks in 4,753 ms (47.53 µs/check, about 21,038 checks/s); environment-specific, not an end-to-end throughput claim. The direct Node loader avoids the tsx CLI IPC socket denied by this environment.
+The focused suite exercises real HTTP/native websocket paths, actor/presence binding, reconnect persistence, viewer denial, revocation and late commits, asset isolation/HEAD/range, per-user templates/fresh rooms, signed projects policy, local media JWT claims and an injected provider-removal stub. The benchmark compares warmed cached native reads with/without live authorization, excluding network and providers. Browser coverage is scripted but was **not executed successfully in cloud**: managed browser localhost navigation returns `net::ERR_BLOCKED_BY_CLIENT`, and workspace Playwright Chromium is not installed. The ZIP includes exact results and command evidence; do not count the blocked smoke as passing.

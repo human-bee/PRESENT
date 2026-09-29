@@ -1,17 +1,19 @@
 import { packDocument } from './common';
 import { briefActionMetaPatch } from './brief-state';
+import { reconcileTextInput } from './text-selection';
 
 export const briefHtml = packDocument(`
 <div><h2>Meeting brief</h2><p class="muted">Keep what mattered, what was decided and who takes the next step.</p></div>
 <label>Summary<textarea id="brief-summary" aria-label="Meeting summary" rows="4" maxlength="4000" placeholder="What brought us together, and where did we land?"></textarea></label>
 <section class="stack"><h3>Decisions</h3><div class="row"><input id="new-decision" class="grow" aria-label="New decision" maxlength="500" placeholder="What did we decide?"><button id="add-decision" type="button">Add decision</button></div><div id="decisions" class="stack" aria-label="Meeting decisions"></div></section>
 <section class="stack"><h3>Actions</h3><div class="row"><input id="new-action" class="grow" aria-label="New action" maxlength="300" placeholder="What happens next?"><input id="new-action-owner" class="grow" aria-label="New action owner" maxlength="80" placeholder="Owner"><button id="add-action" type="button" class="primary">Add action</button></div><div id="actions" class="stack" aria-label="Meeting actions"></div></section>`, `
-const briefActionMetaPatch=${briefActionMetaPatch.toString()};
+const briefActionMetaPatch=${briefActionMetaPatch.toString()};const reconcileTextInput=${reconcileTextInput.toString()};
 const summary=document.getElementById('brief-summary'),decisions=document.getElementById('decisions'),actions=document.getElementById('actions');
 const statuses=['To do','Doing','Done'];
+let composing=false;
 const render=()=>{
   const current=state(),decisionFocus=rememberFocus(decisions),actionFocus=rememberFocus(actions);
-  if(document.activeElement!==summary)summary.value=typeof current.summary==='string'?current.summary:'';
+  if(!composing)reconcileTextInput(summary,typeof current.summary==='string'?current.summary:'');
   decisions.replaceChildren();actions.replaceChildren();
   for(const decision of records(current,'decision').sort((a,b)=>Number(a.at)-Number(b.at))){
     const panel=el('div',{className:'panel stack','data-decision-id':decision.id}),text=el('textarea',{'aria-label':'Decision text',rows:2,maxlength:500});
@@ -29,7 +31,8 @@ const render=()=>{
   if(!actions.children.length)actions.append(empty('Add the next step and give it an owner.'));
   restoreFocus(decisions,decisionFocus);restoreFocus(actions,actionFocus);
 };
-summary.oninput=()=>commit({summary:summary.value});summary.onblur=()=>{summary.value=String(state().summary||'')};
+summary.oninput=()=>{if(!composing)commit({summary:summary.value})};summary.onblur=()=>{if(!composing)reconcileTextInput(summary,String(state().summary||''))};
+summary.oncompositionstart=()=>{composing=true};summary.oncompositionend=()=>{composing=false;commit({summary:summary.value});render()};
 const addDecision=()=>{
   const input=document.getElementById('new-decision');if(!input.value.trim())return;
   if(records(state(),'decision').length>=30){notice.textContent='Keep up to 30 decisions in this brief.';return}

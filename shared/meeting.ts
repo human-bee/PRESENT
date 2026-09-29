@@ -45,6 +45,7 @@ export const commitmentSchema = z.object({
   authorizedBy: id.nullable(),
   authorizedAt: z.number().nullable(),
   authorization: z.string(),
+  projectId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/).nullable().default(null),
   status: z.enum(['blocked', 'ready', 'dispatching', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),
   jobId: id.nullable(),
   objectId: id.nullable(),
@@ -94,7 +95,7 @@ export const meetingCommands = [
     ownerId: id,
     blockedBy: z.array(id).min(1).max(8),
   }),
-  z.object({ type: z.literal('authorize-work'), commitmentId: id }),
+  z.object({ type: z.literal('authorize-work'), commitmentId: id, projectId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/).optional() }),
   z.object({ type: z.literal('cancel-authorization'), commitmentId: id }),
   z.object({ type: z.literal('retry-dispatch'), commitmentId: id }),
 ] as const;

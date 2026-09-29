@@ -1,3 +1,15 @@
+import { closeVoiceAuthorizations } from './access/voice-lease';
+import { enableHostedWorkAuthorization } from './access/work-authorization';
+import { configuredAccess, AccessError, assertAccessOrigin } from './access';
+import { installNativeAccessGuard } from './access/native-guard';
+import { createInviteProfile } from './access/profile';
+import { closeAuthorizedActivities } from './access/activities';
+import { mediaRevocations } from './media-routes';
+import { createTemplateRequestHandler } from './template-routes';
+import { TemplateCatalog } from './templates/catalog';
+import { installTemplateRecords } from './templates/install';
+import { getCanvasRecords, getTldrawRoom } from './room-store';
+import { dataPath } from './data-path';
 import { handleSceneRequest } from './scenes/routes';
 import { closeScenes } from './scenes/playback';
 import dotenv from 'dotenv';
@@ -13,6 +25,7 @@ import { handleRoomRequest } from './room-routes.js';
 import { handleAssetRequest } from './asset-routes.js';
 import { handleEmbedRequest } from './embed-routes.js';
 import { handleWorkRequest } from './work-routes.js';
+import { handleProjectRequest } from './projects/routes.js';
 import { handleActivityRequest } from './activity-routes.js';
 import { activityEngine } from './activities/engine.js';
 import { closeWorkJobs } from './agents/work-jobs.js';
@@ -24,22 +37,39 @@ const { closeCodexSession } = await import('./agents/codex.js');
 const { handleMediaRequest } = await import('./media-routes.js');
 const port = Number(process.env.PRESENT_PORT ?? 4317);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('PORT must be an integer between 1024 and 65535.');
+const alpha = configuredAccess();
+const host = process.env.PRESENT_HOST ?? '127.0.0.1';
+if (!['127.0.0.1', '0.0.0.0'].includes(host) || (host !== '127.0.0.1' && !alpha)) throw new Error('Network hosting requires the signed invitation profile.');
+if (alpha) installNativeAccessGuard();
+enableHostedWorkAuthorization();
+const inviteProfile = alpha ? createInviteProfile(alpha) : undefined;
+const localTemplates = createTemplateRequestHandler({ catalog: new TemplateCatalog(dataPath('templates', 'local')), readRoom: getCanvasRecords, installRoom: (id, records) => installTemplateRecords(getTldrawRoom(id), records) });
 let closing = false;
 const server = createServer(async (req, res) => {
   commonHeaders(res);
   if (closing) return json(res, 503, { error: 'The room is restarting. Reconnect in a moment.' });
+  // Platform probes may not use the public Host. Only liveness and a public source revision.
+  if (req.method === 'GET' && req.url === '/healthz') {
+    const revision = process.env.RAILWAY_GIT_COMMIT_SHA;
+    return json(res, 200, { ok: true, ...(/^[a-f0-9]{40}$/.test(revision ?? '') ? { revision } : {}) });
+  }
   const hostOrigin = `http://127.0.0.1:${port}`, sandboxOrigin = `http://localhost:${port}`;
-  if (handleMcpSandbox(req, res, { hostOrigin, sandboxOrigin })) return;
+  if (!alpha && handleMcpSandbox(req, res, { hostOrigin, sandboxOrigin })) return;
   // localhost is reserved for the cross-origin MCP sandbox. Only top-level UI
   // navigation redirects; its API, asset, iframe and socket requests stay denied.
-  if (req.headers.host === `localhost:${port}` && req.method === 'GET' && req.headers['sec-fetch-dest'] === 'document' && req.headers['sec-fetch-mode'] === 'navigate' && !/^\/(api|mcp|connect|__vite_hmr)(\/|$)/.test(req.url ?? '/')) {
+  if (!alpha && req.headers.host === `localhost:${port}` && req.method === 'GET' && req.headers['sec-fetch-dest'] === 'document' && req.headers['sec-fetch-mode'] === 'navigate' && !/^\/(api|mcp|connect|__vite_hmr)(\/|$)/.test(req.url ?? '/')) {
     const redirect = new URL(req.url ?? '/', hostOrigin);
     res.writeHead(307, { location: `${hostOrigin}${redirect.pathname}${redirect.search}` }); res.end(); return;
   }
-  if (req.headers.host !== `127.0.0.1:${port}` || !isLocalRequest(req, port)) return json(res, 403, { error: 'This server accepts same-origin local requests only.' });
-  res.setHeader('content-security-policy', `frame-src 'self' ${sandboxOrigin}; object-src 'none'; base-uri 'self'`);
+  if (!alpha && (req.headers.host !== `127.0.0.1:${port}` || !isLocalRequest(req, port))) return json(res, 403, { error: 'This server accepts same-origin local requests only.' });
+  res.setHeader('content-security-policy', `frame-src 'self' ${alpha ? '' : sandboxOrigin}; object-src 'none'; base-uri 'self'`);
   try {
+    if (inviteProfile) { await inviteProfile(req, res, async request => { await dispatch(request); }); return; }
+    await dispatch(req);
+    async function dispatch(req: import('node:http').IncomingMessage) {
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+    if (!alpha && url.pathname === '/api/profile' && req.method === 'GET') return json(res, 200, { profile: 'local' });
+    if (!alpha && await localTemplates(req, res)) return;
     if (url.pathname === '/api/health') return json(res, 200, { ok: true, service: 'present', version: '0.1.0' });
     if (await handleSceneRequest(req, res) || await handlePlaybook(req, res)) return;
     if (await handleReactiveBenchmark(req, res)) return;
@@ -48,6 +78,7 @@ const server = createServer(async (req, res) => {
     if (await handleAssetRequest(req, res)) return;
     if (handleEmbedRequest(req, res)) return;
     if (await handleWorkRequest(req, res)) return;
+    if (await handleProjectRequest(req, res)) return;
     if (await handleActivityRequest(req, res)) return;
     if (await handleMcpRequest(req, res)) return;
     if (await handleAgentRequest(req, res)) return;
@@ -55,9 +86,10 @@ const server = createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) return json(res, 404, { error: 'Unknown API route.' });
     if (vite) return vite.middlewares(req, res, () => json(res, 404, { error: 'Not found.' }));
     return serveDist(req, res, url.pathname, join(process.cwd(), 'dist'));
+    }
   } catch (error) {
     if (res.headersSent) { res.end(); return; }
-    json(res, error instanceof RoomError ? error.status : 500, { error: error instanceof RoomError ? error.message : 'The request could not be completed.' });
+    json(res, (error instanceof RoomError || error instanceof AccessError) ? error.status : 500, { error: (error instanceof RoomError || error instanceof AccessError) ? error.message : 'The request could not be completed.' });
   }
 });
 server.requestTimeout = 30_000;
@@ -65,29 +97,36 @@ server.headersTimeout = 10_000;
 server.on('upgrade', (req, socket) => {
   const path = (req.url ?? '').split('?')[0];
   const allowed = path === '/connect' || (process.env.NODE_ENV !== 'production' && path === '/__vite_hmr');
-  if (req.headers.host !== `127.0.0.1:${port}` || !isLocalRequest(req, port) || !allowed) socket.destroy();
+  try {
+    if (!allowed) throw new Error('Unknown upgrade');
+    if (alpha) assertAccessOrigin(req, alpha.origin, true);
+    else if (req.headers.host !== `127.0.0.1:${port}` || !isLocalRequest(req, port)) throw new Error('Local upgrade only');
+  } catch { socket.destroy(); }
 });
-const closeSockets = attachRoomSocket(server, port);
+const closeSockets = attachRoomSocket(server, port, { getTldrawRoom }, alpha);
 let vite: import('vite').ViteDevServer | undefined;
 if (process.env.NODE_ENV !== 'production') {
   const { createServer: createVite } = await import('vite');
-  vite = await createVite({ server: { middlewareMode: true, hmr: { server, path: '/__vite_hmr' } }, appType: 'spa' });
+  vite = await createVite({ server: { middlewareMode: true, allowedHosts: process.env.PRESENT_MANAGED_PREVIEW === '1' ? ['terminal.local'] : [], hmr: { server, path: '/__vite_hmr' } }, appType: 'spa' });
 }
 const sweep = setInterval(sweepExpired, 5_000);
 sweep.unref();
-server.listen(port, '127.0.0.1', () => console.log(`PRESENT is ready at http://127.0.0.1:${port}`));
+server.listen(port, host, () => console.log(`PRESENT is ready at ${alpha?.origin ?? `http://127.0.0.1:${port}`}`));
 async function shutdown() {
   if (closing) return;
   closing = true;
   cancelAgentRequests();
+  closeVoiceAuthorizations();
   activityEngine.close();
+  closeAuthorizedActivities();
+  mediaRevocations.close();
   closeWorkJobs();
   closeScenes();
   clearInterval(sweep);
   closeSockets();
   await closeCodexSession();
   await vite?.close();
-  const finish = () => { closeRoomStore(); process.exit(0); };
+  const finish = () => { closeRoomStore(); alpha?.access.close(); process.exit(0); };
   server.close(finish);
   setTimeout(() => { server.closeAllConnections(); finish(); }, 5000).unref();
 }

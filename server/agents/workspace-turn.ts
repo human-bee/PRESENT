@@ -9,13 +9,15 @@ const finalText = (turn: Record<string, unknown>) => itemsOf(turn).filter(item =
 
 /** Correlate durable turn checkpoints before considering another dispatch. */
 export async function runWorkspaceTurn(wire: WorkspaceWire, input: WorkspaceRunInput, cwd: string, signal: AbortSignal): Promise<string> {
+  const check = () => { input.assertAuthorized?.(); if (signal.aborted) throw new AgentError('Local work was cancelled.', 408); };
+  check();
   const state = structuredClone(input.state), threadId = state.threadId;
   if (!threadId) throw new AgentError('The local work task was not saved.');
   let turnId = ['dispatching', 'running'].includes(state.phase) ? state.turnId : null;
   let output = '', rejectCompletion: (error: Error) => void = () => {}, resolveCompletion: (value: string) => void = () => {};
   let polling: ReturnType<typeof setInterval> | undefined, reading = false;
   const early: WireMessage[] = [];
-  const save = (patch: Partial<WorkExecutionState>) => { Object.assign(state, patch); input.onCheckpoint(structuredClone(state)); };
+  const save = (patch: Partial<WorkExecutionState>) => { check(); Object.assign(state, patch); input.onCheckpoint(structuredClone(state)); };
   const completion = new Promise<string>((resolve, reject) => { resolveCompletion = resolve; rejectCompletion = reject; });
   void completion.catch(() => {});
   const receipt = (item: Record<string, unknown>) => {
@@ -38,6 +40,7 @@ export async function runWorkspaceTurn(wire: WorkspaceWire, input: WorkspaceRunI
       if (message.method === 'closed') { rejectCompletion(new AgentError('The local work connection stopped. Resume to reconcile its saved turn.')); return; }
       if (!['item/completed', 'turn/completed', 'error'].includes(message.method ?? '')) return;
       const params = record(message.params); if (params.threadId !== threadId) return;
+      check();
       if (!turnId) { if (early.length < 256) early.push(message); return; }
       const turn = record(params.turn); if ((params.turnId ?? turn.id) !== turnId) return;
       if (message.method === 'item/completed') {
@@ -49,7 +52,9 @@ export async function runWorkspaceTurn(wire: WorkspaceWire, input: WorkspaceRunI
     } catch (error) { rejectCompletion(error instanceof Error ? error : new AgentError('Local work could not be checkpointed.')); }
   };
   const readTurn = async () => {
+    check();
     const response = await wire.request<{ thread: { turns?: unknown[] } }>('thread/read', { threadId, includeTurns: true });
+    check();
     const turns = (response.thread.turns ?? []).map(record);
     const matches = turns.filter(turn => turnId ? turn.id === turnId : itemsOf(turn).some(item => item.type === 'userMessage' && item.clientId === state.dispatchId));
     if (matches.length !== 1 || typeof matches[0].id !== 'string') throw new AgentError('The checkpointed work turn could not be identified. A duplicate turn was not started.', 409);
@@ -73,7 +78,8 @@ export async function runWorkspaceTurn(wire: WorkspaceWire, input: WorkspaceRunI
           cwd, runtimeWorkspaceRoots: [cwd], environments: [{ environmentId: 'local', cwd, runtimeWorkspaceRoots: [cwd] }],
           permissions: 'present-work', approvalPolicy: 'never', outputSchema: input.outputSchema,
         });
-        turnId = started.turn.id; save({ phase: 'running', turnId });
+        turnId = started.turn.id; // Retain the remote ID for interruption even if access ended during the await.
+        check(); save({ phase: 'running', turnId });
       } catch (error) {
         if (error instanceof AgentError && error.cause) save({ phase: 'failed' }); // A definite RPC rejection did not dispatch a turn.
         throw error;
@@ -81,7 +87,7 @@ export async function runWorkspaceTurn(wire: WorkspaceWire, input: WorkspaceRunI
       for (const message of early) listener(message);
     }
     if (signal.aborted) abort();
-    return await completion;
+    const result = await completion; check(); return result;
   } finally {
     if (polling) clearInterval(polling);
     signal.removeEventListener('abort', abort);

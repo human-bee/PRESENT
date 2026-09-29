@@ -1,4 +1,6 @@
-import { Track, type Participant, type Room } from 'livekit-client';
+import type { Participant, Room } from 'livekit-client';
+
+export type MediaSource = string;
 
 export type MediaParticipant = {
   id: string;
@@ -24,8 +26,8 @@ export const emptyMediaState = (): MediaState => ({
   status: 'idle', error: null, mic: false, camera: false, screen: false, participants: [],
 });
 
-export function sourceActive(person: Participant, source: Track.Source): boolean {
-  const publication = person.getTrackPublication(source);
+export function sourceActive(person: Participant, source: MediaSource): boolean {
+  const publication = person.getTrackPublication(source as never);
   return Boolean(publication && !publication.isMuted && publication.track?.mediaStreamTrack.readyState === 'live');
 }
 
@@ -42,7 +44,7 @@ function participantState(person: Participant, localId: string): MediaParticipan
   for (const publication of person.trackPublications.values()) {
     const track = publication.track?.mediaStreamTrack;
     if (!track || publication.isMuted || track.readyState === 'ended') continue;
-    const isScreen = publication.source === Track.Source.ScreenShare || publication.source === Track.Source.ScreenShareAudio;
+    const isScreen = publication.source === 'screen_share' || publication.source === 'screen_share_audio';
     (isScreen ? screenTracks : personTracks).push(track);
   }
   for (const [stream, tracks] of [[pair.person, personTracks], [pair.screen, screenTracks]] as const) {
@@ -54,8 +56,8 @@ function participantState(person: Participant, localId: string): MediaParticipan
     stream: personTracks.length ? pair.person : undefined,
     screenStream: screenTracks.length ? pair.screen : undefined,
     speaking: person.isSpeaking,
-    mic: person.identity === localId ? sourceActive(person, Track.Source.Microphone) : person.isMicrophoneEnabled,
-    camera: person.identity === localId ? sourceActive(person, Track.Source.Camera) : person.isCameraEnabled,
+    mic: person.identity === localId ? sourceActive(person, 'microphone') : person.isMicrophoneEnabled,
+    camera: person.identity === localId ? sourceActive(person, 'camera') : person.isCameraEnabled,
   };
 }
 

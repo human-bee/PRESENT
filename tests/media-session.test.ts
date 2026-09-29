@@ -2,9 +2,19 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { LocalTrack, Room } from 'livekit-client';
 import { MediaSession } from '../src/media/media-session';
+import { loadLiveKit, resetLiveKitLoaderForTests } from '../src/media/livekit-loader';
+
+if (!globalThis.MediaStream) (globalThis as typeof globalThis & { MediaStream: typeof MediaStream }).MediaStream = class {
+  private tracks: MediaStreamTrack[] = [];
+  getTracks() { return this.tracks; }
+  addTrack(track: MediaStreamTrack) { this.tracks.push(track); }
+  removeTrack(track: MediaStreamTrack) { this.tracks = this.tracks.filter((item) => item !== track); }
+  getVideoTracks() { return []; }
+  getAudioTracks() { return []; }
+} as unknown as typeof MediaStream;
 
 // Replace the device/network boundary so lifecycle tests never touch real devices.
-type Boundary = { capture: (device: string) => Promise<LocalTrack[]>; join: () => Promise<Room>; room: Room | null };
+type Boundary = { capture: (device: string) => Promise<LocalTrack[]>; join: () => Promise<Room>; room: Room | null; sdk: unknown };
 const session = () => new MediaSession('a'.repeat(32), 'human-1', 'Human');
 
 test('creating a media session leaves every device and connection off', () => {
@@ -32,16 +42,19 @@ test('leaving while a permission prompt is pending stops late tracks and never p
   let resolveCapture!: (tracks: LocalTrack[]) => void;
   const track = { stop: () => { stopped += 1; } } as unknown as LocalTrack;
   const room = {
+    remoteParticipants: new Map(),
     localParticipant: { trackPublications: new Map(), getTrackPublication: () => undefined,
       publishTrack: async () => { published += 1; }, unpublishTrack: async () => undefined },
     removeAllListeners: () => undefined,
     disconnect: async () => { disconnected += 1; },
   } as unknown as Room;
   boundary.room = room;
+  boundary.sdk = await loadLiveKit();
   boundary.join = async () => room;
   boundary.capture = () => new Promise((resolve) => { resolveCapture = resolve; });
   const pending = media.toggleMic();
-  await Promise.resolve();
+  for (let i = 0; i < 200 && !resolveCapture; i++) await new Promise((resolve) => setTimeout(resolve, 1));
+  assert.ok(resolveCapture);
   media.disconnect();
   resolveCapture([track]);
   await pending;
@@ -78,4 +91,13 @@ test('repeated device presses cannot launch simultaneous capture prompts', async
   rejectCapture(new DOMException('Denied', 'NotAllowedError'));
   await first;
   assert.equal(media.getSnapshot().screen, false);
+});
+
+test('concurrent SDK loads share one resolved module and remain retryable by contract', async () => {
+  resetLiveKitLoaderForTests();
+  const [first, second] = await Promise.all([loadLiveKit(), loadLiveKit()]);
+  assert.equal(first, second);
+  resetLiveKitLoaderForTests();
+  const retry = await loadLiveKit();
+  assert.equal(retry.Room !== undefined, true);
 });

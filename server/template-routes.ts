@@ -8,6 +8,8 @@ import { TemplateCatalog } from './templates/catalog';
 
 export type TemplateRoutePorts = {
   catalog: TemplateCatalog;
+  reserveRoom?: () => string;
+  check?: () => void;
   /** Host applies its room authorization policy before returning records. */
   readRoom: (roomId: string) => readonly TLRecord[] | Promise<readonly TLRecord[]>;
   /** Commit all records atomically to a NEW room, rejecting an existing destination. */
@@ -20,6 +22,7 @@ export function createTemplateRequestHandler(ports: TemplateRoutePorts) {
     const match = /^\/api\/templates(?:\/([a-z0-9-]+)(\/instantiate)?)?$/.exec(path);
     if (!match) return false;
     try {
+      ports.check?.();
       if (req.method === 'GET' && !match[2]) {
         const value = match[1] ? ports.catalog.get(match[1]) : ports.catalog.list();
         json(res, value ? 200 : 404, value ?? { error: 'Template not found.' }); return true;
@@ -30,14 +33,18 @@ export function createTemplateRequestHandler(ports: TemplateRoutePorts) {
       const body: unknown = JSON.parse(Buffer.concat(chunks).toString() || '{}');
       if (!match[1]) {
         const input = save.parse(body);
-        const result = ports.catalog.save(exportRoomTemplate(await ports.readRoom(input.roomId), input.name));
+        const records = await ports.readRoom(input.roomId);
+        ports.check?.();
+        const result = ports.catalog.save(exportRoomTemplate(records, input.name));
         json(res, 201, result); return true;
       }
       z.object({}).strict().parse(body);
       const template = ports.catalog.get(match[1]);
       if (!template) { json(res, 404, { error: 'Template not found.' }); return true; }
-      const instance = instantiateRoomTemplate(template), roomId = randomBytes(16).toString('hex');
+      const instance = instantiateRoomTemplate(template), roomId = ports.reserveRoom?.() ?? randomBytes(16).toString('hex');
+      ports.check?.();
       await ports.installRoom(roomId, instance.records);
+      ports.check?.();
       json(res, 201, { roomId, notices: instance.notices } satisfies TemplateInstallation);
     } catch { json(res, 400, { error: 'Template operation failed. Check the room, template and server capacity.' }); }
     return true;

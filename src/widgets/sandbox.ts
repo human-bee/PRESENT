@@ -2,6 +2,8 @@ import { createWidgetStateView } from './pending-widget-state';
 
 export type WidgetState = Record<string, unknown>;
 export const MAX_STATE_BYTES = 48_000;
+export const WIDGET_SHORTCUT_EVENT = 'present:widget-shortcut';
+export type WidgetShortcut = 'composer' | 'escape';
 const forbiddenKeys = new Set(['__proto__', 'prototype', 'constructor']);
 
 /** State crosses a trust boundary, so accept only small, plain JSON trees. */
@@ -47,6 +49,12 @@ export function readWidgetRequestId(event: Pick<MessageEvent, 'source' | 'data'>
   return typeof id === 'string' && id.length <= 100 && id.startsWith(`${channel}:`) && /^[1-9]\d*$/.test(id.slice(channel.length + 1)) ? id : null;
 }
 
+/** Only two app commands cross this boundary; never forward typed characters. */
+export function readWidgetShortcut(event: Pick<MessageEvent, 'source' | 'data'>, source: MessageEventSource | null, channel: string, focused: boolean): WidgetShortcut | null {
+  if (!focused || !source || event.source !== source || event.data?.channel !== channel || event.data.type !== 'present:shortcut') return null;
+  return event.data.shortcut === 'composer' || event.data.shortcut === 'escape' ? event.data.shortcut : null;
+}
+
 function scriptJson(value: unknown): string {
   return JSON.stringify(value).replaceAll('<', '\\u003c').replaceAll('\u2028', '\\u2028').replaceAll('\u2029', '\\u2029');
 }
@@ -60,7 +68,10 @@ export function buildSandboxDocument(html: string, channel: string, state: Widge
 <script>(()=>{
 const __name=(fn)=>fn;
 const channel=${scriptJson(channel)};const view=(${createWidgetStateView.toString()})(${scriptJson(initialState)});let state=view.read();let sequence=0;
-const emit=()=>window.dispatchEvent(new CustomEvent('present:state',{detail:structuredClone(state)}));
+// Receipt-only native updates still retire pending edits and acknowledge rendering,
+// but must not rebuild every unrelated widget's DOM on another user's keystroke.
+let emittedState=null;
+const emit=()=>{const next=JSON.stringify(state);if(next===emittedState)return;emittedState=next;window.dispatchEvent(new CustomEvent('present:state',{detail:structuredClone(state)}))};
 const safe=(value)=>{try{const text=JSON.stringify(value);return text.length<=48000&&value&&typeof value==='object'&&!Array.isArray(value)&&!/("(?:__proto__|prototype|constructor)"\\s*:)/.test(text)}catch{return false}};
 window.present=Object.freeze({participantId:${scriptJson(participantId)},getState:()=>structuredClone(state),setState:patch=>{
 if(!safe(patch))return;patch=JSON.parse(JSON.stringify(patch));if(!safe({...state,...patch}))return;
@@ -81,6 +92,11 @@ const receipts=event.data.receipts.filter(id=>typeof id==='string'&&id.length<=1
 requestAnimationFrame(()=>requestAnimationFrame(()=>parent.postMessage({type:'present:rendered',channel,receipts},'*')))});
 document.addEventListener('click',event=>{const link=event.target.closest?.('a[href],area[href]');if(link){event.preventDefault();if(event.isTrusted)window.present.openLink(link.getAttribute('href'))}},true);
 document.addEventListener('submit',event=>event.preventDefault(),true);
+document.addEventListener('keydown',event=>{
+if(!event.isTrusted||event.isComposing||event.repeat)return;
+const shortcut=event.key==='Escape'?'escape':(event.metaKey||event.ctrlKey)&&!event.altKey&&event.key.toLowerCase()==='k'?'composer':null;
+if(!shortcut)return;event.preventDefault();event.stopImmediatePropagation();parent.postMessage({type:'present:shortcut',channel,shortcut},'*');
+},true);
 parent.postMessage({type:'present:ready',channel},'*');
 })();</script></head><body>${html}</body></html>`;
 }

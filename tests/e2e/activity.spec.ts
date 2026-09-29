@@ -84,6 +84,7 @@ test("two participants instantly launch, take opposing seats, correct claims and
 				},
 			});
 			await context.addInitScript((name) => {
+				if (window !== window.top) return;
 				localStorage.setItem("present:name", name);
 				navigator.mediaDevices.getUserMedia = async () => {
 					throw new Error("Physical devices are disabled for this test.");
