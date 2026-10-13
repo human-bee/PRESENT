@@ -233,6 +233,60 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
           <span style={{ color: '#85907c', fontSize: 11 }}>{agentNames[work.provider]}</span>
         )}
       </div>
+      <div className="widget-work-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {active ? (
+          <button
+            type="button"
+            className="widget-quiet"
+            style={button}
+            disabled={pending !== null || !selfId || !canControl}
+            title={canControl ? undefined : 'Only the person who started this run can cancel it.'}
+            onClick={() => void request('cancel')}
+          >
+            {pending === 'cancel' ? 'Cancelling…' : 'Cancel'}
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="widget-primary"
+              style={button}
+              disabled={pending !== null || !selfId || !nextPrompt.trim() || !canControl}
+              onClick={() => void request('start')}
+            >
+              {pending === 'start' ? 'Starting…' : work ? 'Continue work' : 'Start work'}
+            </button>
+            {resumable && (
+              <button
+                type="button"
+                className="widget-quiet"
+                style={button}
+                disabled={pending !== null || !selfId || !canControl}
+                title={
+                  canControl
+                    ? 'Resume the previous run with its original request.'
+                    : 'Only the person who started this run can resume it.'
+                }
+                onClick={() => void request('resume')}
+              >
+                {pending === 'resume' ? 'Resuming…' : 'Resume'}
+              </button>
+            )}
+          </>
+        )}
+        {work?.artifactIds.map((id, index) => (
+          <button
+            key={id}
+            type="button"
+            className="widget-quiet"
+            style={button}
+            disabled={!onOpenArtifact}
+            onClick={() => onOpenArtifact?.(id)}
+          >
+            {work.artifactIds.length === 1 ? 'Open artifact' : `Open artifact ${index + 1}`}
+          </button>
+        ))}
+      </div>
       <label style={label}>
         Title
         <input
@@ -322,60 +376,7 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
           {error}
         </p>
       )}
-      <div className="widget-work-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {active ? (
-          <button
-            type="button"
-            className="widget-quiet"
-            style={button}
-            disabled={pending !== null || !selfId || !canControl}
-            title={canControl ? undefined : 'Only the person who started this run can cancel it.'}
-            onClick={() => void request('cancel')}
-          >
-            {pending === 'cancel' ? 'Cancelling…' : 'Cancel'}
-          </button>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="widget-primary"
-              style={button}
-              disabled={pending !== null || !selfId || !nextPrompt.trim() || !canControl}
-              onClick={() => void request('start')}
-            >
-              {pending === 'start' ? 'Starting…' : work ? 'Continue work' : 'Start work'}
-            </button>
-            {resumable && (
-              <button
-                type="button"
-                className="widget-quiet"
-                style={button}
-                disabled={pending !== null || !selfId || !canControl}
-                title={
-                  canControl
-                    ? 'Resume the previous run with its original request.'
-                    : 'Only the person who started this run can resume it.'
-                }
-                onClick={() => void request('resume')}
-              >
-                {pending === 'resume' ? 'Resuming…' : 'Resume'}
-              </button>
-            )}
-          </>
-        )}
-        {work?.artifactIds.map((id, index) => (
-          <button
-            key={id}
-            type="button"
-            className="widget-quiet"
-            style={button}
-            disabled={!onOpenArtifact}
-            onClick={() => onOpenArtifact?.(id)}
-          >
-            {work.artifactIds.length === 1 ? 'Open artifact' : `Open artifact ${index + 1}`}
-          </button>
-        ))}
-      </div>
+
     </section>
   );
 }

@@ -13,6 +13,8 @@ import { appendTranscript } from './agents/transcript';
 import { createVoiceSession } from './agents/voice-session';
 import { executeVoiceTool } from './agents/voice-tools';
 import { voiceOwnership } from './agents/voice-ownership';
+import { RequestRecoveryError } from './agents/request-journal';
+import { requireRoomAuthorization } from './access/context';
 import { RoomError } from './room-store';
 
 const requests = new Set<AbortController>();
@@ -74,11 +76,16 @@ export async function handleAgentRequest(req: IncomingMessage, res: ServerRespon
             authorizedActivityEngine().ingestVoice(parsed.roomId, parsed.sessionId, parsed.arguments, voiceOwnership.provenance(parsed.roomId, parsed.sessionId));
             return saved;
           }));
-        } else reply(res, 200, await (url.pathname === '/api/agents/contribute' ? contribute(input, controller.signal) : url.pathname === '/api/agents/generate' ? fulfillRoomRequest(input, controller.signal) : voiceOwnership.runTool(input, ownerSignal => executeVoiceTool(input, AbortSignal.any([controller.signal, ownerSignal])))));
+        } else if (url.pathname === '/api/agents/generate') {
+          const result = await fulfillRoomRequest(input, controller.signal);
+          if (controller.signal.aborted || res.destroyed) return true;
+          requireRoomAuthorization((input as { roomId: string }).roomId, 'tools');
+          reply(res, 200, result);
+        } else reply(res, 200, await (url.pathname === '/api/agents/contribute' ? contribute(input, controller.signal) : voiceOwnership.runTool(input, ownerSignal => executeVoiceTool(input, AbortSignal.any([controller.signal, ownerSignal])))));
       }
     }
   } catch (error) {
-    if (error instanceof AgentError || error instanceof RoomError || error instanceof AccessError) reply(res, error.status, { error: error.message });
+    if (error instanceof AgentError || error instanceof RoomError || error instanceof AccessError) reply(res, error.status, { error: error.message, ...(error instanceof RequestRecoveryError ? { requestState: error.requestState } : {}) });
     else reply(res, 502, { error: controller.signal.aborted ? 'The request was cancelled or timed out.' : 'The agent could not complete this request. Please try again.' });
   } finally { res.off('close', disconnect); requests.delete(controller); }
   return true;

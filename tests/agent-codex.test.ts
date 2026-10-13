@@ -5,10 +5,11 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { closeCodexSession, codexAvailability, codexThreadOptions, generateWithCodex } from '../server/agents/codex';
 import { CodexWire, codexEnvironment } from '../server/agents/codex-wire';
+import { withRequestTrace, type TraceReceipt } from '../server/agents/request-trace';
 import { agentModels } from '../server/agents/contract';
 
 type Log = { method?: string; id?: number | string; params?: Record<string, unknown>; error?: unknown };
-async function fixture(includeSpark = true) {
+async function fixture(includeSpark = true, generatedText?: string) {
   await closeCodexSession();
   const directory = mkdtempSync(join(tmpdir(), 'present-codex-')); const ledger = join(directory, 'wire.jsonl');
   const command = join(directory, 'codex'); const previous = { cli: process.env.CODEX_CLI_PATH, home: process.env.CODEX_HOME };
@@ -33,7 +34,7 @@ createInterface({input:process.stdin}).on('line',line=>{
    event('item/completed',{threadId:'other-room',turnId,item:{type:'agentMessage',text:'wrong-room'}});
    event('item/completed',{threadId,turnId:'old-turn',item:{type:'agentMessage',text:'wrong-turn'}});
    event('error',{threadId,turnId,willRetry:true,error:{message:'retrying'}});
-   event('item/completed',{threadId,turnId,item:{type:'agentMessage',phase:'final_answer',text:prompt}});
+   event('item/completed',{threadId,turnId,item:{type:'agentMessage',phase:'final_answer',text:${JSON.stringify(generatedText)}??prompt}});
    event('item/completed',{threadId,turnId,item:{type:'agentMessage',phase:'commentary',text:'ignore-commentary'}});
    event('turn/completed',{threadId,turn:{id:turnId,status:'completed'}});
   };
@@ -124,4 +125,58 @@ test('retired execution providers cannot silently become current models', async 
     await assert.rejects(generateWithCodex('Keep my old model', AbortSignal.timeout(1000), 'terra'), /unavailable.*explicitly/);
     assert.equal(fake.logs().filter(message => message.method === 'thread/start').length, 0);
   } finally { await fake.close(); }
+});
+
+
+test('scoped smoke fence reserves before actual Codex turn/start and exhausted requests never dispatch', async () => {
+  const fake = await fixture(), directory = mkdtempSync(join(tmpdir(), 'present-scene-fence-'));
+  const keys = ['PRESENT_NATIVE_SCENE_BUDGET_FILE', 'PRESENT_NATIVE_SCENE_MAX_TURNS', 'PRESENT_NATIVE_SCENE_BUDGET_ROOM'];
+  const previous = keys.map(key => process.env[key]), roomId = 'd'.repeat(32), events: TraceReceipt[] = [];
+  process.env[keys[0]] = join(directory, 'budget.json'); process.env[keys[1]] = '1'; process.env[keys[2]] = roomId;
+  const generate = (requestId: string) => withRequestTrace({ roomId, requestId, provider: 'sol', sink: r => events.push(r) }, () => generateWithCodex('synthetic', AbortSignal.timeout(1000), 'sol'));
+  try {
+    await codexAvailability(); assert.equal(await generate('one'), 'synthetic');
+    await assert.rejects(generate('two'), /budget is exhausted/);
+    assert.equal(fake.logs().filter(m => m.method === 'turn/start').length, 1);
+    assert.equal(fake.logs().filter(m => m.method === 'thread/unsubscribe').length, 2);
+    const first = events.filter(e => e.requestId === 'one');
+    assert.ok(first.findIndex(e => e.stage === 'turn_reserved') < first.findIndex(e => e.stage === 'provider_dispatch'));
+    assert.equal(first.find(e => e.stage === 'provider_dispatch')?.model, 'gpt-6.1-sol');
+    assert.equal(events.filter(e => e.requestId === 'two' && e.stage === 'provider_dispatch').length, 0);
+    const ledger = JSON.parse(readFileSync(join(directory, 'budget.json'), 'utf8'));
+    assert.equal(ledger.count, 1);
+  } finally {
+    keys.forEach((key, i) => { if (previous[i] === undefined) delete process.env[key]; else process.env[key] = previous[i]; });
+    await fake.close(); rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+
+test('fenced unexpected scene intents cannot dispatch research/media or a background executor', async () => {
+  const { runRoomRequest } = await import('../server/agents/room-request');
+  const { getRoom, closeRoomStore } = await import('../server/room-store');
+  const kinds = [{ kind: 'work', title: 'Unexpected work', prompt: 'Do not execute', owner: '' },
+    { kind: 'research', question: 'Do not research' }, { kind: 'image', prompt: 'Do not draw', referenceIds: [] },
+    { kind: 'scene_research', question: 'Do not research scene' }, { kind: 'video_search', query: 'No search' }, { kind: 'image_search', query: 'No image search' }];
+  const keys = ['PRESENT_NATIVE_SCENE_BUDGET_FILE', 'PRESENT_NATIVE_SCENE_MAX_TURNS', 'PRESENT_NATIVE_SCENE_BUDGET_ROOM', 'PRESENT_MODEL_TRANSPORT'];
+  const previous = keys.map(key => process.env[key]), fetch = globalThis.fetch;
+  let networkCalls = 0; globalThis.fetch = async () => { networkCalls++; throw new Error('Unexpected provider dispatch'); };
+  const directory = mkdtempSync(join(tmpdir(), 'present-fence-escape-'));
+  try {
+    process.env.PRESENT_MODEL_TRANSPORT = 'codex';
+    for (const [i, result] of kinds.entries()) {
+      const roomId = String(i + 1).repeat(32), fake = await fixture(true, JSON.stringify({ result }));
+      process.env[keys[0]] = join(directory, 'budget-' + i + '.json'); process.env[keys[1]] = '1'; process.env[keys[2]] = roomId;
+      try {
+        await assert.rejects(runRoomRequest({ roomId, requestId: 'unexpected-' + i, provider: 'sol', prompt: 'Create native scene', decisions: 'off', position: { x: 0, y: 0 } }), /only native scene plans/);
+        assert.equal(fake.logs().filter(m => m.method === 'turn/start').length, 1, 'only one structured planning turn; no repair or executor dispatch');
+        assert.equal(fake.logs().filter(m => m.method === 'thread/start').length, 1);
+        assert.equal(getRoom(roomId).objects.length, 0, 'no work card or delegated artifact was created');
+      } finally { await fake.close(); }
+    }
+    assert.equal(networkCalls, 0);
+  } finally {
+    globalThis.fetch = fetch; keys.forEach((key, i) => { if (previous[i] === undefined) delete process.env[key]; else process.env[key] = previous[i]; });
+    closeRoomStore(); rmSync(directory, { recursive: true, force: true });
+  }
 });

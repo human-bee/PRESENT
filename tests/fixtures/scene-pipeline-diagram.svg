@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420">
+  <rect width="960" height="420" fill="#fffdf5"/>
+  <text x="60" y="65" fill="#28362b" font-family="Arial,sans-serif" font-size="30">A thought becomes a useful result</text>
+  <text x="60" y="100" fill="#66705e" font-family="Arial,sans-serif" font-size="18">A self-authored diagram fixture for editable native reconstruction.</text>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="none" stroke="#485c46" stroke-width="2"/></marker></defs>
+  <rect x="60" y="170" width="210" height="120" rx="18" fill="#e8f0d9" stroke="#6a8055" stroke-width="3"/>
+  <rect x="375" y="170" width="210" height="120" rx="18" fill="#f8eac9" stroke="#ab8c46" stroke-width="3"/>
+  <rect x="690" y="170" width="210" height="120" rx="18" fill="#dcebf0" stroke="#5f8693" stroke-width="3"/>
+  <text x="165" y="222" text-anchor="middle" font-family="Arial,sans-serif" font-size="25" fill="#28362b">Source</text>
+  <text x="480" y="222" text-anchor="middle" font-family="Arial,sans-serif" font-size="25" fill="#28362b">Review</text>
+  <text x="795" y="222" text-anchor="middle" font-family="Arial,sans-serif" font-size="25" fill="#28362b">Result</text>
+  <text x="165" y="253" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" fill="#485c46">A concrete idea</text>
+  <text x="480" y="253" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" fill="#725e2f">A human correction</text>
+  <text x="795" y="253" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" fill="#416673">Something retained</text>
+  <path d="M278 230 H360" fill="none" stroke="#485c46" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M593 230 H675" fill="none" stroke="#485c46" stroke-width="4" marker-end="url(#arrow)"/>
+  <circle cx="105" cy="320" r="12" fill="#bd6850"/>
+  <text x="130" y="327" font-family="Arial,sans-serif" font-size="18" fill="#66705e">The moving token follows Source → Review → Result.</text>
+</svg>

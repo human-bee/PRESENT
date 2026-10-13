@@ -41,7 +41,7 @@ export function buildSceneShapes(plan: ScenePlan, pageId: string, records: TLRec
 }
 
 /** Each revision is one atomic native document transaction. Prior plans remain in the document. */
-export function applyScene(roomId: string, pageId: string, plan: ScenePlan, sceneId: string | null, before: TLRecord[], prompt: string, provider: string, evidence?: EvidenceReport) {
+export function applyScene(roomId: string, pageId: string, plan: ScenePlan, sceneId: string | null, before: TLRecord[], prompt: string, provider: string, evidence?: EvidenceReport, requestId?: string) {
   validateScene(plan);
   const revision = randomUUID();
   let applied!: Scene;
@@ -76,7 +76,7 @@ export function applyScene(roomId: string, pageId: string, plan: ScenePlan, scen
     applied = { ...version, id, pageId, shapeIds, history };
     if (!old && scenes.length >= 8) throw new Error('This room has eight animated scenes. Revise an existing scene.');
     return { creates, updates, deletes: old ? Object.values(old.shapeIds).filter(id => records.some(r => r.id === id) && !Object.values(shapeIds).includes(id)) : [], documentMeta: { scenes: [...scenes.filter(s => s.id !== id), applied] as unknown as JsonObject['scenes'] } };
-  }, { requestId: revision });
+  }, { requestId: revision, causalRequestId: requestId });
   return applied;
 }
 export const scenesInRoom = (roomId: string) => readScenes(getCanvasRecords(roomId));

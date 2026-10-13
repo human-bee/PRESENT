@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 test('a reload restores the original request identity and recovers its result', async ({ page }) => {
   const roomId = randomBytes(16).toString('hex');
   const requests: Record<string, unknown>[] = [];
+  await page.route('**/api/agents', route => route.fulfill({ json: { defaultProvider: 'sol', providers: [{ id: 'sol', model: 'gpt-6.1-sol', configured: true }] } }));
   await page.route('**/api/agents/generate', async route => {
     requests.push(route.request().postDataJSON());
     await route.fulfill({ status: requests.length === 1 ? 502 : 200, json: requests.length === 1
@@ -21,6 +22,6 @@ test('a reload restores the original request identity and recovers its result', 
   await page.getByRole('button', { name: 'Recover result' }).click();
   await expect(page.getByText('Recovered the previous result')).toBeVisible();
   expect(requests).toHaveLength(2);
-  expect(requests[1]).toEqual(requests[0]);
+  expect(requests[1]).toEqual({ ...requests[0], recoverOnly: true });
   await expect(page.getByRole('button', { name: 'Recover result' })).toHaveCount(0);
 });

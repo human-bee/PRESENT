@@ -116,8 +116,72 @@ test('hosted restart never reads private rooms or replays providers until signed
     writeFileSync(join(f.jobsDirectory, `${job.jobId}.json`), JSON.stringify({ ...f.saved(job.jobId), status: 'running' }));
     restarted = new WorkJobs({ directory: f.jobsDirectory, store: f.store, run: async () => { calls++; return result(); } });
     await tick(); assert.equal(calls, 1); assert.equal(f.saved(job.jobId).status, 'interrupted');
+    f.asOwner(() => {
+      const work = f.store.getRoom(f.roomId).objects.find(o => o.id === job.objectId)!.data.work as Record<string, unknown>;
+      f.store.applyOperation(f.roomId, { type: 'patch', id: job.objectId, patch: { data: { work: { ...work, status: 'running' } } } }, f.owner.userId);
+    });
+    assert.equal(f.asEditor(() => restarted!.get(f.roomId, job.jobId)).status, 'interrupted');
+    assert.equal((f.asOwner(() => f.store.getRoom(f.roomId)).objects.find(o => o.id === job.objectId)!.data.work as { status: string }).status, 'running', 'another member cannot reconcile the initiating actor’s card');
+    f.asOwner(() => restarted!.get(f.roomId, job.jobId));
+    assert.equal((f.asOwner(() => f.store.getRoom(f.roomId)).objects.find(o => o.id === job.objectId)!.data.work as { status: string }).status, 'interrupted', 'current initiating actor refresh reconciles the canonical card');
+    assert.equal(calls, 1, 'refresh does not replay a provider');
     assert.throws(() => restarted!.resume(f.roomId, job.jobId, f.owner.userId), AccessError);
     f.asOwner(() => restarted!.resume(f.roomId, job.jobId, f.owner.userId)); await restarted.settled();
     assert.equal(calls, 2); assert.equal(f.asOwner(() => restarted!.get(f.roomId, job.jobId)).status, 'completed');
   } finally { restarted?.close(); await restarted?.settled(); gate.resolve(); await f.close(); }
 });
+
+test('signed recovery repairs a flushed artifact receipt before resume without replacing canonical edits or dispatching a turn', async () => {
+  let calls = 0;
+  const f = fixture(async () => { calls++; return result(); });
+  let restarted: WorkJobs | undefined;
+  try {
+    const job = f.asOwner(() => f.jobs.start(f.input('committed-before-private-save'))); await f.jobs.settled();
+    f.jobs.close();
+    const completed = f.saved(job.jobId);
+    f.asOwner(() => f.store.applyOperation(f.roomId, { type: 'patch', id: job.objectId, patch: { title: 'Human edit after commit', data: { owner: 'Maya' } } }, f.owner.userId));
+    f.store.flush();
+    const canonical = f.asOwner(() => f.store.getRoom(f.roomId));
+    writeFileSync(join(f.jobsDirectory, `${job.jobId}.json`), JSON.stringify({ ...completed, status: 'running', completedAt: null, artifactIds: [] }));
+    restarted = new WorkJobs({ directory: f.jobsDirectory, store: f.store, run: async () => { calls++; throw new Error('A committed receipt must not dispatch.'); } });
+    assert.equal(f.asEditor(() => restarted!.get(f.roomId, job.jobId)).status, 'interrupted');
+    assert.equal(f.saved(job.jobId).status, 'interrupted');
+    assert.throws(() => f.asEditor(() => restarted!.resume(f.roomId, job.jobId, f.editor.userId)), /initiating/);
+    const recovered = f.asOwner(() => restarted!.resume(f.roomId, job.jobId, f.owner.userId));
+    await restarted.settled();
+    assert.equal(recovered.status, 'completed'); assert.equal(calls, 1);
+    assert.deepEqual(f.asOwner(() => f.store.getRoom(f.roomId)), canonical);
+    assert.deepEqual(f.saved(job.jobId).executionState, completed.executionState);
+    assert.deepEqual(f.saved(job.jobId).artifactIds, completed.artifactIds);
+    assert.equal(recovered.title, 'Human edit after commit'); assert.equal(recovered.owner, 'Maya');
+  } finally { restarted?.close(); await restarted?.settled(); await f.close(); }
+});
+
+for (const conflict of ['deleted-artifact', 'changed-marker', 'changed-card-status'] as const) {
+  test(`signed crash-window recovery preserves ${conflict} and fails closed without a turn`, async () => {
+    let calls = 0;
+    const f = fixture(async () => { calls++; return result(); });
+    let restarted: WorkJobs | undefined;
+    try {
+      const job = f.asOwner(() => f.jobs.start(f.input(conflict))); await f.jobs.settled(); f.jobs.close();
+      const completed = f.saved(job.jobId), artifact = completed.artifactIds[0];
+      f.asOwner(() => {
+        if (conflict === 'deleted-artifact') f.store.applyOperation(f.roomId, { type: 'remove', id: artifact }, f.owner.userId);
+        else if (conflict === 'changed-marker') f.store.applyOperation(f.roomId, { type: 'patch', id: artifact, patch: { data: { commitToken: 'human-edited-marker' } } }, f.owner.userId);
+        else {
+          const card = f.store.getRoom(f.roomId).objects.find(object => object.id === job.objectId); assert.ok(card);
+          f.store.applyOperation(f.roomId, { type: 'patch', id: job.objectId, patch: { data: { work: { ...(card.data.work as Record<string, unknown>), status: 'failed' } } } }, f.owner.userId);
+        }
+      }); f.store.flush();
+      const canonical = f.asOwner(() => f.store.getRoom(f.roomId));
+      writeFileSync(join(f.jobsDirectory, `${job.jobId}.json`), JSON.stringify({ ...completed, status: 'running', completedAt: null, artifactIds: [] }));
+      restarted = new WorkJobs({ directory: f.jobsDirectory, store: f.store, run: async () => { calls++; throw new Error('Conflicting completion must not dispatch.'); } });
+      assert.throws(() => f.asOwner(() => restarted!.resume(f.roomId, job.jobId, f.owner.userId)), /changed or removed/);
+      assert.throws(() => f.asOwner(() => restarted!.get(f.roomId, job.jobId)), /changed or removed/);
+      await restarted.settled();
+      assert.equal(calls, 1); assert.equal(f.saved(job.jobId).status, 'interrupted');
+      assert.deepEqual(f.saved(job.jobId).output, completed.output); assert.deepEqual(f.saved(job.jobId).executionState, completed.executionState);
+      assert.deepEqual(f.asOwner(() => f.store.getRoom(f.roomId)), canonical);
+    } finally { restarted?.close(); await restarted?.settled(); await f.close(); }
+  });
+}

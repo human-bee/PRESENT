@@ -73,7 +73,10 @@ jobs:
         run: npx playwright test --config tests/release-playwright.config.ts
       - name: Signed owner, editor, viewer and revocation
         if: matrix.profile == 'invite'
-        run: npx playwright test --config tests/access-playwright.config.ts
+        run: |
+          npx playwright test --config tests/access-playwright.config.ts
+          npm run build
+          PRESENT_RECOVERY_BROWSER=1 PRESENT_RECOVERY_EVIDENCE_DIRECTORY=/tmp/present-recovery-browser node --import tsx --test tests/work-browser-recovery.test.ts
       - name: Production bundle and UI latency
         if: matrix.profile == 'production'
         run: |
@@ -89,6 +92,7 @@ jobs:
             playwright-report/
             /tmp/present-access-browser-*/results/
             /tmp/present-release-story-*/results/
+            /tmp/present-recovery-browser/
           retention-days: 7
 
   meeting-soak:
