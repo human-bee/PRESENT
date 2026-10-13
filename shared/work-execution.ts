@@ -21,6 +21,7 @@ export type WorkCommandReceipt = z.infer<typeof commandReceiptSchema>;
 /** Kept only in server metadata; never accepted from a shared canvas card or API request. */
 export const workExecutionStateSchema = z.object({
   workspaceId: z.string().regex(/^[a-f0-9]{32}$/), threadId: z.string().min(1).max(100).nullable(),
+  model: z.string().min(1).max(100).optional(),
   turnId: z.string().min(1).max(100).nullable(), dispatchId: z.string().max(150).nullable(),
   phase: z.enum(['ready', 'dispatching', 'running', 'completed', 'interrupted', 'failed']),
   commands: z.array(commandReceiptSchema).max(12), output: z.string().max(24000).optional(),

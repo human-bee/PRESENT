@@ -2,10 +2,10 @@ import type { TLShape } from '@tldraw/tlschema';
 import { canvasToolSchemas, type CanvasBatch } from '../../shared/canvas-commands';
 import type { RoomObject } from '../../shared/room';
 import { records } from '../../src/widgets/packs/common';
-import { judge, type Engine, type Questions } from './choice-judgments';
+import { judge, type Engine, type Questions, type DecisionProvenance } from './choice-judgments';
 
 export type ReactiveContext = { request: string; pageId: string; shapes: TLShape[]; widget?: RoomObject };
-export type ReactivePlan = { route: string; modelMs: number; confidence: number | null; batch?: CanvasBatch;
+export type ReactivePlan = { route: string; modelMs: number; confidence: number | null; provenance?: DecisionProvenance; batch?: CanvasBatch;
   widget?: { id: string; state: Record<string, unknown>; dependencies: Record<string, unknown> } };
 const colors = ['black', 'grey', 'light-violet', 'violet', 'blue', 'light-blue', 'yellow', 'orange', 'green', 'light-green', 'light-red', 'red', 'white'];
 const question = (instructions: string, criteria: Record<string, string>) => ({ type: 'choice' as const, instructions, criteria });
@@ -48,9 +48,9 @@ export async function decideReactive(context: ReactiveContext, engine: Engine, s
     defer: 'Requests a software action, tool change, content generation, summary, scoring, factual verification or external research instead of contributing to the debate.',
   });
   if (mode === 'contribution' && widget?.data.capability === 'debate') delete questions.route;
-  const result = !Object.keys(questions).length ? { get: (_key: string): string | null => null, modelMs: 0, confidence: (_key: string): number | null => null } : await judge({ request, selection: shapes.map(s => ({ id: s.id, type: s.type })), claims: claims.map(c => ({ id: c.id, text: c.text })), tasks: tasks.map(t => ({ id: t.id, title: t.title, status: t.status })) }, questions, engine, signal);
+  const result = !Object.keys(questions).length ? { provenance: undefined, get: (_key: string): string | null => null, modelMs: 0, confidence: (_key: string): number | null => null } : await judge({ request, selection: shapes.map(s => ({ id: s.id, type: s.type })), claims: claims.map(c => ({ id: c.id, text: c.text })), tasks: tasks.map(t => ({ id: t.id, title: t.title, status: t.status })) }, questions, engine, signal);
   const route = mode === 'contribution' && widget?.data.capability === 'debate' ? 'contribution' : result.get('route') ?? 'defer';
-  const base = { route, modelMs: result.modelMs, confidence: result.confidence('route') };
+  const base = { route, provenance: result.provenance, modelMs: result.modelMs, confidence: result.confidence('route') };
   const defer = { ...base, route: 'defer' };
   if (route === 'contribution' && widget) {
     const links = claims.flatMap((claim, i) => { const relation = result.get('claim' + i); return relation && relation !== 'unrelated' ? [{ claimId: claim.id, claimText: claim.text, relation, confidence: result.confidence('claim' + i) }] : []; });

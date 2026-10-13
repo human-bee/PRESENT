@@ -1,11 +1,11 @@
-import { agentModels, agentNames, type CodexProvider, type GenerationOptions, type ProviderAvailability } from '../../shared/agent-models';
+import { agentModels, agentNames, currentCodexProviders, isCurrentCodexProvider, type CodexProvider, type GenerationOptions, type ProviderAvailability } from '../../shared/agent-models';
 import { AgentError, widgetInstructions, widgetOutputSchema } from './contract';
 import type { StructuredProfile } from './codex';
 
 // Explicit operator opt-in: never fall back from a subscription to paid API calls.
 export const usesOpenAIResponses = () => process.env.PRESENT_MODEL_TRANSPORT === 'openai';
-const ids: CodexProvider[] = ['luna', 'terra', 'codex', 'spark'];
-const efforts = (provider: CodexProvider) => provider === 'codex' ? ['low', 'medium', 'high', 'xhigh', 'max'] : ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+const ids = currentCodexProviders;
+const efforts = (provider: CodexProvider) => provider !== 'luna' ? ['low', 'medium', 'high', 'xhigh', 'max'] : ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
 const maxBytes = 2_000_000;
 const failure = (message = 'The OpenAI response was incomplete. Your canvas is unchanged.', status = 502) => new AgentError(message, status);
 function requireSuccess(response: Response) {
@@ -85,7 +85,7 @@ export async function generateWithOpenAI(prompt: string, signal: AbortSignal, pr
   if (!usesOpenAIResponses()) throw failure('OpenAI API planning requires explicit PRESENT_MODEL_TRANSPORT=openai configuration.', 503);
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw failure('OpenAI is not configured on this server.', 503);
-  if (provider === 'spark') throw failure('Spark requires the Codex app-server transport.', 400);
+  if (!isCurrentCodexProvider(provider)) throw failure(`${agentNames[provider]} is unavailable for new execution. Select Sol, Luna or Astra explicitly.`, 409);
   const effort = options.reasoning ?? 'low';
   if (!efforts(provider).includes(effort)) throw failure('This model does not support the selected API reasoning effort.', 400);
   signal.throwIfAborted();
@@ -120,8 +120,8 @@ export async function openAIAvailability(): Promise<{ providers: ProviderAvailab
     })() };
     const result = await discovery.pending; models = result.models; reason = result.reason ?? 'This model is not available to this API project.';
   }
-  return { providers: ids.map(id => ({ id, name: agentNames[id], model: agentModels[id], configured: id !== 'spark' && models.has(agentModels[id]),
-    reasoning: id === 'spark' ? [] : efforts(id), fast: id !== 'spark' && models.has(agentModels[id]),
+  return { providers: ids.map(id => ({ id, name: agentNames[id], model: agentModels[id], configured: models.has(agentModels[id]),
+    reasoning: efforts(id), fast: models.has(agentModels[id]),
     fastDescription: 'OpenAI API usage is billed to the configured project. Fast requests the paid Fast tier; availability and latency still need verification.',
-    reason: id === 'spark' ? 'Spark requires the Codex app-server transport.' : models.has(agentModels[id]) ? undefined : reason })) };
+    reason: models.has(agentModels[id]) ? undefined : reason })) };
 }

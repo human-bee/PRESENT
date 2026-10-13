@@ -1,7 +1,7 @@
 // Local verification fixture only. This module is never imported by app routes.
 import { createServer } from 'node:http';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { McpServer } from '@modelcontextprotocol/server';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { registerAppTool, registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { build } from 'vite';
@@ -31,11 +31,11 @@ export async function startMcpFixture() {
     if (req.url !== '/mcp' || req.headers['x-fixture-secret'] !== 'local-fixture-secret') { res.writeHead(403); res.end(); return; }
     const mcp = new McpServer({ name: 'PRESENT local fixture', version: '1.0.0' }); connections.add(mcp);
     const result = () => ({ content: [{ type: 'text' as const, text: `Local fixture count: ${count}` }], structuredContent: { count, fixture: true } });
-    registerAppTool(mcp, 'fixture_counter', { title: 'Local fixture counter', inputSchema: { label: z.string().optional() }, _meta: { ui: { resourceUri: fixtureResourceUri } } }, async () => { calls.push('fixture_counter'); return result(); });
-    registerAppTool(mcp, 'fixture_increment', { inputSchema: { amount: z.number().int().min(1).max(10) }, _meta: { ui: { visibility: ['app'] } } }, async ({ amount }) => { calls.push('fixture_increment'); count += amount; return result(); });
+    registerAppTool(mcp, 'fixture_counter', { title: 'Local fixture counter', inputSchema: z.object({ label: z.string().optional() }), _meta: { ui: { resourceUri: fixtureResourceUri } } }, async () => { calls.push('fixture_counter'); return result(); });
+    registerAppTool(mcp, 'fixture_increment', { inputSchema: z.object({ amount: z.number().int().min(1).max(10) }), _meta: { ui: { visibility: ['app'] } } }, async ({ amount }) => { calls.push('fixture_increment'); count += amount; return result(); });
     registerAppTool(mcp, 'fixture_model_only', { _meta: { ui: { visibility: ['model'] } } }, async () => { calls.push('fixture_model_only'); return result(); });
     registerAppResource(mcp, 'Local fixture view', fixtureResourceUri, {}, async () => ({ contents: [{ uri: fixtureResourceUri, mimeType: RESOURCE_MIME_TYPE, text: html, _meta: { ui: { csp: {}, permissions: { camera: {} } } } }] }));
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
       const parts: Buffer[] = []; for await (const part of req) parts.push(Buffer.from(part));
       const body = parts.length ? JSON.parse(Buffer.concat(parts).toString('utf8')) : undefined;

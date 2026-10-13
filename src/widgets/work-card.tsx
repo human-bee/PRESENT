@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { ObjectPatch, RoomObject } from '../../shared/room';
 import { workExecutionSchema, type WorkExecution } from '../../shared/work-execution';
 import { projectSummarySchema, type ProjectSummary } from '../../shared/project-work';
+import { agentNames } from '../../shared/agent-models';
 
 type WorkStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
 type Work = {
@@ -12,7 +13,7 @@ type Work = {
   actor?: string;
   status: WorkStatus;
   prompt: string;
-  provider: 'spark' | 'codex' | 'luna' | 'terra';
+  provider: 'sol' | 'spark' | 'codex' | 'luna' | 'terra';
   error?: string;
   artifactIds: string[];
   execution?: WorkExecution;
@@ -52,7 +53,7 @@ function readWork(value: unknown): Work | null {
     actor: typeof work.actor === 'string' ? work.actor : undefined,
     status: work.status as WorkStatus,
     prompt: typeof work.prompt === 'string' ? work.prompt : '',
-    provider: ['codex', 'spark', 'luna', 'terra'].includes(String(work.provider)) ? work.provider as Work['provider'] : 'luna',
+    provider: ['sol', 'codex', 'spark', 'luna', 'terra'].includes(String(work.provider)) ? work.provider as Work['provider'] : 'luna',
     error: typeof work.error === 'string' ? work.error : undefined,
     artifactIds: Array.isArray(work.artifactIds)
       ? work.artifactIds.filter((id): id is string => typeof id === 'string')
@@ -179,7 +180,9 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
               objectId: object.id,
               requestId: startRequest.current?.requestId,
               prompt: nextPrompt.trim(),
-              provider: work?.provider ?? 'spark',
+              ...(work ? { provider: work.provider } : {}),
+              reasoning: 'low',
+              fast: true,
               ...(projectId ? { projectId } : {}),
             }
           : { roomId, actor: selfId, jobId: work?.jobId };
@@ -227,7 +230,7 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
           {work?.status ?? 'Ready to start'}
         </span>
         {work && (
-          <span style={{ color: '#85907c', fontSize: 11 }}>{work.provider === 'spark' ? 'Spark' : 'Codex'}</span>
+          <span style={{ color: '#85907c', fontSize: 11 }}>{agentNames[work.provider]}</span>
         )}
       </div>
       <label style={label}>

@@ -1,0 +1,146 @@
+{
+  "version": "0.1.0",
+  "name": "present-essence",
+  "dependencies": {
+    "@biomejs/biome": {
+      "version": "2.5.15",
+      "resolved": "https://registry.npmjs.org/@biomejs/biome/-/biome-2.5.15.tgz",
+      "overridden": false
+    },
+    "@modelcontextprotocol/client": {
+      "version": "2.3.1",
+      "resolved": "https://registry.npmjs.org/@modelcontextprotocol/client/-/client-2.3.1.tgz",
+      "overridden": false
+    },
+    "@modelcontextprotocol/core": {
+      "version": "2.3.1",
+      "resolved": "https://registry.npmjs.org/@modelcontextprotocol/core/-/core-2.3.1.tgz",
+      "overridden": false
+    },
+    "@modelcontextprotocol/ext-apps": {
+      "version": "2.0.3",
+      "resolved": "https://registry.npmjs.org/@modelcontextprotocol/ext-apps/-/ext-apps-2.0.3.tgz",
+      "overridden": false
+    },
+    "@modelcontextprotocol/node": {
+      "version": "2.1.1",
+      "resolved": "https://registry.npmjs.org/@modelcontextprotocol/node/-/node-2.1.1.tgz",
+      "overridden": false
+    },
+    "@modelcontextprotocol/server": {
+      "version": "2.3.1",
+      "resolved": "https://registry.npmjs.org/@modelcontextprotocol/server/-/server-2.3.1.tgz",
+      "overridden": false
+    },
+    "@playwright/test": {
+      "version": "1.64.0",
+      "resolved": "https://registry.npmjs.org/@playwright/test/-/test-1.64.0.tgz",
+      "overridden": false
+    },
+    "@tldraw/assets": {
+      "version": "5.5.2",
+      "resolved": "https://registry.npmjs.org/@tldraw/assets/-/assets-5.5.2.tgz",
+      "overridden": false
+    },
+    "@tldraw/sync-core": {
+      "version": "5.5.2",
+      "resolved": "https://registry.npmjs.org/@tldraw/sync-core/-/sync-core-5.5.2.tgz",
+      "overridden": false
+    },
+    "@tldraw/sync": {
+      "version": "5.5.2",
+      "resolved": "https://registry.npmjs.org/@tldraw/sync/-/sync-5.5.2.tgz",
+      "overridden": false
+    },
+    "@tldraw/tlschema": {
+      "version": "5.5.2",
+      "resolved": "https://registry.npmjs.org/@tldraw/tlschema/-/tlschema-5.5.2.tgz",
+      "overridden": false
+    },
+    "@types/node": {
+      "version": "24.19.2",
+      "resolved": "https://registry.npmjs.org/@types/node/-/node-24.19.2.tgz",
+      "overridden": false
+    },
+    "@types/react-dom": {
+      "version": "19.3.0",
+      "resolved": "https://registry.npmjs.org/@types/react-dom/-/react-dom-19.3.0.tgz",
+      "overridden": false
+    },
+    "@types/react": {
+      "version": "19.3.0",
+      "resolved": "https://registry.npmjs.org/@types/react/-/react-19.3.0.tgz",
+      "overridden": false
+    },
+    "@types/ws": {
+      "version": "8.18.2",
+      "resolved": "https://registry.npmjs.org/@types/ws/-/ws-8.18.2.tgz",
+      "overridden": false
+    },
+    "dotenv": {
+      "version": "18.0.7",
+      "resolved": "https://registry.npmjs.org/dotenv/-/dotenv-18.0.7.tgz",
+      "overridden": false
+    },
+    "image-size": {
+      "version": "2.0.4",
+      "resolved": "https://registry.npmjs.org/image-size/-/image-size-2.0.4.tgz",
+      "overridden": false
+    },
+    "ipaddr.js": {
+      "version": "2.5.0",
+      "resolved": "https://registry.npmjs.org/ipaddr.js/-/ipaddr.js-2.5.0.tgz",
+      "overridden": false
+    },
+    "livekit-client": {
+      "version": "2.22.4",
+      "resolved": "https://registry.npmjs.org/livekit-client/-/livekit-client-2.22.4.tgz",
+      "overridden": false
+    },
+    "livekit-server-sdk": {
+      "version": "2.19.1",
+      "resolved": "https://registry.npmjs.org/livekit-server-sdk/-/livekit-server-sdk-2.19.1.tgz",
+      "overridden": false
+    },
+    "react-dom": {
+      "version": "19.3.0",
+      "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.0.tgz",
+      "overridden": false
+    },
+    "react": {
+      "version": "19.3.0",
+      "resolved": "https://registry.npmjs.org/react/-/react-19.3.0.tgz",
+      "overridden": false
+    },
+    "tldraw": {
+      "version": "5.5.2",
+      "resolved": "https://registry.npmjs.org/tldraw/-/tldraw-5.5.2.tgz",
+      "overridden": false
+    },
+    "tsx": {
+      "version": "4.23.15",
+      "resolved": "https://registry.npmjs.org/tsx/-/tsx-4.23.15.tgz",
+      "overridden": false
+    },
+    "typescript": {
+      "version": "7.0.2",
+      "resolved": "https://registry.npmjs.org/typescript/-/typescript-7.0.2.tgz",
+      "overridden": false
+    },
+    "vite": {
+      "version": "8.3.4",
+      "resolved": "https://registry.npmjs.org/vite/-/vite-8.3.4.tgz",
+      "overridden": false
+    },
+    "ws": {
+      "version": "8.22.0",
+      "resolved": "https://registry.npmjs.org/ws/-/ws-8.22.0.tgz",
+      "overridden": false
+    },
+    "zod": {
+      "version": "4.6.7",
+      "resolved": "https://registry.npmjs.org/zod/-/zod-4.6.7.tgz",
+      "overridden": false
+    }
+  }
+}

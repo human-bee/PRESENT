@@ -1,0 +1,359 @@
+{
+  "checkedAtUTC": "2026-10-13T05:13:58.410076+00:00",
+  "runtimeVerified": "Node24.19.0",
+  "removed": [
+    "@modelcontextprotocol/sdk"
+  ],
+  "packages": [
+    {
+      "package": "@modelcontextprotocol/client",
+      "group": "dependencies",
+      "before": null,
+      "chosen": "2.3.1",
+      "registryLatest": "2.3.1",
+      "registrySource": "https://registry.npmjs.org/%40modelcontextprotocol%2Fclient/latest",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=20"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@modelcontextprotocol/core",
+      "group": "dependencies",
+      "before": null,
+      "chosen": "2.3.1",
+      "registryLatest": "2.3.1",
+      "registrySource": "https://registry.npmjs.org/%40modelcontextprotocol%2Fcore/latest",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=20"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@modelcontextprotocol/ext-apps",
+      "group": "dependencies",
+      "before": "1.7.5",
+      "chosen": "2.0.3",
+      "registryLatest": "2.0.3",
+      "registrySource": "https://registry.npmjs.org/%40modelcontextprotocol%2Fext-apps/latest",
+      "license": "MIT",
+      "engines": {
+        "node": ">=20"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@modelcontextprotocol/node",
+      "group": "dependencies",
+      "before": null,
+      "chosen": "2.1.1",
+      "registryLatest": "2.1.1",
+      "registrySource": "https://registry.npmjs.org/%40modelcontextprotocol%2Fnode/latest",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=20"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@modelcontextprotocol/server",
+      "group": "dependencies",
+      "before": null,
+      "chosen": "2.3.1",
+      "registryLatest": "2.3.1",
+      "registrySource": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver/latest",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=20"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@tldraw/assets",
+      "group": "dependencies",
+      "before": "5.4.0",
+      "chosen": "5.5.2",
+      "registryLatest": "5.5.2",
+      "registrySource": "https://registry.npmjs.org/%40tldraw%2Fassets/latest",
+      "license": "SEE LICENSE IN LICENSE.md",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@tldraw/sync",
+      "group": "dependencies",
+      "before": "5.4.0",
+      "chosen": "5.5.2",
+      "registryLatest": "5.5.2",
+      "registrySource": "https://registry.npmjs.org/%40tldraw%2Fsync/latest",
+      "license": "SEE LICENSE IN LICENSE.md",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@tldraw/sync-core",
+      "group": "dependencies",
+      "before": "5.4.0",
+      "chosen": "5.5.2",
+      "registryLatest": "5.5.2",
+      "registrySource": "https://registry.npmjs.org/%40tldraw%2Fsync-core/latest",
+      "license": "SEE LICENSE IN LICENSE.md",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@tldraw/tlschema",
+      "group": "dependencies",
+      "before": "5.4.0",
+      "chosen": "5.5.2",
+      "registryLatest": "5.5.2",
+      "registrySource": "https://registry.npmjs.org/%40tldraw%2Ftlschema/latest",
+      "license": "MIT",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "dotenv",
+      "group": "dependencies",
+      "before": "^16.5.0",
+      "chosen": "18.0.7",
+      "registryLatest": "18.0.7",
+      "registrySource": "https://registry.npmjs.org/dotenv/latest",
+      "license": "BSD-2-Clause",
+      "engines": {
+        "node": ">=12"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "image-size",
+      "group": "dependencies",
+      "before": "^2.0.4",
+      "chosen": "2.0.4",
+      "registryLatest": "2.0.4",
+      "registrySource": "https://registry.npmjs.org/image-size/latest",
+      "license": "MIT",
+      "engines": {
+        "node": ">=18"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "ipaddr.js",
+      "group": "dependencies",
+      "before": "^2.2.0",
+      "chosen": "2.5.0",
+      "registryLatest": "2.5.0",
+      "registrySource": "https://registry.npmjs.org/ipaddr.js/latest",
+      "license": "MIT",
+      "engines": {
+        "node": ">= 10"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "livekit-client",
+      "group": "dependencies",
+      "before": "2.20.1",
+      "chosen": "2.22.4",
+      "registryLatest": "2.22.4",
+      "registrySource": "https://registry.npmjs.org/livekit-client/latest",
+      "license": "Apache-2.0",
+      "engines": null,
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "livekit-server-sdk",
+      "group": "dependencies",
+      "before": "2.17.0",
+      "chosen": "2.19.1",
+      "registryLatest": "2.19.1",
+      "registrySource": "https://registry.npmjs.org/livekit-server-sdk/latest",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=19"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "react",
+      "group": "dependencies",
+      "before": "19.2.4",
+      "chosen": "19.3.0",
+      "registryLatest": "19.3.0",
+      "registrySource": "https://registry.npmjs.org/react/latest",
+      "license": "MIT",
+      "engines": {
+        "node": ">=0.10.0"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "react-dom",
+      "group": "dependencies",
+      "before": "19.2.4",
+      "chosen": "19.3.0",
+      "registryLatest": "19.3.0",
+      "registrySource": "https://registry.npmjs.org/react-dom/latest",
+      "license": "MIT",
+      "engines": null,
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "tldraw",
+      "group": "dependencies",
+      "before": "5.4.0",
+      "chosen": "5.5.2",
+      "registryLatest": "5.5.2",
+      "registrySource": "https://registry.npmjs.org/tldraw/latest",
+      "license": "SEE LICENSE IN LICENSE.md",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "ws",
+      "group": "dependencies",
+      "before": "^8.18.3",
+      "chosen": "8.22.0",
+      "registryLatest": "8.22.0",
+      "registrySource": "https://registry.npmjs.org/ws/latest",
+      "license": "MIT",
+      "engines": {
+        "node": ">=10.0.0"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "zod",
+      "group": "dependencies",
+      "before": "^4.3.6",
+      "chosen": "4.6.7",
+      "registryLatest": "4.6.7",
+      "registrySource": "https://registry.npmjs.org/zod/latest",
+      "license": "MIT",
+      "engines": null,
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@biomejs/biome",
+      "group": "devDependencies",
+      "before": "^2.3.3",
+      "chosen": "2.5.15",
+      "registryLatest": "2.5.15",
+      "registrySource": "https://registry.npmjs.org/%40biomejs%2Fbiome/latest",
+      "license": "MIT OR Apache-2.0",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@playwright/test",
+      "group": "devDependencies",
+      "before": "^1.56.1",
+      "chosen": "1.64.0",
+      "registryLatest": "1.64.0",
+      "registrySource": "https://registry.npmjs.org/%40playwright%2Ftest/latest",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=20"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@types/node",
+      "group": "devDependencies",
+      "before": "^24.10.0",
+      "chosen": "24.19.2",
+      "registryLatest": "26.6.5",
+      "registrySource": "https://registry.npmjs.org/%40types%2Fnode/latest",
+      "license": "MIT",
+      "engines": null,
+      "policy": "Latest Node 24 type line matches supported LTS runtime"
+    },
+    {
+      "package": "@types/react",
+      "group": "devDependencies",
+      "before": "^19.2.2",
+      "chosen": "19.3.0",
+      "registryLatest": "19.3.0",
+      "registrySource": "https://registry.npmjs.org/%40types%2Freact/latest",
+      "license": "MIT",
+      "engines": null,
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@types/react-dom",
+      "group": "devDependencies",
+      "before": "^19.2.2",
+      "chosen": "19.3.0",
+      "registryLatest": "19.3.0",
+      "registrySource": "https://registry.npmjs.org/%40types%2Freact-dom/latest",
+      "license": "MIT",
+      "engines": null,
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "@types/ws",
+      "group": "devDependencies",
+      "before": "^8.18.1",
+      "chosen": "8.18.2",
+      "registryLatest": "8.18.2",
+      "registrySource": "https://registry.npmjs.org/%40types%2Fws/latest",
+      "license": "MIT",
+      "engines": null,
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "tsx",
+      "group": "devDependencies",
+      "before": "^4.20.6",
+      "chosen": "4.23.15",
+      "registryLatest": "4.23.15",
+      "registrySource": "https://registry.npmjs.org/tsx/latest",
+      "license": "MIT",
+      "engines": {
+        "node": ">=18.0.0"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "typescript",
+      "group": "devDependencies",
+      "before": "^5.9.3",
+      "chosen": "7.0.2",
+      "registryLatest": "7.0.2",
+      "registrySource": "https://registry.npmjs.org/typescript/latest",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=16.20.0"
+      },
+      "policy": "Latest stable exact pin"
+    },
+    {
+      "package": "vite",
+      "group": "devDependencies",
+      "before": "^7.3.1",
+      "chosen": "8.3.4",
+      "registryLatest": "8.3.4",
+      "registrySource": "https://registry.npmjs.org/vite/latest",
+      "license": "MIT",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "policy": "Latest stable exact pin"
+    }
+  ]
+}

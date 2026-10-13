@@ -12,7 +12,7 @@ export const workRequestSchema = z.object({
   requestId: z.string().regex(/^[\w:.-]{1,100}$/), objectId: identity.optional(),
   title: z.string().trim().min(1).max(200).default('Follow through'), owner: z.string().max(200).optional(),
   ...generationOptionsSchema.shape,
-  prompt: z.string().trim().min(1).max(6000), provider: z.enum(['spark', 'codex', 'luna', 'terra']).default('luna'),
+  prompt: z.string().trim().min(1).max(6000), provider: z.enum(['sol', 'codex', 'luna']).default('sol'),
   position: z.object({ x: z.number().finite().min(-100000).max(100000), y: z.number().finite().min(-100000).max(100000) }).default({ x: 0, y: 0 }),
   projectId: projectIdSchema.optional(),
 }).strict();
@@ -21,7 +21,7 @@ export const workJobSchema = z.object({
   jobId: z.string().regex(/^[a-f0-9]{32}$/), roomId: z.string().regex(/^[a-f0-9]{24,64}$/), requestId: z.string().regex(/^[\w:.-]{1,100}$/),
   objectId: identity, actor: identity, owner: z.string().max(200), title: z.string().max(200), prompt: z.string().min(1).max(6000),
   ...generationOptionsSchema.shape,
-  provider: z.enum(['spark', 'codex', 'luna', 'terra']), status: workStatusSchema, attempt: z.number().int().min(0).max(100),
+  provider: z.enum(['sol', 'spark', 'codex', 'luna', 'terra']), status: workStatusSchema, attempt: z.number().int().min(0).max(100),
   createdAt: z.number().finite(), startedAt: z.number().finite().nullable(), completedAt: z.number().finite().nullable(),
   error: z.string().max(500).nullable(), artifactIds: z.array(identity).max(1),
   execution: workExecutionSchema.optional(),

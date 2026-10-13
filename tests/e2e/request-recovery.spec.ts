@@ -4,11 +4,13 @@ import { expect, test } from '@playwright/test';
 test('a reload restores the original request identity and recovers its result', async ({ page }) => {
   const roomId = randomBytes(16).toString('hex');
   const requests: Record<string, unknown>[] = [];
+  // Both endpoints are local fixtures. No provider is configured or contacted.
+  await page.route('**/api/agents', route => route.fulfill({ json: { defaultProvider: 'sol', providers: [{ id: 'sol', name: 'Synthetic recovery fixture', model: 'fixture-sol', configured: true, reasoning: ['low'], fast: false }], voice: { configured: false } } }));
   await page.route('**/api/agents/generate', async route => {
     requests.push(route.request().postDataJSON());
     await route.fulfill({ status: requests.length === 1 ? 502 : 200, json: requests.length === 1
       ? { error: 'The connection ended before the result arrived.' }
-      : { kind: 'canvas', provider: 'luna', elapsedMs: 20, objectIds: [], replayed: true } });
+      : { kind: 'canvas', provider: 'sol', elapsedMs: 20, objectIds: [], replayed: true } });
   });
   await page.goto(`/r/${roomId}`);
   await expect(page.locator('.room-status')).toHaveText('here, together');

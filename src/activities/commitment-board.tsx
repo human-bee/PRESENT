@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { agentNames } from '../../shared/agent-models';
 import type { Activity } from '../../shared/activity';
 import type { Send } from './activity-api';
 import { useWorkJobs } from './use-work-jobs';
@@ -127,7 +128,7 @@ export function CommitmentBoard({
             )}
             {c.jobId && (
               <div className="meeting-execution">
-                <strong>✦ Spark · {job?.status ?? c.status}</strong>
+                <strong>✦ {job ? agentNames[job.provider] : 'Codex'} · {job?.status ?? c.status}</strong>
                 <div className="work-file-list">
                   {job?.execution?.files.map((f) => (
                     <span key={f.path}>↳ {f.path}</span>

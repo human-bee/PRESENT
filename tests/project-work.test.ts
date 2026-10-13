@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -11,7 +11,7 @@ import { RoomStore } from '../server/room-store';
 
 const runGit = (cwd: string, args: string[]) => execFileSync('git', ['-C', cwd, ...args], { stdio: 'ignore' });
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'present-project-work-')), source = join(root, 'source'), destination = join(root, 'copy'), config = join(root, 'projects.json');
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'present-project-work-'))), source = join(root, 'source'), destination = join(root, 'copy'), config = join(root, 'projects.json');
   execFileSync('git', ['init', '--quiet', source]);
   writeFileSync(join(source, 'app.ts'), 'export const answer = 42;\n');
   writeFileSync(join(source, '.env'), 'PRIVATE=do-not-copy\n');
@@ -44,7 +44,7 @@ test('registry accepts only configured IDs and project continuation cannot switc
   const f = fixture();
   const jobsDir = join(f.root, 'jobs'), store = new RoomStore({ directory: join(f.root, 'rooms'), legacyDirectory: join(f.root, 'legacy') });
   const jobs = new WorkJobs({ directory: jobsDir, store, projects: f.registry, run: async input => ({ output: JSON.stringify({ title: 'Done', format: 'markdown', body: 'Done.' }), execution: { boundary: 'local-workspace', continued: input.state.threadId !== null, commands: [], files: [] } }) });
-  const base = { roomId: 'd'.repeat(32), actor: 'human', title: 'Change source', owner: 'Human', prompt: 'Change app.', provider: 'spark' as const };
+  const base = { roomId: 'd'.repeat(32), actor: 'human', title: 'Change source', owner: 'Human', prompt: 'Change app.', provider: 'sol' as const };
   try {
     assert.throws(() => jobs.start({ ...base, requestId: 'escape', projectId: 'other' }), /registered project/);
     const first = jobs.start({ ...base, requestId: 'first', projectId: 'demo' }); await jobs.settled();

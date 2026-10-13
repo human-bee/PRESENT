@@ -1,6 +1,11 @@
 .bottom-area {
   --voice-caption-bottom: 152px;
 }
+.bottom-area:has(.voice-panel),
+.bottom-area:has(.voice-caption) {
+  /* The dock isolates its children; raise it above an open activity dialog. */
+  z-index: 60;
+}
 .bottom-area:has(.agent-progress) {
   --voice-caption-bottom: 188px;
 }

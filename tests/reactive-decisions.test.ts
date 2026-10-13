@@ -1,3 +1,4 @@
+import { DECISIONS_MODEL } from '../server/agents/choice-judgments';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -16,9 +17,9 @@ test('native actions require valid arguments; quoted replacement remains literal
   let choices: Record<string, string> = { route: 'move', direction: 'right', distance: 'd0' }, uncertain = '';
   globalThis.fetch = async (_url, init) => {
     const { questions } = JSON.parse(String(init?.body));
-    return new Response(JSON.stringify({ answers: Object.fromEntries(Object.entries(questions).map(([id, q]) => {
+    return new Response(JSON.stringify({ model: DECISIONS_MODEL, answers: Object.fromEntries(Object.entries(questions).map(([id, q]) => {
       const keys = Object.keys((q as { criteria: object }).criteria), choice = choices[id] ?? keys[0];
-      return [id, { choice, confidence: id === uncertain ? .7 : 1, probabilities: Object.fromEntries(keys.map(k => [k, k === choice ? 1 : 0])) }];
+      return [id, { type: 'choice', choice, confidence: id === uncertain ? .7 : 1, probabilities: Object.fromEntries(keys.map(k => [k, k === choice ? 1 : 0])) }];
     })) }));
   };
   try {

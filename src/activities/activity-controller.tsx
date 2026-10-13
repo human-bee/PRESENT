@@ -1,8 +1,9 @@
 import { shapeIdForObject } from '../../shared/tldraw-adapter';
 import { fitCanvas } from '../tldraw/focus';
+import { findOpenPosition } from '../tldraw/placement';
 import { useEffect, useState, useRef } from 'react';
 import { TLDOCUMENT_ID, useValue, type Editor } from 'tldraw';
-import { activityKinds, activityTemplates, readRoomOS, type ActivityKind } from '../../shared/activity';
+import { ACTIVITY_STAGE_SIZE, activityKinds, activityTemplates, readRoomOS, type ActivityKind } from '../../shared/activity';
 import { post } from './activity-api';
 import { ActivityStage } from './activity-stage';
 const palette = ['#f39376', '#93b8f1', '#c7b0ed', '#8bc9b2', '#e8c878', '#e8a5cb'];
@@ -68,13 +69,18 @@ export function ActivityController({
     setError('');
     try {
       const viewport = editor.getViewportPageBounds();
+      const occupied = editor.getCurrentPageShapes().flatMap(shape => {
+        const bounds = editor.getShapePageBounds(shape);
+        return bounds ? [bounds] : [];
+      });
+      const position = findOpenPosition({ x: viewport.x + 100, y: viewport.y + 100, ...ACTIVITY_STAGE_SIZE }, occupied);
       const result = await post('launch', {
         roomId,
         actor: selfId,
         requestId: crypto.randomUUID(),
         kind,
         pageId: editor.getCurrentPageId(),
-        position: { x: viewport.x + 100, y: viewport.y + 100 },
+        position,
       });
       setFocusId(result.activityId);
       setMenu(false);

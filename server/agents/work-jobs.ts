@@ -11,7 +11,7 @@ import { applyOperation, flushRoomStore, getCanvasRecords, getRoom, transactCanv
 import { writeDurableFile } from '../durable-file';
 import { requireCanvasPage } from '../tldraw-operations';
 import type { generateWithCodex } from './codex';
-import { AgentError, agentModels } from './contract';
+import { AgentError } from './contract';
 import { createRunWorkspaceWork, type WorkspaceRunner } from './workspace-work';
 import { ProjectRegistry, ProjectRegistryError } from '../projects/registry';
 import { captureRoomAuthorization, inviteAuthorizationEnforced, requireRoomAuthorization } from '../access/context';
@@ -139,7 +139,7 @@ export class WorkJobs {
       throw new AgentError(error instanceof ProjectRegistryError ? error.message : 'The selected project is unavailable.', 409);
     }
     const job: StoredWorkJob = { jobId, fingerprint, commitToken: randomUUID().replaceAll('-', ''), roomId: input.roomId, requestId: input.requestId, objectId: existing?.id ?? `work-${jobId}`, actor: input.actor, owner: ownerOf(existing?.data.owner, input.owner ?? input.actor), title: existing?.title ?? input.title, prompt: input.prompt, provider: input.provider, reasoning: input.reasoning, fast: input.fast, ...(project ? { project } : {}), status: 'queued', attempt: 0, createdAt: this.now(), startedAt: null, completedAt: null, error: null, artifactIds: [] };
-    job.executionState = { workspaceId: prior?.executionState?.workspaceId ?? digest([job.roomId, job.objectId]).slice(0, 32), threadId: prior?.executionState?.threadId ?? null, turnId: null, dispatchId: null, phase: 'ready', commands: [] };
+    job.executionState = { workspaceId: prior?.executionState?.workspaceId ?? digest([job.roomId, job.objectId]).slice(0, 32), threadId: prior?.executionState?.threadId ?? null, ...(prior?.executionState?.model ? { model: prior.executionState.model } : {}), turnId: null, dispatchId: null, phase: 'ready', commands: [] };
     this.authorizations.capture(jobId, job.roomId, job.actor);
     try {
       this.save(job); this.jobs.set(jobId, job); this.rememberHead(job);
@@ -200,7 +200,7 @@ export class WorkJobs {
       const target = records.find((record): record is TLShape => record.typeName === 'shape' && record.id === shapeIdForObject(job.objectId));
       if (target?.type !== 'present-widget' || record(target.props.data.work).jobId !== job.jobId) throw new AgentError('The original work card changed or was removed. The artifact was not committed.', 409);
       finished.owner = ownerOf(target.props.data.owner, job.owner); finished.title = target.props.title;
-      const data = { capability: 'artifact', sourceJobId: job.jobId, requestId: job.requestId, commitToken: job.commitToken, humanOwner: finished.owner, format: output.format, provider: job.provider, model: agentModels[job.provider], generatedAt: finished.completedAt, completionBoundary: 'artifact-created', ...(job.execution ? { execution: job.execution } : {}), html: output.format === 'html' ? output.body : markdownArtifactHtml, state: output.format === 'markdown' ? { markdown: output.body } : {} };
+      const data = { capability: 'artifact', sourceJobId: job.jobId, requestId: job.requestId, commitToken: job.commitToken, humanOwner: finished.owner, format: output.format, provider: job.provider, model: job.executionState?.model ?? null, generatedAt: finished.completedAt, completionBoundary: 'artifact-created', ...(job.execution ? { execution: job.execution } : {}), html: output.format === 'html' ? output.body : markdownArtifactHtml, state: output.format === 'markdown' ? { markdown: output.body } : {} };
       const artifact = { ...makeObject('widget', `agent:${job.provider}`, { x: target.x + target.props.w + 40, y: target.y }, data), id: artifactId(job), title: output.title, w: 640, h: 500 };
       const indices = records.filter((record): record is TLShape => record.typeName === 'shape' && record.parentId === target.parentId).map(shape => shape.index).sort();
       return { creates: [objectToShape(artifact, { parentId: target.parentId, index: getIndexAbove(indices.at(-1)) })], updates: [patchNativeShape(target, { data: { work: workSummary(finished) } })] };

@@ -24,7 +24,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  const {id,method,params}=message;
  if(method==='initialize') result(id,{});
  if(method==='account/read') result(id,{account:{type:'chatgpt'}});
- if(method==='model/list') result(id,{data:${JSON.stringify((includeSpark ? ['spark', 'codex'] : ['codex']).map(key => ({ model: agentModels[key as 'spark' | 'codex'], supportedReasoningEfforts: [{ reasoningEffort: 'low' }] })))},nextCursor:null});
+ if(method==='model/list') result(id,{data:${JSON.stringify((includeSpark ? ['sol', 'codex'] : ['codex']).map(key => ({ model: agentModels[key as 'sol' | 'codex'], supportedReasoningEfforts: [{ reasoningEffort: 'low' }] })))},nextCursor:null});
  if(method==='thread/start'){const threadId='thread-'+ ++next;threads.set(threadId,params.model);result(id,{thread:{id:threadId},model:params.model});}
  if(method==='turn/start'){
   const threadId=params.threadId, turnId='turn-'+threadId, prompt=params.input[0].text;
@@ -54,17 +54,17 @@ test('Codex receives no host environment, credentials, tools or model fallback',
   process.env.PRESENT_TEST_SECRET = 'private'; process.env.CEREBRAS_API_KEY = 'test-secret';
   try { assert.equal(codexEnvironment().PRESENT_TEST_SECRET, undefined); assert.equal(codexEnvironment().CEREBRAS_API_KEY, undefined); }
   finally { delete process.env.PRESENT_TEST_SECRET; if (previousKey === undefined) delete process.env.CEREBRAS_API_KEY; else process.env.CEREBRAS_API_KEY = previousKey; }
-  const options = codexThreadOptions('spark');
-  assert.equal(options.model, agentModels.spark); assert.equal(options.allowProviderModelFallback, false);
+  const options = codexThreadOptions('sol');
+  assert.equal(options.model, agentModels.sol); assert.equal(options.allowProviderModelFallback, false);
   assert.deepEqual(options.environments, []); assert.deepEqual(options.dynamicTools, []); assert.deepEqual(options.selectedCapabilityRoots, []);
   assert.equal(options.config.features.shell_tool, false); assert.equal(options.config.features.skip_host_skill_discovery, true);
 });
 
-test('warm Spark turns correlate early notifications by thread and turn and ignore retry errors', async () => {
+test('warm Sol turns correlate early notifications by thread and turn and ignore retry errors', async () => {
   const fake = await fixture();
   try {
-    const availability = await codexAvailability(); assert.equal(availability.spark, true); assert.equal(availability.codex, true); assert.equal(availability.providers.length, 4);
-    const results = await Promise.all([generateWithCodex('early', AbortSignal.timeout(1000), 'spark'), generateWithCodex('slow', AbortSignal.timeout(1000), 'spark')]);
+    const availability = await codexAvailability(); assert.equal(availability.providers.find(provider => provider.id === 'sol')?.configured, true); assert.equal(availability.codex, true); assert.equal(availability.providers.length, 3);
+    const results = await Promise.all([generateWithCodex('early', AbortSignal.timeout(1000), 'sol'), generateWithCodex('slow', AbortSignal.timeout(1000), 'sol')]);
     assert.deepEqual(results, ['early', 'slow']);
     const logs = fake.logs();
     assert.equal(logs.filter(m => m.method === 'initialize').length, 1);
@@ -79,19 +79,19 @@ test('cancellation interrupts only its turn, then reuses the transport for the n
   try {
     await codexAvailability();
     const controller = new AbortController(); const abort = setTimeout(() => controller.abort(), 100);
-    await assert.rejects(generateWithCodex('cancel', controller.signal, 'spark'), /cancelled/); clearTimeout(abort);
-    assert.equal(await generateWithCodex('retry', AbortSignal.timeout(1000), 'spark'), 'retry');
+    await assert.rejects(generateWithCodex('cancel', controller.signal, 'sol'), /cancelled/); clearTimeout(abort);
+    assert.equal(await generateWithCodex('retry', AbortSignal.timeout(1000), 'sol'), 'retry');
     const logs = fake.logs(); const turn = logs.find(m => m.method === 'turn/interrupt');
     assert.equal(turn?.params?.threadId, 'thread-1'); assert.equal(turn?.params?.turnId, 'turn-thread-1');
     assert.equal(logs.filter(m => m.method === 'initialize').length, 1); assert.equal(logs.filter(m => m.method === 'thread/unsubscribe').length, 2);
   } finally { await fake.close(); }
 });
 
-test('Spark unavailability is truthful and never silently substitutes Astra', async () => {
+test('Sol unavailability is truthful and never silently substitutes Astra', async () => {
   const fake = await fixture(false);
   try {
-    const availability = await codexAvailability(); assert.equal(availability.spark, false); assert.equal(availability.codex, true);
-    await assert.rejects(generateWithCodex('hello', AbortSignal.timeout(1000), 'spark'), /gpt-5.3-codex-spark is not available/);
+    const availability = await codexAvailability(); assert.equal(availability.providers.find(provider => provider.id === 'sol')?.configured, false); assert.equal(availability.codex, true);
+    await assert.rejects(generateWithCodex('hello', AbortSignal.timeout(1000), 'sol'), /gpt-6.1-sol is not available/);
     assert.equal(fake.logs().filter(m => m.method === 'thread/start').length, 0);
   } finally { await fake.close(); }
 });
@@ -99,7 +99,7 @@ test('Spark unavailability is truthful and never silently substitutes Astra', as
 test('RPC errors identify the failed operation, redact backend details, and release their thread', async () => {
   const fake = await fixture();
   try {
-    await assert.rejects(generateWithCodex('rpc-error', AbortSignal.timeout(1000), 'spark'), error => error instanceof Error && error.message.includes('turn/start') && error.message.includes('-32600') && !error.message.includes('private'));
+    await assert.rejects(generateWithCodex('rpc-error', AbortSignal.timeout(1000), 'sol'), error => error instanceof Error && error.message.includes('turn/start') && error.message.includes('-32600') && !error.message.includes('private'));
     assert.equal(fake.logs().filter(m => m.method === 'thread/unsubscribe').length, 1);
   } finally { await fake.close(); }
 });
@@ -113,4 +113,15 @@ test('host tool requests fail closed and a dead stdin rejects without an unhandl
     await assert.rejects(wire.request('die', {}), /closed/);
     wire.send({ method: 'initialized' }); await assert.rejects(wire.request('initialize', {}), /unavailable/);
   } finally { wire.close(); await fake.close(); }
+});
+
+
+test('retired execution providers cannot silently become current models', async () => {
+  const fake = await fixture();
+  try {
+    await codexAvailability();
+    await assert.rejects(generateWithCodex('Keep my old model', AbortSignal.timeout(1000), 'spark'), /unavailable.*explicitly/);
+    await assert.rejects(generateWithCodex('Keep my old model', AbortSignal.timeout(1000), 'terra'), /unavailable.*explicitly/);
+    assert.equal(fake.logs().filter(message => message.method === 'thread/start').length, 0);
+  } finally { await fake.close(); }
 });

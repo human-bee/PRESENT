@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { RESOURCE_MIME_TYPE, McpUiResourceMetaSchema, McpUiUpdateModelContextRequestSchema } from '@modelcontextprotocol/ext-apps/app-bridge';
-import { CallToolResultSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResultSchema } from '@modelcontextprotocol/core';
+import type { CallToolResult } from '@modelcontextprotocol/client';
 import { mcpAppSchema, mcpCreateSchema, mcpIdentitySchema, mcpInputSchema, mcpSessionSchema, type McpAppReference } from '../../shared/mcp-app';
 import { makeObject } from '../../shared/room';
 import { applyOperation, getRoom } from '../room-store';
@@ -93,7 +94,7 @@ export class McpApps {
       if (toolResource(linkedTool) !== ref.resourceUri) throw new AgentError('The app resource no longer matches its tool.', 403);
       mcpTool(tools, profile, actualName, fromApp);
       this.dependencies.audit({ action: 'tool-call', roomId: input.roomId, actor: input.actor, objectId: input.objectId, profile: profile.id, tool: actualName, requestId });
-      const result = boundedMcpValue(CallToolResultSchema.parse(await client.callTool({ name: actualName, arguments: actualInput }, CallToolResultSchema, { timeout: 20000 })));
+      const result = boundedMcpValue(CallToolResultSchema.parse(await client.callTool({ name: actualName, arguments: actualInput }, { timeout: 20000 })));
       // Recheck canonical identity after a slow call before caching invocation data.
       const current = this.session(rawIdentity);
       if (JSON.stringify(current.ref) !== JSON.stringify(ref)) throw new AgentError('The app changed while its tool was running. The tool may have completed.', 409);

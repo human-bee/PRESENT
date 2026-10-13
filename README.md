@@ -2,15 +2,16 @@
 
 A room for people, their agents, and whatever they make together.
 
-This native application includes RoomOS activities and a signed invitation profile. The canvas uses real tldraw: human drawing, shared instruments, generated applets and agent changes live in the same native document. The September QA integration builds on `codex/present-cloud-base-20260921`; see [hosted readiness and required configuration](docs/cloud-readiness.md) and the [earlier baseline measurements](docs/QA-2026-09-28.md).
+This native application includes RoomOS activities and a signed invitation profile. The canvas uses real tldraw: human drawing, shared instruments, generated applets and agent changes live in the same native document. The October release candidate consolidates PR #191 and the later Mini voice, placement and work-continuation fixes. See the [release manifest](docs/releases/p0-2026-10-12.md), [hosted readiness and required configuration](docs/cloud-readiness.md) and [earlier baseline measurements](docs/QA-2026-09-28.md).
 
 ## Run
 
 Requires Node 24+ and an installed, signed-in Codex CLI for subscription-backed model work.
 
 ```sh
-npm install
-cp .env.example .env.local
+npm ci
+# For a new checkout only; preserve any existing operator environment.
+cp -n .env.example .env.local
 npm run dev
 ```
 
@@ -24,7 +25,7 @@ Open **http://127.0.0.1:4317**. The root creates a room; its link returns to tha
 - **Bring in an audience.** A Live room has a separate audience link, incoming comments, host moderation, votes, and an on-air/next-up queue. YouTube chat is a read-only connector requiring `YOUTUBE_API_KEY` and an active chat ID. Local moderation does not moderate the external YouTube channel.
 
 - **Draw directly.** The left rail contains selection, pan, pen, eraser, text, sticky notes, rectangles, ellipses, arrows, frames and undo/redo. Native handles move, resize and rotate objects. Selection reveals styles and grouping. Use the bottom-right Fit everything control to frame the room; **F** selects the frame tool.
-- **Ask in the composer.** Luna is the local default; invite sessions default to the hosted Cerebras provider. Requests can draw native shapes, create or change a shared applet, research with source links, generate an image, or start a work card. Selection and viewport provide context. Choose another available model in settings for deeper work. Requested models do not silently fall back.
+- **Ask in the composer.** Sol 6.1 is the local default; Luna 6 handles bounded tasks and Astra 6 supports demanding work when your account offers it. Invite sessions default to the hosted Cerebras provider. Requests can draw native shapes, create or change a shared applet, research with source links, generate an image, or start a work card. Selection and viewport provide context. Choose another available model in settings. Requested models do not silently fall back; saved work keeps its exact executor model.
 - **Add an instrument.** The plus opens notes, timers, dice, polls, documents, briefs, task boards, debate tools, cards, audience questions, captions and media. New instruments and opened rooms fit above the conversation controls. Generated HTML applets can implement additional shared interactions.
 - **Meet.** Turn on mic, camera or screen sharing explicitly. LiveKit carries the human call; tiles can be placed on the canvas. Canvas reconnects preserve a healthy media connection.
 - **Invite the voice agent.** The sparkle opens the listener. Listen quietly produces text and canvas changes; Talk with me plays responses to that listener. Each participant can use a personal microphone session with attributable speech. A shared microphone mixes call audio and keeps speakers unknown; it cannot overlap personal listeners. Shared captions retain bounded recent room audio text.
@@ -52,6 +53,8 @@ npm run test:e2e
 ```
 
 Browser tests use Playwright Chromium (`npx playwright install chromium`), or installed Chrome with `PRESENT_E2E_BROWSER_CHANNEL=chrome`. The local suite and invite suite use separate runtimes. Live provider/voice checks are separately bounded because they make real model calls. See [current QA results and exact smoke commands](docs/QA-2026-09-28.md).
+
+The October [release story commands](scripts/release-story/README.md) add peer correction, a shared timer, disk readback and reload, plus bounded genuine coding with same-card continuation. Process recovery contracts kill and restart the actual server with a controlled executor; they verify authorization without making provider calls. The tldraw upgrade fixture verifies native 5.4 data under 5.5 without resetting stored rooms. Current dependency and routing choices are recorded in [dependency decisions](docs/releases/p0-dependency-decisions.md).
 
 ## Hosting boundary
 

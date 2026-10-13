@@ -73,7 +73,7 @@ test('all voice creation paths preserve the listener page through native, provid
 test('missing target pages are rejected before model, image, research or work provider invocation', async () => {
   const f = fixture(); let providers = 0;
   const jobs = new WorkJobs({ directory: join(f.directory, 'jobs'), store: f.store, generate: async () => { providers++; return ''; } });
-  const input = { roomId, pageId: missingPageId, actor: 'human', prompt: 'A task', requestId: 'missing-page', provider: 'spark', position: { x: 0, y: 0 }, selection: [] };
+  const input = { roomId, pageId: missingPageId, actor: 'human', prompt: 'A task', requestId: 'missing-page', provider: 'sol', position: { x: 0, y: 0 }, selection: [] };
   try {
     await assert.rejects(generateWidget(input, undefined, { ...f.dependencies, codex: async () => { providers++; return widget; }, cerebras: async () => { providers++; return widget; } }), missingPage);
     const fetcher: typeof fetch = async () => { providers++; throw new Error('Must not fetch'); };

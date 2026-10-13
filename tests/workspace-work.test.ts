@@ -12,7 +12,7 @@ import type { WorkExecutionState } from '../shared/work-execution';
 const ID = 'a'.repeat(32), THREAD = 'thread-work', TURN = 'turn-work';
 const artifact = JSON.stringify({ title: 'Source prepared', format: 'markdown', body: 'The source is ready.' });
 const ready = (): WorkExecutionState => ({ workspaceId: ID, threadId: null, turnId: null, dispatchId: null, phase: 'ready', commands: [] });
-type Options = { pending?: boolean; failed?: boolean; commands?: boolean; output?: string; permission?: 'missing' | 'wrong'; recovery?: object[]; configured?: boolean };
+type Options = { pending?: boolean; failed?: boolean; commands?: boolean; output?: string; permission?: 'missing' | 'wrong'; recovery?: object[]; configured?: boolean; savedModel?: string | null; onModelList?: () => void };
 type Call = { method: string; params: Record<string, unknown> };
 function fixture(options: Options = {}) {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), 'present-workspace-runner-'))), calls: Call[] = [], wires: FakeWire[] = [];
@@ -28,9 +28,9 @@ function fixture(options: Options = {}) {
       const params = raw as Record<string, unknown>; calls.push({ method, params });
       let result: unknown = {};
       if (method === 'account/read') result = { account: { type: 'chatgpt' } };
-      if (method === 'model/list') result = { data: Object.values(agentModels).map(model => ({ model, supportedReasoningEfforts: [{ reasoningEffort: 'low' }] })), nextCursor: null };
-      if (method === 'thread/start' || method === 'thread/resume') result = { thread: { id: THREAD }, model: agentModels.spark, cwd: this.options.cwd, runtimeWorkspaceRoots: [this.options.cwd], ...(options.permission === 'missing' ? {} : { activePermissionProfile: { id: options.permission === 'wrong' ? 'host-unrestricted' : 'present-work' } }) };
-      if (method === 'thread/read') result = { thread: { id: THREAD, turns: options.recovery ?? [] } };
+      if (method === 'model/list') { options.onModelList?.(); result = { data: Object.values(agentModels).map(model => ({ model, supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }] })), nextCursor: null }; }
+      if (method === 'thread/start' || method === 'thread/resume') result = { thread: { id: THREAD }, model: agentModels.sol, cwd: this.options.cwd, runtimeWorkspaceRoots: [this.options.cwd], ...(options.permission === 'missing' ? {} : { activePermissionProfile: { id: options.permission === 'wrong' ? 'host-unrestricted' : 'present-work' } }) };
+      if (method === 'thread/read') result = { thread: { id: THREAD, model: options.savedModel === undefined ? agentModels.sol : options.savedModel, turns: options.recovery ?? [] } };
       if (method === 'turn/start') {
         result = { turn: { id: TURN } }; started();
         if (!options.pending) setImmediate(() => {
@@ -50,7 +50,7 @@ function fixture(options: Options = {}) {
   }
   const run = createRunWorkspaceWork({ directory, configured: () => options.configured !== false, wire: config => { const wire = new FakeWire(config); wires.push(wire); return wire; } });
   return { directory, calls, wires, turnStarted, get latest() { return latest; },
-    execute: (state = ready(), signal = AbortSignal.timeout(2000), jobId = ID) => run({ prompt: 'Prepare the source.', provider: 'spark', jobId, attempt: 1, state, onCheckpoint: state => { latest = structuredClone(state); } }, signal),
+    execute: (state = ready(), signal = AbortSignal.timeout(2000), jobId = ID, assertAuthorized?: () => void) => run({ assertAuthorized, prompt: 'Prepare the source.', provider: 'sol', jobId, attempt: 1, state, onCheckpoint: state => { latest = structuredClone(state); } }, signal),
     close: () => { for (const wire of wires) wire.close(); rmSync(directory, { recursive: true, force: true }); },
   };
 }
@@ -108,7 +108,7 @@ test('unknown dispatch recovery fails closed without dispatching a duplicate tur
   const f = fixture({ recovery: [{ id: 'unrelated-turn', status: 'completed', items: [{ type: 'userMessage', id: 'user', clientId: 'different-dispatch', content: [] }, { type: 'agentMessage', id: 'answer', phase: 'final_answer', text: artifact }] }] });
   try {
     await assert.rejects(f.execute({ ...ready(), threadId: THREAD, phase: 'dispatching', dispatchId: 'unknown-dispatch' }));
-    assert.equal(f.calls.filter(call => call.method === 'thread/read').length, 1); assert.equal(f.calls.filter(call => call.method === 'turn/start').length, 0);
+    assert.equal(f.calls.filter(call => call.method === 'thread/read' && call.params.includeTurns === true).length, 1); assert.equal(f.calls.filter(call => call.method === 'turn/start').length, 0);
     assert.equal(f.latest.output, undefined);
   } finally { f.close(); }
 });
@@ -139,7 +139,7 @@ test('a redirected workspace base is rejected before worker creation', async () 
   try {
     const outside = join(root, 'outside'), directory = join(root, 'redirected'); mkdirSync(outside); symlinkSync(outside, directory);
     const run = createRunWorkspaceWork({ directory, configured: () => true, wire: () => { workers++; throw new Error('Worker creation was reached.'); } });
-    await assert.rejects(run({ prompt: 'Prepare the source.', provider: 'spark', jobId: ID, attempt: 1, state: ready(), onCheckpoint: () => {} }, AbortSignal.timeout(2000)));
+    await assert.rejects(run({ prompt: 'Prepare the source.', provider: 'sol', jobId: ID, attempt: 1, state: ready(), onCheckpoint: () => {} }, AbortSignal.timeout(2000)));
     assert.equal(workers, 0);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
@@ -151,4 +151,42 @@ test('oversized terminal output is checkpointed failed so an explicit retry can 
     assert.equal(f.latest.phase, 'failed'); assert.equal(f.latest.output, undefined);
     assert.ok(f.wires.every(wire => wire.closed));
   } finally { f.close(); }
+});
+
+
+test('resume refuses an old or unknown exact model without changing its task or starting a turn', async () => {
+  for (const savedModel of ['gpt-5.6-luna', 'gpt-5.3-codex-spark', null]) {
+    const f = fixture({ savedModel });
+    try {
+      const state = { ...ready(), threadId: THREAD };
+      await assert.rejects(f.execute(state), /model differs or cannot be verified/);
+      assert.equal(f.calls.filter(call => ['thread/resume', 'turn/start', 'thread/start'].includes(call.method)).length, 0);
+      assert.equal(f.latest.threadId, null);
+    } finally { f.close(); }
+  }
+});
+
+test('new work records the exact selected model and validates the requested reasoning level', async () => {
+  const f = fixture();
+  try {
+    await f.execute();
+    assert.equal(f.latest.model, agentModels.sol);
+    assert.equal(f.calls.find(call => call.method === 'thread/start')?.params.model, agentModels.sol);
+    assert.equal(f.calls.find(call => call.method === 'turn/start')?.params.effort, 'high');
+  } finally { f.close(); }
+});
+
+
+test('authorization loss or cancellation during model discovery cannot start or resume a workspace task', async () => {
+  for (const continued of [false, true]) for (const outcome of ['revoked', 'aborted']) {
+    let authorized = true;
+    const controller = new AbortController();
+    const f = fixture({ onModelList: () => { if (outcome === 'aborted') controller.abort(); else authorized = false; } });
+    try {
+      const state = continued ? { ...ready(), threadId: THREAD, model: agentModels.sol } : ready();
+      await assert.rejects(f.execute(state, controller.signal, ID, () => { if (!authorized) throw new Error('Work lease revoked.'); }), /revoked|cancelled/);
+      assert.equal(f.calls.filter(call => ['thread/start', 'thread/resume', 'turn/start'].includes(call.method)).length, 0);
+      assert.ok(f.wires.every(wire => wire.closed));
+    } finally { f.close(); }
+  }
 });
