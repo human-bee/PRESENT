@@ -68,7 +68,7 @@ const toolSchemas = {
   generate_image: position.extend({ prompt: z.string().min(1).max(3000), referenceIds: selectedIds.refine(ids => new Set(ids).size === ids.length, 'Choose each reference only once.') }),
   control_video: z.object({ id: objectId, command: z.enum(['play', 'pause', 'restart', 'seek', 'rate', 'status']), seconds: z.number().min(0).max(604800).optional(), rate: z.number().min(0.25).max(2).optional() }).strict(),
   add_video: position.extend({ url: z.string().min(1).max(2048), title: z.string().max(100).optional() }),
-  start_work: position.extend({ prompt: z.string().min(1).max(6000), title: z.string().min(1).max(200).default('Follow through'), owner: z.string().max(200).default(''), objectId: objectId.optional(), provider: z.enum(['spark', 'codex', 'luna', 'terra']).default('luna') }),
+  start_work: position.extend({ prompt: z.string().min(1).max(6000), title: z.string().min(1).max(200).default('Follow through'), owner: z.string().max(200).default(''), objectId: objectId.optional(), provider: z.enum(['sol', 'codex', 'luna']).default('sol') }),
 } satisfies Record<VoiceToolName, z.ZodType>;
 const descriptions = {
   add_starter: 'Add the standard room pulse poll (Where do we go next? Explore a little / Make something / Take a breath), editable teleprompter or playable sound synthesizer immediately. No HTML generation. Use only when default behavior fully fits the request; custom options or seeded content need create_widget. Never draw shapes to imitate working controls.',

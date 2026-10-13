@@ -1,7 +1,6 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { RESOURCE_MIME_TYPE, McpUiToolMetaSchema } from '@modelcontextprotocol/ext-apps/app-bridge';
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { Tool } from '@modelcontextprotocol/client';
 import { AgentError } from '../agents/contract';
 import type { McpProfile } from './profiles';
 
@@ -26,17 +25,13 @@ export function toolResource(tool: Tool): string {
 export async function withMcpClient<T>(profile: McpProfile, action: (client: Client, tools: Tool[]) => Promise<T>): Promise<T> {
   if (activeConnections >= 6) throw new AgentError('MCP Apps are busy. Try again shortly.', 429);
   activeConnections++;
-  const client = new Client({ name: 'PRESENT', version: '0.1.0' }, { capabilities: { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: [RESOURCE_MIME_TYPE] } } } });
+  const client = new Client({ name: 'PRESENT', version: '0.1.0' }, { listMaxPages: 5, enforceStrictCapabilities: true, capabilities: { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: [RESOURCE_MIME_TYPE] } } } });
   const transport = new StreamableHTTPClientTransport(new URL(profile.url), { requestInit: { headers: profile.headers, redirect: 'error' } });
   try {
     await client.connect(transport, { timeout: 10000 });
-    const tools: Tool[] = []; let cursor: string | undefined;
-    for (let page = 0; page < 5; page++) {
-      const result = boundedMcpValue(await client.listTools(cursor ? { cursor } : {}, { timeout: 10000 }));
-      tools.push(...result.tools); cursor = result.nextCursor;
-      if (!cursor) break;
-    }
-    if (cursor) throw new AgentError('This server exposes too many tools for the local app host.', 502);
+    // v2 aggregates pages; listMaxPages retains the five-page discovery bound.
+    const result = boundedMcpValue(await client.listTools({}, { timeout: 10000 }));
+    const tools = result.tools;
     return await action(client, tools);
   } catch (error) {
     if (error instanceof AgentError) throw error;

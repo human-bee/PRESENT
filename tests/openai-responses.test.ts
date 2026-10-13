@@ -66,7 +66,7 @@ test('model discovery is bounded, cached and reports actual project visibility w
   const [a, b] = await Promise.all([openAIAvailability(), openAIAvailability()]);
   assert.deepEqual(a, b); assert.equal(calls, 1);
   assert.deepEqual(a.providers.filter(provider => provider.configured).map(provider => provider.id), ['luna']);
-  assert.equal(a.providers.find(provider => provider.id === 'spark')?.configured, false);
+  assert.equal(a.providers.some(provider => provider.id === 'spark' || provider.id === 'terra'), false);
 });
 test('oversized or unterminated streams stop without accepting partial output', async () => {
   await assert.rejects(readResponsesStream(chunks('data: ' + 'x'.repeat(2_000_001), 65536), agentModels.luna, () => {}), /size limit/);

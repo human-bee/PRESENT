@@ -5,7 +5,7 @@ import { applyOperation, getCanvasRecords, getRoom } from '../room-store';
 import { requireCanvasPage } from '../tldraw-operations';
 import { AgentError } from './contract';
 
-export const RESEARCH_MODEL = 'gpt-5.6-luna';
+export const RESEARCH_MODEL = 'gpt-6-luna';
 type Result = { objectId: string; model: string; responseId: string; elapsedMs: number; evidence: EvidenceReport };
 type Dependencies = { getRoom: typeof getRoom; getCanvasRecords: typeof getCanvasRecords; applyOperation: typeof applyOperation; fetch: typeof fetch; apiKey: () => string | undefined; now: () => number };
 const defaults: Dependencies = { getRoom, getCanvasRecords, applyOperation, fetch: (...args) => fetch(...args), apiKey: () => process.env.OPENAI_API_KEY, now: Date.now };

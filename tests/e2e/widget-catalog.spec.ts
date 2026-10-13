@@ -154,12 +154,12 @@ test('composer keyboard shortcut and panel exclusivity survive repeated toggles'
 test('operator model default respects an explicit saved preference (metadata fixture)', async ({ page }) => {
   const generated: string[] = [];
   page.on('request', request => { if (request.url().endsWith('/api/agents/generate')) generated.push(request.url()); });
-  await page.route('**/api/agents', route => route.fulfill({ json: { defaultProvider: 'terra', providers: ['luna', 'terra'].map(id => ({ id, name: id, model: `fixture-${id}`, configured: true, reasoning: ['low'], fast: false })), voice: { configured: false } } }));
+  await page.route('**/api/agents', route => route.fulfill({ json: { defaultProvider: 'sol', providers: ['luna', 'sol'].map(id => ({ id, name: id, model: `fixture-${id}`, configured: true, reasoning: ['low'], fast: false })), voice: { configured: false } } }));
   await page.goto(`/r/${randomBytes(16).toString('hex')}`);
   await expect(page.locator('.room-status')).toHaveText('here, together');
   await page.getByRole('button', { name: 'Room settings', exact: true }).click();
   const picker = page.getByRole('combobox', { name: 'Who’s making things?' });
-  await expect(picker).toHaveValue('terra');
+  await expect(picker).toHaveValue('sol');
   await picker.selectOption('luna');
   await page.reload();
   await expect(page.locator('.room-status')).toHaveText('here, together');

@@ -1,3 +1,4 @@
+import { DECISIONS_MODEL } from '../server/agents/choice-judgments';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decide, questionsFor } from '../server/agents/semantic-decisions';
@@ -9,10 +10,10 @@ test('bounded decisions reject malformed distributions and uncertain arguments',
  const {questions}=questionsFor(request);
  const answers=Object.fromEntries(Object.entries(questions).map(([key,q])=>{
   const selected=key==='route'?'timer':key==='duration'?'d0':'none';
-  return [key,{choice:selected,confidence:1,probabilities:Object.fromEntries(Object.keys(q.criteria).map(k=>[k,k===selected?1:0]))}];
+  return [key,{type:'choice' as const,choice:selected,confidence:1,probabilities:Object.fromEntries(Object.keys(q.criteria).map(k=>[k,k===selected?1:0]))}];
  }));
  try {
-  globalThis.fetch=async()=>new Response(JSON.stringify({answers}));
+  globalThis.fetch=async()=>new Response(JSON.stringify({model:DECISIONS_MODEL,answers}));
   assert.equal((await decide(request,'jev')).seconds,120);
   answers.duration.confidence=.7;
   assert.equal((await decide(request,'jev')).route,'defer');

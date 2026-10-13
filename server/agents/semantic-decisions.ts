@@ -1,4 +1,4 @@
-import { judge, type Engine } from './choice-judgments';
+import { judge, type Engine, type DecisionProvenance } from './choice-judgments';
 export type { Engine } from './choice-judgments';
 export const criteria = {
   timer: 'Create and START a new countdown with exactly one explicit duration.',
@@ -27,7 +27,7 @@ export function questionsFor(request: string) {
   return { questions, durations, quotes };
 }
 /** Closed-set routing of explicitly submitted requests. */
-export async function decide(request: string, engine: Engine, signal?: AbortSignal) {
+export async function decide(request: string, engine: Engine, signal?: AbortSignal): Promise<{ route: string; seconds?: number; text?: string; modelMs: number; confidence: number | null; provenance?: DecisionProvenance }> {
   const { questions, durations, quotes } = questionsFor(request);
   const result = await judge({ request }, questions as import('./choice-judgments').Questions, engine, signal);
   const { get } = result;
@@ -36,5 +36,5 @@ export async function decide(request: string, engine: Engine, signal?: AbortSign
   const seconds = duration && /^d\d+$/.test(duration) ? durations[Number(duration.slice(1))]?.seconds : undefined;
   const text = quote && /^q\d+$/.test(quote) ? quotes[Number(quote.slice(1))] : undefined;
   if ((route === 'timer' && !seconds) || (route === 'note' && !text)) route = 'defer';
-  return { route, seconds: route === 'timer' ? seconds : undefined, text: route === 'note' ? text : undefined, modelMs: result.modelMs, confidence: result.confidence('route') };
+  return { route, seconds: route === 'timer' ? seconds : undefined, text: route === 'note' ? text : undefined, provenance: result.provenance, modelMs: result.modelMs, confidence: result.confidence('route') };
 }

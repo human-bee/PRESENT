@@ -98,7 +98,7 @@ test('image generation requires explicit reference IDs and forwards only those r
 
 test('start_work preserves the human owner and reports queued work rather than a finished artifact', async () => {
   const f = fixture(); let calls = 0;
-  f.dependencies.work = raw => { const input = workRequestSchema.parse(raw); calls++; assert.equal(input.owner, 'Maya'); assert.equal(input.actor, actor); assert.equal(input.provider, 'luna'); assert.deepEqual(input.position, { x: 12, y: 34 }); return { ...input, owner: input.owner ?? '', title: input.title, jobId: 'a'.repeat(32), objectId: 'existing-work', status: 'queued', attempt: 0, createdAt: 0, startedAt: null, completedAt: null, error: null, artifactIds: [] }; };
+  f.dependencies.work = raw => { const input = workRequestSchema.parse(raw); calls++; assert.equal(input.owner, 'Maya'); assert.equal(input.actor, actor); assert.equal(input.provider, 'sol'); assert.deepEqual(input.position, { x: 12, y: 34 }); return { ...input, owner: input.owner ?? '', title: input.title, jobId: 'a'.repeat(32), objectId: 'existing-work', status: 'queued', attempt: 0, createdAt: 0, startedAt: null, completedAt: null, error: null, artifactIds: [] }; };
   try {
     const result = await f.run('start_work', { prompt: 'Write the launch brief', owner: 'Maya', objectId: 'existing-work', x: 12, y: 34 }) as { status: string; completionBoundary: string };
     assert.equal(result.status, 'queued'); assert.equal(result.completionBoundary, 'job-accepted');

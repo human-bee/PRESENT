@@ -13,7 +13,7 @@ type Work = {
   actor?: string;
   status: WorkStatus;
   prompt: string;
-  provider: 'spark' | 'codex' | 'luna' | 'terra';
+  provider: 'sol' | 'spark' | 'codex' | 'luna' | 'terra';
   error?: string;
   artifactIds: string[];
   execution?: WorkExecution;
@@ -53,7 +53,7 @@ function readWork(value: unknown): Work | null {
     actor: typeof work.actor === 'string' ? work.actor : undefined,
     status: work.status as WorkStatus,
     prompt: typeof work.prompt === 'string' ? work.prompt : '',
-    provider: ['codex', 'spark', 'luna', 'terra'].includes(String(work.provider)) ? work.provider as Work['provider'] : 'luna',
+    provider: ['sol', 'codex', 'spark', 'luna', 'terra'].includes(String(work.provider)) ? work.provider as Work['provider'] : 'luna',
     error: typeof work.error === 'string' ? work.error : undefined,
     artifactIds: Array.isArray(work.artifactIds)
       ? work.artifactIds.filter((id): id is string => typeof id === 'string')

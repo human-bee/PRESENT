@@ -17,7 +17,7 @@ import { makeVideoObject } from '../shared/video-reference';
 import { getRoomId, useRoom } from './room-client';
 import { Icon, type IconName } from './icons';
 import { createStarter } from './widgets/presets';
-import { providerSchema, generationOptionsSchema, agentNames, type AgentProvider, type GenerationOptions } from '../shared/agent-models';
+import { providerSchema, generationOptionsSchema, agentNames, readProviderPreference, providerUnavailableReason, type ProviderAvailability, type AgentProvider, type GenerationOptions } from '../shared/agent-models';
 import { controlNativeCanvas } from './tldraw/native-controls';
 import { useWebMCP } from './webmcp';
 import { useMedia } from './media/use-media';
@@ -48,10 +48,11 @@ export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: 
   const [prompt, setPrompt] = useState('');
   const [capabilities, setCapabilities] = useState<Record<string, unknown>>({});
   const providerStorageKey = accessGrant ? 'present:invite-provider' : 'present:provider';
-  const [providerPreference, setProvider] = useState<AgentProvider | undefined>(() => { try { const saved = providerSchema.safeParse(localStorage.getItem(providerStorageKey)); return saved.success && saved.data !== 'spark' ? saved.data : undefined; } catch { return undefined; } });
+  const [providerPreference, setProvider] = useState<AgentProvider | undefined>(() => { try { return readProviderPreference(localStorage.getItem(providerStorageKey)); } catch { return undefined; } });
   const serverProvider = providerSchema.safeParse(capabilities.defaultProvider);
   // An explicit preference always wins. Only an unconfigured first visit uses the operator's transport choice.
-  const provider = providerPreference ?? (serverProvider.success ? serverProvider.data : accessGrant ? 'cerebras' : 'luna');
+  const provider = providerPreference ?? (serverProvider.success ? serverProvider.data : accessGrant ? 'cerebras' : 'sol');
+  const providerProblem = providerUnavailableReason(provider, (capabilities.providers ?? []) as ProviderAvailability[]);
   const [generationOptions, setGenerationOptions] = useState<GenerationOptions>(() => { try { return generationOptionsSchema.parse(JSON.parse(localStorage.getItem('present:generation-options') ?? '{"reasoning":"low","fast":false}')); } catch { return { reasoning: 'low', fast: false }; } });
   useEffect(() => { try { if (providerPreference) localStorage.setItem(providerStorageKey, providerPreference); localStorage.setItem('present:generation-options', JSON.stringify(generationOptions)); } catch { /* Session-only if storage is blocked. */ } }, [providerStorageKey, providerPreference, generationOptions]);
   const [busy, setBusy] = useState(false);
@@ -98,6 +99,7 @@ export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: 
   const webmcp = useWebMCP({ room: room.room, participants: room.participants, selected, viewport, act: room.act, focus, editor: room.editor });
   async function generate(text: string) {
     if (viewer || !text.trim() || busy || !room.connected) return;
+    if (providerProblem && pendingGeneration?.prompt !== text) { setToast(providerProblem); return; }
     setBusy(true); setPrompt(''); setPanel(null);
     try {
       const view = room.editor?.getViewportPageBounds();
@@ -160,7 +162,7 @@ export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: 
   return <>
     {!viewer && <ActivityController editor={room.editor} roomId={roomId} selfId={room.selfId} name={name} connected={room.connected}/>}
     <CanvasMediaProvider media={media}><Canvas sync={room.sync} roomId={roomId} selfId={room.selfId} onMount={room.setEditor} act={room.actWidget} onError={setToast}>
-      {!viewer && room.connected && room.editor && !room.room.objects.length && <div className="welcome overlay"><div className="welcome-eyebrow"><span className="little-sun"/> A SHARED SPACE. AN OPEN POSSIBILITY.</div><h1>A room for<br/><em>anything.</em></h1><p>Come as you are. Bring your people.<br/>Let the room become what you need.</p><div className="invitations"><button type="button" onClick={() => add('note')}><Icon name="note" size={15}/> Leave a thought</button><button type="button" onClick={() => generate('Create a beautiful shared interactive constellation where each participant can name a star, with connections between them.')} disabled={busy || !room.connected}><Icon name="spark" size={15}/> Make something together</button></div><span className="empty-footnote">A meeting. A game. A thought that becomes something.</span></div>}
+      {!viewer && room.connected && room.editor && !room.room.objects.length && <div className="welcome overlay"><div className="welcome-eyebrow"><span className="little-sun"/> A SHARED SPACE. AN OPEN POSSIBILITY.</div><h1>A room for<br/><em>anything.</em></h1><p>Come as you are. Bring your people.<br/>Let the room become what you need.</p><div className="invitations"><button type="button" onClick={() => add('note')}><Icon name="note" size={15}/> Leave a thought</button><button type="button" onClick={() => generate('Create a beautiful shared interactive constellation where each participant can name a star, with connections between them.')} disabled={busy || !room.connected || !!providerProblem}><Icon name="spark" size={15}/> Make something together</button></div><span className="empty-footnote">A meeting. A game. A thought that becomes something.</span></div>}
     </Canvas></CanvasMediaProvider>
     <header className="topbar overlay"><div className="brand"><img src="/mark.svg" alt=""/><span>present</span></div><span className="top-divider"/><input className="room-title" aria-label="Room name" readOnly={viewer} defaultValue={room.room.title} key={`${roomId}-${room.room.title}`} onBlur={event => { const title = event.target.value.trim(); if (title && title !== room.room.title) attempt({ type: 'rename', title }); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}/><div className="room-status"><i className={room.connected ? 'online' : ''}/>{room.connected ? 'here, together' : 'connecting…'}</div><button type="button" className="invite" onClick={() => toggle('room')}><Icon name="plus" size={15}/>{!accessGrant || accessGrant.role === 'owner' ? 'Invite' : 'Room'}</button></header>
     {!viewer && <SceneControls roomId={roomId} editor={room.editor}/>}
@@ -168,9 +170,10 @@ export function App({ accessGrant, onRoomOpen, onAccessLeave }: { accessGrant?: 
     {!viewer && <div className="bottom-area overlay">
 
       <form className={`composer${busy ? ' thinking' : ''}`} onSubmit={event => { event.preventDefault(); void generate(prompt); }}>
-        <span className="composer-orbit" aria-hidden="true"/><input ref={input} aria-label="Ask the room" value={prompt} onChange={event => setPrompt(event.target.value)} placeholder={selected ? 'Change this, or imagine something new…' : 'What do you want to make room for?'} autoComplete="off" maxLength={3000}/><button className="send" type="submit" aria-label="Create with agent" disabled={!prompt.trim() || busy || !room.connected}><Icon name="arrow" size={18}/></button>
+        <span className="composer-orbit" aria-hidden="true"/><input ref={input} aria-label="Ask the room" value={prompt} onChange={event => setPrompt(event.target.value)} placeholder={selected ? 'Change this, or imagine something new…' : 'What do you want to make room for?'} autoComplete="off" maxLength={3000}/><button className="send" type="submit" aria-label="Create with agent" disabled={!prompt.trim() || busy || !room.connected || !!providerProblem}><Icon name="arrow" size={18}/></button>
       </form>
       {(busy || lastGeneration) && <div className={`agent-progress${busy ? ' working' : ''}`} aria-live="polite"><span className="mini-orbit"/>{busy ? 'Making room for your idea…' : lastGeneration}</div>}
+      {!busy && providerProblem && <div className="agent-progress" role="status"><span>{providerProblem}</span><button type="button" onClick={() => setPanel('settings')}>Choose model</button></div>}
       {!busy && pendingGeneration && <div className="agent-progress request-recovery" role="status"><span>An unfinished request is saved.</span><button type="button" onClick={() => void generate(pendingGeneration.prompt)}>Recover result</button><button type="button" onClick={() => { forgetPendingGeneration(roomId, room.selfId); setPendingGeneration(null); }}>Dismiss</button></div>}
       <nav className="dock" aria-label="Room controls"><DockButton icon="plus" label="Add to room" onClick={() => toggle('add')} active={panel === 'add'}/><span className="dock-divider"/><DockButton icon="mic" label={media.mic ? 'Turn microphone off' : 'Turn microphone on'} onClick={() => void media.toggleMic()} active={media.mic}/><DockButton icon="camera" label={media.camera ? 'Turn camera off' : 'Turn camera on'} onClick={() => void media.toggleCamera()} active={media.camera}/><DockButton icon="screen" label={media.screen ? 'Stop screen sharing' : 'Share screen'} onClick={() => void media.toggleScreen()} active={media.screen}/><span className="dock-divider"/><VoiceControl editor={room.editor} open={panel === 'voice'} setOpen={open => setPanel(current => open ? 'voice' : current === 'voice' ? null : current)} provider={provider} generationOptions={generationOptions} canvasContext={canvasContext} roomId={roomId} selfId={room.selfId} position={position} audioStreams={media.participants.filter(p => !p.isLocal).flatMap(p => [p.stream, p.screenStream].filter((s): s is MediaStream => Boolean(s)))}/><DockButton icon="history" label="Room memory" onClick={() => toggle('history')} active={panel === 'history'}/><DockButton icon="settings" label="Room settings" onClick={() => toggle('settings')} active={panel === 'settings'}/></nav>
     </div>

@@ -1,8 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium, expect, test } from '@playwright/test';
+import type { TLRecord } from 'tldraw';
+import { recordsToRoom } from '../../shared/tldraw-adapter';
 
 type VoiceProof = {
   startedAt: number;
@@ -23,7 +26,7 @@ test('real GPT Live speech creates a native note from a synthetic microphone', a
   const conversation = process.env.LIVE_VOICE_MODE === 'conversation';
   test.skip(!process.env.PRESENT_VOICE_FIXTURE && process.platform !== 'darwin', 'Provide PRESENT_VOICE_FIXTURE with the documented phrase on non-macOS hosts.');
   test.setTimeout(100_000);
-  const evidence = resolve('docs/evidence');
+  const evidence = process.env.PRESENT_VOICE_PROOF_DIRECTORY ? resolve(process.env.PRESENT_VOICE_PROOF_DIRECTORY) : resolve('docs/evidence');
   await mkdir(evidence, { recursive: true });
   const aiff = info.outputPath('voice-speech.aiff');
   const wav = process.env.PRESENT_VOICE_FIXTURE ? resolve(process.env.PRESENT_VOICE_FIXTURE) : info.outputPath('voice-input.wav');
@@ -88,6 +91,9 @@ test('real GPT Live speech creates a native note from a synthetic microphone', a
     });
   });
   const page = await context.newPage();
+  const peerContext = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+  await peerContext.addInitScript(() => { if (window === window.top) localStorage.setItem('present:name', 'Independent voice observer'); });
+  const peerPage = await peerContext.newPage();
   let startedAt = 0;
   let failure: unknown;
   let safetyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -102,7 +108,7 @@ test('real GPT Live speech creates a native note from a synthetic microphone', a
     requests.push({ route, status: response.status(), elapsedMs: Date.now() - startedAt, tool });
   });
   try {
-    await page.goto(`/r/${roomId}`);
+    await Promise.all([page.goto(`/r/${roomId}`), peerPage.goto(`/r/${roomId}`)]);
     await expect(page.locator('.room-status')).toHaveText('here, together');
     await expect(page.locator('.native-canvas .tl-canvas')).toBeVisible();
     await expect(page.locator('.tl-note__container')).toHaveCount(0);
@@ -149,6 +155,32 @@ test('real GPT Live speech creates a native note from a synthetic microphone', a
       await page.waitForTimeout(2000); // Preserve the short confirmation's audio tail before stopping capture.
       report.tts = 'Nonzero received audio energy and active unmuted browser playback; no physical-speaker or intelligibility claim.';
     }
+    await expect(peerPage.locator('.tl-note__container .tl-text-content')).toContainText(expectedWords);
+    const canonicalResponse = await page.request.get(`/api/room/${roomId}`);
+    expect(canonicalResponse.status()).toBe(200);
+    const canonical = (await canonicalResponse.json()).room;
+    const created = canonical.objects.find((object: { kind: string; data: { text?: string } }) => object.kind === 'note' && expectedWords.test(object.data.text ?? ''));
+    expect(created).toBeTruthy();
+    report.peer = { contexts: 2, physicalDevices: false, objectId: created.id, observed: true };
+    if (process.env.PRESENT_VOICE_DATA_DIRECTORY) {
+      const snapshotPath = resolve(process.env.PRESENT_VOICE_DATA_DIRECTORY, 'tldraw', `${roomId}.json`);
+      let snapshotBytes = Buffer.alloc(0);
+      await expect.poll(() => {
+        try {
+          snapshotBytes = readFileSync(snapshotPath);
+          const snapshot = JSON.parse(snapshotBytes.toString());
+          return recordsToRoom(roomId, snapshot.documents.map((document: { state: TLRecord }) => document.state)).objects.find(object => object.id === created.id);
+        } catch { return undefined; }
+      }).toEqual(created);
+      report.disk = { path: snapshotPath, sha256: createHash('sha256').update(snapshotBytes).digest('hex'), objectMatchesCanonical: true };
+    }
+    await peerPage.reload();
+    await expect(peerPage.locator('.room-status')).toHaveText('here, together');
+    await expect(peerPage.locator('.tl-note__container .tl-text-content')).toContainText(expectedWords);
+    const afterReload = await peerPage.request.get(`/api/room/${roomId}`);
+    expect((await afterReload.json()).room.objects.find((object: { id: string }) => object.id === created.id)).toEqual(created);
+    report.peerReload = true;
+    report.runtime = { node: process.version, browser: browser.version() };
     report.outcome = 'passed';
   } catch (error) {
     report.error = error instanceof Error ? error.message : String(error);
@@ -192,6 +224,7 @@ test('real GPT Live speech creates a native note from a synthetic microphone', a
       failure ??= error;
     } finally {
       clearTimeout(safetyTimer);
+      await peerContext.close();
       await context.close();
       await browser.close();
       const video = page.video();

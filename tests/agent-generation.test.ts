@@ -56,7 +56,7 @@ test('an edit cannot replace a newer source, a deleted object or an unselected w
 test('failed generation releases room capacity and Spark retries keep the exact provider', async () => {
   const store = fixture(); const providers: unknown[] = []; let attempts = 0;
   try {
-    const dependencies = { ...store, cerebras: async () => { throw new Error('Unexpected Cerebras fallback'); }, codex: async (_prompt: string, _signal: AbortSignal, provider?: 'spark' | 'codex' | 'luna' | 'terra') => { providers.push(provider); if (++attempts === 1) throw new Error('temporary failure'); return JSON.stringify(output); } };
+    const dependencies = { ...store, cerebras: async () => { throw new Error('Unexpected Cerebras fallback'); }, codex: async (_prompt: string, _signal: AbortSignal, provider?: 'sol' | 'spark' | 'codex' | 'luna' | 'terra') => { providers.push(provider); if (++attempts === 1) throw new Error('temporary failure'); return JSON.stringify(output); } };
     await assert.rejects(generateWidget(input, undefined, dependencies), /temporary failure/);
     assert.equal(store.getRoom(roomId).objects.length, 0);
     const result = await generateWidget(input, undefined, dependencies);

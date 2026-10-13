@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppBridge, PostMessageTransport, type McpUiResourceCsp } from '@modelcontextprotocol/ext-apps/app-bridge';
-import type { CallToolResult, ReadResourceResult, Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, ReadResourceResult, Tool } from '@modelcontextprotocol/client';
 import { mcpAppSchema } from '../../shared/mcp-app';
 import type { RoomObject } from '../../shared/room';
 
@@ -40,11 +40,11 @@ export function McpApp({ roomId, object, selfId }: McpAppProps) {
         current.oncalltool = async (params, extra) => {
           if (disposed) throw new Error('This app connection has closed.');
           if (!appCallsEnabled.current) throw new Error('Run this app once to enable its tool interactions.');
-          return request<CallToolResult>('call', { appSession: app.appSession, name: params.name, arguments: params.arguments ?? {}, requestId: crypto.randomUUID() }, AbortSignal.any([controller.signal, extra.signal]));
+          return request<CallToolResult>('call', { appSession: app.appSession, name: params.name, arguments: params.arguments ?? {}, requestId: crypto.randomUUID() }, AbortSignal.any([controller.signal, extra.mcpReq.signal]));
         };
-        current.onreadresource = (params, extra) => request<ReadResourceResult>('resource', { appSession: app.appSession, uri: params.uri }, AbortSignal.any([controller.signal, extra.signal]));
+        current.onreadresource = (params, extra) => request<ReadResourceResult>('resource', { appSession: app.appSession, uri: params.uri }, AbortSignal.any([controller.signal, extra.mcpReq.signal]));
         current.onupdatemodelcontext = async (context, extra) => {
-          await request('context', { appSession: app.appSession, context }, AbortSignal.any([controller.signal, extra.signal]));
+          await request('context', { appSession: app.appSession, context }, AbortSignal.any([controller.signal, extra.mcpReq.signal]));
           if (!disposed) setContextStatus('App context available to PRESENT'); return {};
         };
         current.onrequestdisplaymode = async () => ({ mode: 'inline' });

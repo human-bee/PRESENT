@@ -1,6 +1,6 @@
 const key = 'present:microphone-id';
 export function saveMicrophone(id: string) { localStorage.setItem(key, id); window.dispatchEvent(new Event('present:microphone-change')); }
-export async function microphoneConstraints(): Promise<MediaTrackConstraints> {
+export async function microphoneConstraints(): Promise<{ deviceId: { exact: string }; echoCancellation: boolean; noiseSuppression: boolean }> {
   const devices = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'audioinput' && !['default', 'communications'].includes(device.deviceId));
   const saved = localStorage.getItem(key);
   const chosen = saved ? devices.find(device => device.deviceId === saved) : devices.find(device => /macbook|built.?in|internal microphone/i.test(device.label) && !/iphone/i.test(device.label));

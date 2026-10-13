@@ -25,7 +25,7 @@ function fixture(generate: typeof generateWithCodex, persist?: (path: string, co
 test('start returns a causal shared card before mocked Codex runs, and commits one genuine artifact atomically', async () => {
   let calls = 0;
   const f = fixture(async (prompt, _signal, provider, profile) => {
-    calls++; assert.equal(provider, 'luna'); assert.match(JSON.parse(prompt).deliverable, /launch brief/);
+    calls++; assert.equal(provider, 'sol'); assert.match(JSON.parse(prompt).deliverable, /launch brief/);
     assert.ok(profile); assert.match(profile.instructions, /actual deliverable/);
     assert.deepEqual(codexThreadOptions(provider, profile).environments, []);
     assert.equal(codexThreadOptions(provider, profile).config.features.shell_tool, false);

@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -46,7 +47,7 @@ test('SDK tool calls preserve request replay, app visibility, the profile allowl
   const [one, two] = await Promise.all([apps.call(run, false), apps.call(run, false)]);
   assert.deepEqual(one, two); assert.deepEqual(fixture.calls, ['fixture_counter']);
   const increment = await apps.call({ ...identity, requestId: 'fixture-increment', name: 'fixture_increment', arguments: { amount: 2 } }, true);
-  assert.equal(increment.structuredContent?.count, 2); assert.equal(fixture.count(), 2);
+  assert.equal(z.object({ count: z.number() }).parse(increment.structuredContent).count, 2); assert.equal(fixture.count(), 2);
   await assert.rejects(apps.call({ ...identity, requestId: 'fixture-increment', name: 'fixture_increment', arguments: { amount: 3 } }, true), /another call/);
   await assert.rejects(apps.call({ ...identity, requestId: 'model-only', name: 'fixture_model_only' }, true), /not visible/);
   await assert.rejects(apps.call({ ...identity, requestId: 'not-configured', name: 'unknown_tool' }, true), /not allowed/);
@@ -74,7 +75,7 @@ test('an open app session cannot follow a changed reference or act as another hu
   assert.equal(fixture.calls.length, before); assert.deepEqual(apps.readContexts(roomId), []);
   const reopened = await apps.open({ roomId, actor, objectId }, 'http://127.0.0.1:4329');
   assert.notEqual(reopened.appSession, appSession);
-  const result = await apps.call({ ...call, appSession: reopened.appSession }, true); assert.equal(result.structuredContent?.count, 3);
+  const result = await apps.call({ ...call, appSession: reopened.appSession }, true); assert.equal(z.object({ count: z.number() }).parse(result.structuredContent).count, 3);
 });
 
 test('sandbox CSP intersects declared domains with host approval and keeps the view opaque', () => {

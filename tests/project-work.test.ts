@@ -44,7 +44,7 @@ test('registry accepts only configured IDs and project continuation cannot switc
   const f = fixture();
   const jobsDir = join(f.root, 'jobs'), store = new RoomStore({ directory: join(f.root, 'rooms'), legacyDirectory: join(f.root, 'legacy') });
   const jobs = new WorkJobs({ directory: jobsDir, store, projects: f.registry, run: async input => ({ output: JSON.stringify({ title: 'Done', format: 'markdown', body: 'Done.' }), execution: { boundary: 'local-workspace', continued: input.state.threadId !== null, commands: [], files: [] } }) });
-  const base = { roomId: 'd'.repeat(32), actor: 'human', title: 'Change source', owner: 'Human', prompt: 'Change app.', provider: 'spark' as const };
+  const base = { roomId: 'd'.repeat(32), actor: 'human', title: 'Change source', owner: 'Human', prompt: 'Change app.', provider: 'sol' as const };
   try {
     assert.throws(() => jobs.start({ ...base, requestId: 'escape', projectId: 'other' }), /registered project/);
     const first = jobs.start({ ...base, requestId: 'first', projectId: 'demo' }); await jobs.settled();

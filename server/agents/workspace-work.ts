@@ -3,7 +3,7 @@ import {dataPath} from '../data-path';
 import { join } from 'node:path';
 import { workArtifactSchema, workInstructions, workOutputSchema } from '../../shared/work';
 import { workExecutionStateSchema, type WorkExecution, type WorkExecutionState } from '../../shared/work-execution';
-import { codexCommand, codexConfigured } from './codex';
+import { assertCurrentCodexProvider, codexCommand, codexConfigured, discoverCodexModels, verifyCodexModelOptions } from './codex';
 import { CodexWire } from './codex-wire';
 import { AgentError, agentModels } from './contract';
 import { prepareWorkspace, readWorkspaceFiles } from './workspace-sandbox';
@@ -14,7 +14,7 @@ import { runWorkspaceTurn } from './workspace-turn';
 
 export type WorkspaceWire = Pick<CodexWire, 'request' | 'send' | 'listeners' | 'close' | 'closed'> & { stopped?: Promise<void> };
 export type WorkspaceRunInput = GenerationOptions & {
-  prompt: string; provider: 'spark' | 'codex' | 'luna' | 'terra'; jobId: string; attempt: number; state: WorkExecutionState;
+  prompt: string; provider: 'sol' | 'spark' | 'codex' | 'luna' | 'terra'; jobId: string; attempt: number; state: WorkExecutionState;
   onCheckpoint: (state: WorkExecutionState) => void; outputSchema?: object; project?: ProjectSnapshot;
   assertAuthorized?: () => void;
 };
@@ -23,7 +23,7 @@ export type WorkspaceRunner = (input: WorkspaceRunInput, signal: AbortSignal) =>
 type Options = { directory?: string; wire?: (options: { cwd: string; config: Record<string, unknown> }) => WorkspaceWire; configured?: () => boolean; projects?: ProjectRegistry };
 type ThreadResult = { thread: { id: string }; model: string; cwd: string; runtimeWorkspaceRoots: string[]; activePermissionProfile: { id: string } | null };
 
-export function workspaceThreadOptions(cwd: string, provider: 'spark' | 'codex' | 'luna' | 'terra') {
+export function workspaceThreadOptions(cwd: string, provider: 'sol' | 'spark' | 'codex' | 'luna' | 'terra') {
   return {
     model: agentModels[provider], cwd, runtimeWorkspaceRoots: [cwd], permissions: 'present-work', approvalPolicy: 'never',
     developerInstructions: workInstructions,
@@ -58,15 +58,26 @@ export function createRunWorkspaceWork(options: Options = {}): WorkspaceRunner {
         const account = await wire.request<{ account: { type: string } | null }>('account/read', { refreshToken: false });
         check();
         if (account.account?.type !== 'chatgpt') throw new AgentError('Workspace work requires the ChatGPT Codex subscription.', 503);
-        const model = agentModels[input.provider], common = { ...workspaceThreadOptions(workspace.cwd, input.provider), serviceTier: input.fast ? 'priority' : 'default' };
+        assertCurrentCodexProvider(input.provider);
+        const model = agentModels[input.provider];
+        if (state.threadId) {
+          const saved = await wire.request<{ thread: { id: string; model?: string | null } }>('thread/read', { threadId: state.threadId, includeTurns: false });
+          check();
+          const previousModel = saved.thread.model ?? state.model;
+          if (saved.thread.id !== state.threadId || !previousModel || previousModel !== model || (state.model && state.model !== previousModel)) throw new AgentError('The saved work model differs or cannot be verified. Its task and files are retained; start new work with an explicitly selected current model.', 409);
+        } else if (state.model && state.model !== model) throw new AgentError('The saved work model differs from the selected model. No task was started.', 409);
+        const models = await discoverCodexModels(wire);
+        check(); // Discovery is remote work; authorization/cancellation may have changed while awaiting it.
+        const reasoning = verifyCodexModelOptions(models, model, input, input.provider === 'sol' ? 'high' : 'low');
+        const common = { ...workspaceThreadOptions(workspace.cwd, input.provider), serviceTier: input.fast ? 'priority' : 'default' };
         const response = state.threadId
           ? await wire.request<ThreadResult>('thread/resume', { ...common, threadId: state.threadId, excludeTurns: true })
           : await wire.request<ThreadResult>('thread/start', { ...common, allowProviderModelFallback: false, ephemeral: false, historyMode: 'legacy', environments: [{ environmentId: 'local', cwd: workspace.cwd, runtimeWorkspaceRoots: [workspace.cwd] }], dynamicTools: [], selectedCapabilityRoots: [] });
         check();
         if (response.model !== model || response.cwd !== workspace.cwd || response.runtimeWorkspaceRoots?.length !== 1 || response.runtimeWorkspaceRoots[0] !== workspace.cwd || response.activePermissionProfile?.id !== 'present-work') throw new AgentError('Codex did not confirm the isolated workspace profile. No work turn was started.', 503);
         if (state.threadId && response.thread.id !== state.threadId) throw new AgentError('Codex resumed a different task. No work turn was started.', 503);
-        checkpoint({ ...state, threadId: response.thread.id });
-        output = await runWorkspaceTurn(wire, { ...input, state, onCheckpoint: checkpoint, outputSchema: workOutputSchema }, workspace.cwd, signal);
+        checkpoint({ ...state, threadId: response.thread.id, model });
+        output = await runWorkspaceTurn(wire, { ...input, reasoning: reasoning as GenerationOptions['reasoning'], state, onCheckpoint: checkpoint, outputSchema: workOutputSchema }, workspace.cwd, signal);
         check();
         if (Buffer.byteLength(output) > 24000) { checkpoint({ ...state, phase: 'failed' }); throw new AgentError('The work artifact exceeded its output limit.'); }
         try { workArtifactSchema.parse(JSON.parse(output)); }
