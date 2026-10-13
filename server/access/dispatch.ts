@@ -7,7 +7,7 @@ import { sessionToken } from './http';
 import { createRoomAuthorization, withRoomAuthorization, type RoomAuthorization } from './context';
 import type { RoomPermission } from '../../shared/room-access';
 
-const jsonPaths = new Set(['/api/agents/generate', '/api/agents/contribute', '/api/voice/tool', '/api/voice/transcript', '/api/voice/heartbeat', '/api/voice/stop', '/api/media/token', '/api/activity/launch', '/api/activity/action', '/api/scenes']);
+const jsonPaths = new Set(['/api/agents/generate', '/api/agents/contribute', '/api/voice/tool', '/api/voice/transcript', '/api/voice/heartbeat', '/api/voice/stop', '/api/media/token', '/api/activity/launch', '/api/activity/action', '/api/scenes', '/api/projects/review', '/api/projects/apply']);
 const getPaths = new Set(['/api/scenes', '/api/activity/state']);
 export type AccessDispatch = { request: IncomingMessage; scope: RoomAuthorization };
 /** Explicit allowlist; body is bounded and identity replaced before existing handlers parse it. */

@@ -33,3 +33,9 @@ export const projectExecutionSchema = z.object({
   diffTruncated: z.boolean(),
 }).strict();
 export type ProjectExecution = z.infer<typeof projectExecutionSchema>;
+
+/** Server-derived identity; browser approvals never supply a patch or filesystem path. */
+export const projectReviewRequestSchema = z.object({ roomId: z.string().regex(/^[a-f0-9]{24,64}$/), actor: z.string().min(1).max(100), jobId: z.string().regex(/^[a-f0-9]{32}$/) }).strict();
+export const projectApplyRequestSchema = projectReviewRequestSchema.extend({ snapshotId: sha256, changeId: sha256 }).strict();
+export const projectReviewSchema = projectExecutionSchema.extend({ jobId: z.string().regex(/^[a-f0-9]{32}$/), changeId: sha256, canApply: z.boolean(), blockedReason: z.string().max(300).optional(), applied: z.boolean().default(false) }).strict();
+export type ProjectReview = z.infer<typeof projectReviewSchema>;

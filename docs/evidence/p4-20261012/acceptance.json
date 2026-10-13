@@ -1,0 +1,220 @@
+{
+  "version": 1,
+  "phase": "P4",
+  "executionSourceCommit": "dd8513b40134009917fdcf8b0d277d2150b3d969",
+  "finalSourceObjects": {
+    "server/access/dispatch.ts": "6e07d31d2b17be38f9000512851f58e0d7866669",
+    "server/projects/apply.ts": "7465e60a4344f6226f74031fca99b2517f1860a7",
+    "server/projects/routes.ts": "09a98c843e7beb6dc0b3f2b6437ff97e74d3dd3d",
+    "server/projects/workspace.ts": "ca453edf266cda6ff68436d9caaa34d564205d9b",
+    "server/projects/work-budget.ts": "187be25eabcfacead1a432e864118b043d5a28ec",
+    "server/agents/workspace-turn.ts": "bee474a224d9b54dc6b84c7308c631486fcf88c2",
+    "shared/project-work.ts": "6b3f26f60fe34b3ac789e7c68fec218ce1c779f3",
+    "src/widgets/work-card.tsx": "ab50bd80fca651fff2d7f80f4de6a7f9e2dd101c",
+    "src/widgets/packs/game-state.ts": "21b10a30bd26589b60abab8ff9f882ee9fbfe625",
+    "tests/game-state-contract.test.mjs": "64459020e4f317de05a72305088fad2056f3a7b8"
+  },
+  "focusedTests": {
+    "pass": 23,
+    "fail": 0
+  },
+  "fixtureBrowser": {
+    "pass": 1,
+    "providerOutputs": "controlled fixtures"
+  },
+  "genuineStory": {
+    "version": 1,
+    "status": "passed",
+    "at": "2026-10-13T06:55:52.315Z",
+    "roomId": "3f8656fbedd4a3ac291a6ddbcf06810b3bd38ce72ec5a373",
+    "cardId": "project-story-73854fb91443",
+    "sourceFingerprint": "fe80f6f4a5ceffff240f7f8c69a29e23ef1915533e0646aba3ffe64c312f8c81",
+    "selectedPaths": [
+      "src/widgets/packs/game-state.ts",
+      "src/widgets/packs/common.ts"
+    ],
+    "provider": "sol",
+    "reasoning": "high",
+    "maxActualTurns": 2,
+    "mockedProviderOutputs": false,
+    "phases": [
+      {
+        "phase": "prepared",
+        "at": "2026-10-13T06:55:52.315Z"
+      },
+      {
+        "phase": "turn-1:dispatch",
+        "at": "2026-10-13T06:55:57.750Z"
+      },
+      {
+        "phase": "turn-1:completed",
+        "at": "2026-10-13T06:58:08.072Z",
+        "jobId": "c0556c31fbfe94d13d0094df222acf01",
+        "model": "gpt-6.1-sol",
+        "threadHash": "6f4559de57f34848f7562ac0cc1747891c0a7a55f04bbac3234649527989ee3c",
+        "workspaceHash": "360688827369a3b961db3da4a14531b7f8a1aa23c11b0126cb051334da0d5c44",
+        "continued": false,
+        "commands": [
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "47d0315b306ea8525186dd9db0e864afe4736ff9c09ad411b870d3692da2ea8e"
+          },
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "66c4663bb95daf0a849b7c09aeddc4b2bdf386daa196296d8e6626f450d339d9"
+          },
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "2bedb70fd93ef7a0abe58933116dc96b9a3211a26de9a780ade36ec5a5d35d94"
+          },
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "dc1d3f31896dc1547ce49c8f141eba30331199fe2675de86e12c600b47515a18"
+          },
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "e909e0343fd913ad514d5ebea66b01fc48e7bf2d17354e8c4ec0915db6f1dc0e"
+          },
+          {
+            "status": "failed",
+            "exitCode": 69,
+            "commandHash": "7678ae510885e9d497cebabe17b6aafa36785e52ba28bb198426fe3313613fb2"
+          },
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "777c8aef5fd6a36b3b1d4f26e5975c43c9797a25588f55775a28b44f2f9dd8c9"
+          },
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "4398248c51b0081e1e10f5a6bbf3c8ba0bf28e654e18b24215f9fa240c4a6e8f"
+          },
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "e4ddcca0dc899da10cec6c6b66b0c63834644188c865a8ee5d739e0113592477"
+          },
+          {
+            "status": "failed",
+            "exitCode": 1,
+            "commandHash": "a4a75c418eac378b5fb226f075bff4c38c8474d0ee916ce2761782512785b860"
+          },
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "a4a75c418eac378b5fb226f075bff4c38c8474d0ee916ce2761782512785b860"
+          }
+        ]
+      },
+      {
+        "phase": "turn-1:reviewed",
+        "at": "2026-10-13T06:58:09.055Z",
+        "snapshotId": "9272c62a8f2acf62db38ad6b5bb9e1471a6066dc6ad5b8dd3f8308fc8a0b41c6",
+        "changeId": "ce57111e7d3000757bf1d35e7588f6cf2930885f21d998bd3512f7d9833e0a66",
+        "diffHash": "8c5efd1dc0ec1044e9668f1a7b033e222a0800327f61532c8c71cd5773e34bf2",
+        "paths": [
+          "src/widgets/packs/game-state.ts",
+          "tests/game-state-contract.test.mjs"
+        ]
+      },
+      {
+        "phase": "turn-1:waiting-for-root-exact-diff-approval",
+        "at": "2026-10-13T06:58:09.056Z"
+      },
+      {
+        "phase": "turn-1:root-approved-exact-diff",
+        "at": "2026-10-13T06:58:37.768Z",
+        "changeId": "ce57111e7d3000757bf1d35e7588f6cf2930885f21d998bd3512f7d9833e0a66",
+        "diffHash": "8c5efd1dc0ec1044e9668f1a7b033e222a0800327f61532c8c71cd5773e34bf2"
+      },
+      {
+        "phase": "turn-1:applied-and-independent-tests-passed",
+        "at": "2026-10-13T06:58:38.183Z"
+      },
+      {
+        "phase": "turn-2:dispatch",
+        "at": "2026-10-13T06:58:38.183Z"
+      },
+      {
+        "phase": "turn-2:completed",
+        "at": "2026-10-13T06:59:51.942Z",
+        "jobId": "a2e5938cf6f39a343584f23f1c898648",
+        "model": "gpt-6.1-sol",
+        "threadHash": "6f4559de57f34848f7562ac0cc1747891c0a7a55f04bbac3234649527989ee3c",
+        "workspaceHash": "360688827369a3b961db3da4a14531b7f8a1aa23c11b0126cb051334da0d5c44",
+        "continued": true,
+        "commands": [
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "30a8c3fccd998f24bcc730c67040d737d90617a1b29674c7a9124d69ff460fc6"
+          },
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "beace503c9be80a28ff4b639765571389f14411dd1d03a027303e185b57e181f"
+          },
+          {
+            "status": "completed",
+            "exitCode": 0,
+            "commandHash": "a4a75c418eac378b5fb226f075bff4c38c8474d0ee916ce2761782512785b860"
+          }
+        ]
+      },
+      {
+        "phase": "turn-2:reviewed",
+        "at": "2026-10-13T06:59:52.610Z",
+        "snapshotId": "9272c62a8f2acf62db38ad6b5bb9e1471a6066dc6ad5b8dd3f8308fc8a0b41c6",
+        "changeId": "dedf2dd120c77d3d984d5674cafcb4cc3307c9c110e1bbc75343e1f8115b9546",
+        "diffHash": "aee519097fd5237e09e9506405db836406090e73a6a6e1a08fb4c46c909dca63",
+        "paths": [
+          "src/widgets/packs/game-state.ts",
+          "tests/game-state-contract.test.mjs"
+        ]
+      },
+      {
+        "phase": "turn-2:waiting-for-root-exact-diff-approval",
+        "at": "2026-10-13T06:59:52.611Z"
+      },
+      {
+        "phase": "turn-2:root-approved-exact-diff",
+        "at": "2026-10-13T07:00:22.845Z",
+        "changeId": "dedf2dd120c77d3d984d5674cafcb4cc3307c9c110e1bbc75343e1f8115b9546",
+        "diffHash": "aee519097fd5237e09e9506405db836406090e73a6a6e1a08fb4c46c909dca63"
+      },
+      {
+        "phase": "turn-2:applied-and-independent-tests-passed",
+        "at": "2026-10-13T07:00:23.354Z"
+      },
+      {
+        "phase": "disk-and-reload-readback-passed",
+        "at": "2026-10-13T07:00:23.843Z"
+      }
+    ],
+    "completedJobs": [
+      "c0556c31fbfe94d13d0094df222acf01",
+      "a2e5938cf6f39a343584f23f1c898648"
+    ],
+    "appliedFiles": [
+      {
+        "path": "src/widgets/packs/game-state.ts",
+        "sha256": "85e8673cc71b5197e6a388f8ab0309c5d4203496f0147fa4e33f04caa8332f76"
+      },
+      {
+        "path": "tests/game-state-contract.test.mjs",
+        "sha256": "572344a45f415609581351ed69b7d8842665b6599dec250584ccf30d498edfa8"
+      }
+    ],
+    "reservedTurns": 2,
+    "availableModel": "gpt-6.1-sol",
+    "sameThreadAndWorkspace": true,
+    "appliedTestsPassed": true,
+    "endedAt": "2026-10-13T07:00:23.845Z"
+  }
+}

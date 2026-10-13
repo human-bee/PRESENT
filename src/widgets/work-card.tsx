@@ -3,7 +3,7 @@ import { readRoomOS } from '../../shared/activity';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { ObjectPatch, RoomObject } from '../../shared/room';
 import { workExecutionSchema, type WorkExecution } from '../../shared/work-execution';
-import { projectSummarySchema, type ProjectSummary } from '../../shared/project-work';
+import { projectSummarySchema, projectReviewSchema, type ProjectReview, type ProjectSummary } from '../../shared/project-work';
 import { agentNames } from '../../shared/agent-models';
 
 type WorkStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
@@ -152,6 +152,10 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
   const [pending, setPending] = useState<Action | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [followUp, setFollowUp] = useState('');
+  const [projectReview, setProjectReview] = useState<ProjectReview | null>(null);
+  const [reviewedDiff, setReviewedDiff] = useState(false);
+  const [projectPending, setProjectPending] = useState(false);
+  useEffect(() => { setProjectReview(null); setReviewedDiff(false); }, [work?.jobId]);
   const projects = useProjects();
   const workspace = useWorkspaceAvailability();
   const [projectId, setProjectId] = useState(work?.project?.id ?? '');
@@ -223,6 +227,18 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
       inFlight.current = false;
       setPending(null);
     }
+  }
+
+  async function projectAction(action: 'review' | 'apply') {
+    if (projectPending || !work || !canControl || (action === 'apply' && (!projectReview?.canApply || !reviewedDiff))) return;
+    setProjectPending(true); setRequestError(null);
+    try {
+      const response = await fetch(`/api/projects/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId, actor: selfId, jobId: work.jobId, ...(action === 'apply' && projectReview ? { snapshotId: projectReview.project.snapshotId, changeId: projectReview.changeId } : {}) }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'Project changes could not be verified.');
+      setProjectReview(projectReviewSchema.parse(result.review)); setReviewedDiff(false);
+    } catch (cause) { setRequestError(cause instanceof Error ? cause.message : 'Project changes could not be verified.'); }
+    finally { setProjectPending(false); }
   }
 
   return (
@@ -389,6 +405,19 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
           </>}
         </details>
       )}
+      {work?.status === 'completed' && work.execution?.project && <section aria-label="Project change review" style={{ display: 'grid', gap: 8 }}>
+        <button type="button" style={button} disabled={projectPending || !canControl} onClick={() => void projectAction('review')}>{projectPending ? 'Checking changes…' : 'Review project changes'}</button>
+        {projectReview && <>
+          <p style={{ margin: 0 }}>Review for {projectReview.project.name} · snapshot {projectReview.project.snapshotId.slice(0, 12)} · change {projectReview.changeId.slice(0, 12)}</p>
+          <pre aria-label="Exact reviewed project diff" style={{ maxHeight: 260, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 11 }}>{projectReview.diff || 'No source changes.'}</pre>
+          {projectReview.applied ? <p role="status">Applied this reviewed change to the registered source.</p> : <>
+            {projectReview.blockedReason && <p role="status">{projectReview.blockedReason}</p>}
+            <label><input type="checkbox" checked={reviewedDiff} disabled={!projectReview.canApply || projectPending} onChange={event => setReviewedDiff(event.target.checked)}/> I reviewed this exact diff.</label>
+            <button type="button" style={button} disabled={!projectReview.canApply || !reviewedDiff || projectPending || !canControl} onClick={() => void projectAction('apply')}>Apply reviewed changes</button>
+            <p style={{ margin: 0, fontSize: 11 }}>Applies only this reviewed text change to the registered repository. A changed source or index is preserved and requires a new review.</p>
+          </>}
+        </>}
+      </section>}
       {error && (
         <p role="alert" style={{ margin: 0, color: '#9b493c', fontSize: 12, overflowWrap: 'anywhere' }}>
           {error}

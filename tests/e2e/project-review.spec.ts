@@ -1,0 +1,25 @@
+import { randomBytes } from 'node:crypto';
+import { expect, test } from '@playwright/test';
+import { makeObject } from '../../shared/room';
+test('project work shows the exact diff and requires explicit review before applying that identity', async ({ page }) => {
+  const roomId = randomBytes(16).toString('hex'), snapshotId = '1'.repeat(64), changeId = '2'.repeat(64), jobId = '3'.repeat(32);
+  const project = { id: 'existing-source', name: 'Existing source', description: 'Synthetic browser fixture', commit: '4'.repeat(40), sourceFingerprint: '5'.repeat(64), snapshotId, files: 1, bytes: 42 };
+  const evidence = { project, changes: [{ status: 'M', path: 'app.ts' }], diff: '-export const answer = 42;\n+export const answer = 43;\n', diffTruncated: false };
+  let reviewCalls = 0; const approvals: unknown[] = [];
+  await page.route('**/api/agents', route => route.fulfill({ json: { defaultProvider: 'sol', providers: [], voice: { configured: false }, workspace: { supported: true } } }));
+  await page.route('**/api/projects', route => route.fulfill({ json: { projects: [{ id: project.id, name: project.name, description: project.description }] } }));
+  await page.route('**/api/projects/review', route => { reviewCalls++; return route.fulfill({ json: { review: { ...evidence, jobId, changeId, canApply: true, applied: false } } }); });
+  await page.route('**/api/projects/apply', route => { approvals.push(route.request().postDataJSON()); return route.fulfill({ json: { review: { ...evidence, jobId, changeId, canApply: false, applied: true } } }); });
+  await page.goto(`/r/${roomId}`); await expect(page.locator('.room-status')).toHaveText('here, together');
+  const actor = await page.evaluate(() => sessionStorage.getItem('present:member-id'));
+  const object = makeObject('widget', actor!, { x: 100, y: 100 }, { capability: 'work', prompt: 'Improve existing source.', work: { jobId, requestId: 'browser-review', actor, status: 'completed', prompt: 'Improve existing source.', provider: 'sol', artifactIds: [], project, execution: { boundary: 'local-workspace', continued: false, commands: [], files: [], project: evidence } } });
+  object.title = 'Existing source change'; object.w = 650; object.h = 600;
+  const created = await page.request.post(`/api/room/${roomId}/operation`, { data: { actor, requestId: 'create-browser-fixture', operation: { type: 'put', object } } }); expect(created.ok()).toBe(true);
+  await page.goto(`/r/${roomId}?focus=${object.id}`);
+  await page.getByRole('button', { name: 'Review project changes', exact: true }).click();
+  await expect(page.getByLabel('Exact reviewed project diff')).toContainText('+export const answer = 43;');
+  const apply = page.getByRole('button', { name: 'Apply reviewed changes', exact: true }); await expect(apply).toBeDisabled(); expect(approvals).toHaveLength(0);
+  await page.getByLabel('I reviewed this exact diff.').check(); await apply.click();
+  await expect(page.getByText('Applied this reviewed change to the registered source.', { exact: true })).toBeVisible();
+  expect(reviewCalls).toBe(1); expect(approvals).toEqual([{ roomId, actor, jobId, snapshotId, changeId }]);
+});

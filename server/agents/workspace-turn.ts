@@ -1,3 +1,4 @@
+import { reserveProjectStoryTurn } from '../projects/work-budget';
 import { describeCommand } from './command-receipt';
 import type { WorkExecutionState } from '../../shared/work-execution';
 import { AgentError } from './contract';
@@ -73,6 +74,9 @@ export async function runWorkspaceTurn(wire: WorkspaceWire, input: WorkspaceRunI
     } else {
       save({ phase: 'dispatching', turnId: null, dispatchId: `present-work:${input.jobId}:${input.attempt}`, commands: [] });
       try {
+        check();
+        reserveProjectStoryTurn(input.jobId, state.dispatchId!, state.model ?? 'unknown');
+        check();
         const started = await wire.request<{ turn: { id: string } }>('turn/start', {
           threadId, clientUserMessageId: state.dispatchId, input: [{ type: 'text', text: input.prompt, text_elements: [] }], effort: input.reasoning ?? 'low', serviceTierForTurn: input.fast ? 'priority' : 'default',
           cwd, runtimeWorkspaceRoots: [cwd], environments: [{ environmentId: 'local', cwd, runtimeWorkspaceRoots: [cwd] }],
