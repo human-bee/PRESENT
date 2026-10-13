@@ -1,0 +1,221 @@
+{
+  "implementationRevision": "1d92e63c43c50a4e7161ec25345469c16b78bfed",
+  "state": "Local candidate verified with explicit browser-receipt and hosted limits",
+  "runtime": {
+    "node": "24.19.0",
+    "codex": "0.162.1",
+    "playwright": "1.64.0",
+    "managedBrowser": "Chromium 156.0.8078.4 revision 1248",
+    "voiceBrowser": "Chrome 155.0.8059.40"
+  },
+  "runtimeGitObjects": {
+    "src": "9fd508f7ad1438c2b70e18741f91d22340b347bf",
+    "server": "e1b5d40b1279e45db69fb6c6575bc36550dc4692",
+    "shared": "fdde777d94f6835584c0071bdd8029f8d9bac522",
+    "package.json": "f4c5a578d92e27eab927d6ae31f3903d406d0379",
+    "package-lock.json": "6fef3cb9dbae724d2b62b6825b0db6073f975e02",
+    "vite.config.ts": "d14b81db57256d262a9ae9c0844edf94eeb8447a",
+    "tsconfig.json": "b4d1a1a41679bb840a262de0f39ccf8627ad44e6"
+  },
+  "sourceBinding": "Runtime trees and lock are unchanged from 30f57693, used by provider tests; subsequent commits change harness, test expectations and evidence only. Final release-record commit is documentation only.",
+  "checks": {
+    "unit": {
+      "total": 293,
+      "passed": 291,
+      "failed": 0,
+      "skipped": 2,
+      "separateOptInChecks": "Native browser file roundtrip 7/7; installed Codex config proof 1/1, no model call."
+    },
+    "typecheck": "passed",
+    "build": "passed",
+    "lint": "No introduced diagnostics against preserved Mini source; existing 5 errors, 10 warnings and 13 infos remain in candidate. npm lint is not claimed green.",
+    "ordinaryBrowser": {
+      "passed": 32,
+      "skipped": 3,
+      "scope": "30 passed in full profile; unchanged poll rechecked after report-directory collision; updated Sol-default expectation rechecked. Provider-specific skips accepted separately for GPT Live and LiveKit; contextual RoomOS speech not run."
+    },
+    "productionBrowser": {
+      "passed": 21,
+      "skipped": 1,
+      "scope": "20 passed in profile, Sol-default expectation rechecked. Real LiveKit accepted in dedicated configured run."
+    },
+    "signedBrowser": {
+      "passed": 2
+    },
+    "releaseStory": {
+      "passed": 1
+    },
+    "realLiveKit": {
+      "passed": 1,
+      "scope": "Synthetic camera/audio, two contexts, actual remote decoded frames and received bytes, tracks stopped."
+    }
+  },
+  "peerStory": {
+    "contexts": 2,
+    "physicalDevices": false,
+    "providersCalled": 0,
+    "manualCorrection": true,
+    "pointerPlacement": true,
+    "sharedTimer": true,
+    "diskAndBothReload": true,
+    "benchmark": {
+      "boundary": "Host monotonic performance.now before real keyboard command through Playwright DOM observation; includes automation and polling overhead. Local loopback, two independent contexts, no providers, no acoustic or physical display claim.",
+      "rounds": 20,
+      "direct": {
+        "samples": 20,
+        "p50Ms": 48.484042000000045,
+        "p95Ms": 156.43179099999907,
+        "maxMs": 198.3003749999989
+      },
+      "peer": {
+        "samples": 20,
+        "p50Ms": 101.92670800000087,
+        "p95Ms": 243.20199999999932,
+        "maxMs": 370.7783750000017
+      },
+      "rawSamples": [
+        {
+          "directMs": 198.3003749999989,
+          "peerMs": 243.20199999999932
+        },
+        {
+          "directMs": 71.96891700000015,
+          "peerMs": 101.98695899999984
+        },
+        {
+          "directMs": 72.68104200000016,
+          "peerMs": 109.2043330000015
+        },
+        {
+          "directMs": 76.46008299999994,
+          "peerMs": 131.88779199999954
+        },
+        {
+          "directMs": 62.400125000000116,
+          "peerMs": 370.7783750000017
+        },
+        {
+          "directMs": 90.64450000000033,
+          "peerMs": 236.8691660000004
+        },
+        {
+          "directMs": 55.34633300000132,
+          "peerMs": 102.51079100000061
+        },
+        {
+          "directMs": 33.548917000000074,
+          "peerMs": 86.78045899999961
+        },
+        {
+          "directMs": 45.09120800000164,
+          "peerMs": 82.3963330000006
+        },
+        {
+          "directMs": 45.15216599999985,
+          "peerMs": 103.1947909999999
+        },
+        {
+          "directMs": 36.677458999998635,
+          "peerMs": 88.69970899999862
+        },
+        {
+          "directMs": 44.96995799999968,
+          "peerMs": 88.3229169999995
+        },
+        {
+          "directMs": 48.484042000000045,
+          "peerMs": 85.29524999999921
+        },
+        {
+          "directMs": 46.82004099999904,
+          "peerMs": 97.47783299999901
+        },
+        {
+          "directMs": 60.18720899999971,
+          "peerMs": 97.11458400000083
+        },
+        {
+          "directMs": 38.941624999999476,
+          "peerMs": 83.20154100000036
+        },
+        {
+          "directMs": 34.52562500000022,
+          "peerMs": 82.26341599999978
+        },
+        {
+          "directMs": 32.57929200000035,
+          "peerMs": 185.6984169999996
+        },
+        {
+          "directMs": 156.43179099999907,
+          "peerMs": 157.24675000000025
+        },
+        {
+          "directMs": 59.87883300000067,
+          "peerMs": 101.92670800000087
+        }
+      ]
+    },
+    "diskSha256": "05bf4f39ed43d1351feba2db291d431bf62d7da4457025c01f247483a5aef19d"
+  },
+  "voice": {
+    "outcome": "passed",
+    "requestedModel": "gpt-live-1",
+    "sessionResponseMs": 5647,
+    "noteAndTranscriptVisibleMs": 12321,
+    "tts": "Nonzero received audio energy and active unmuted browser playback; no physical-speaker or intelligibility claim.",
+    "peerReload": true,
+    "capturedTracksEnded": true,
+    "ownBrowserClosed": true
+  },
+  "coding": {
+    "status": "work-readback-passed-with-browser-receipt-gaps",
+    "requestsStarted": 2,
+    "initialActualTestsPassed": true,
+    "followupActualTestsPassed": true,
+    "sameWorkspace": true,
+    "samePrivateThread": true,
+    "sameExactModel": true,
+    "initialFullBrowserReceiptAvailable": false,
+    "fullFollowupBrowserReceiptAvailable": false,
+    "followupViaRealUI": false,
+    "peersAndReloadMatch": true,
+    "sharedArtifactsRendered": true
+  },
+  "nativeWebSocketBenchmark": {
+    "boundary": "Server operation start through receipt of native WebSocket patch by all four loopback peers. No browser, acoustic audio or provider time.",
+    "peers": 4,
+    "objects": 113,
+    "rounds": 1000,
+    "categories": {
+      "create": {
+        "actions": 13,
+        "p50Ms": 4.938791999999921,
+        "p95Ms": 33.489959,
+        "maxMs": 33.489959,
+        "belowOneSecond": 13
+      },
+      "move": {
+        "actions": 1000,
+        "p50Ms": 18.372708999999304,
+        "p95Ms": 27.915000000000873,
+        "maxMs": 88.12066699999923,
+        "belowOneSecond": 1000
+      },
+      "sharedState": {
+        "actions": 1000,
+        "p50Ms": 2.36145800000304,
+        "p95Ms": 6.235500000000684,
+        "maxMs": 93.97549999999956,
+        "belowOneSecond": 1000
+      }
+    }
+  },
+  "limits": [
+    "No production deployment, merge, account change or physical-device/WAN acceptance.",
+    "Initial and follow-up coding jobs were dispatched through actual UI and completed real tests, but Playwright response-body receipt failed; zero-turn independent readback verified files, same-thread/model/workspace continuation, shared rendered artifacts and disk/reload. No full original browser-response proof is claimed.",
+    "Hosted staging is still ee35cbe and lacks a valid build-time tldraw license and native provider/executor configuration.",
+    "Browser latency includes automation/assertion overhead and is local, not a provider or WAN latency claim. Direct-edit p95 156.43ms exceeds the proposed 100ms experience target; peer p95 243.20ms is below the proposed 300ms target.",
+    "P0 process recovery proof is signed HTTP/process scope; canonical browser Resume and crash-window reconciliation are P1."
+  ]
+}

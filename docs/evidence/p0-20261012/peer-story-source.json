@@ -1,0 +1,185 @@
+{
+  "at": "2026-10-13T05:46:01.855Z",
+  "roomId": "a2436fb1423e452b95e8e0d729e8eb74",
+  "contexts": 2,
+  "physicalDevices": false,
+  "runtime": {
+    "node": "v24.19.0",
+    "browser": "156.0.8078.4",
+    "channel": "Playwright Chromium"
+  },
+  "source": {
+    "head": "30f576931e95bf92be3cd0b44620c2b7cefeca2c",
+    "dirty": true,
+    "lockSha256": "11731fd9c30af29f103f80af340d3d6b69692a3022056b20f8f51edb275d66ae"
+  },
+  "input": "Real browser keyboard, native contenteditable, pointer down/move/up, timer controls.",
+  "correction": "Correction: meeting starts at ten.",
+  "released": {
+    "x": 347,
+    "y": 261,
+    "props": {
+      "color": "light-green",
+      "richText": {
+        "type": "doc",
+        "attrs": {
+          "dir": "auto"
+        },
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "dir": "auto"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Correction: meeting starts at ten."
+              }
+            ]
+          }
+        ]
+      },
+      "size": "m",
+      "font": "sans",
+      "align": "start",
+      "verticalAlign": "start",
+      "labelColor": "black",
+      "growY": 0,
+      "fontSizeAdjustment": 1,
+      "url": "",
+      "scale": 1.65,
+      "textLastEditedBy": "8e96552a-5fa4-40a0-b5fe-43c65e6ceb1c"
+    }
+  },
+  "paused": "0:58",
+  "canonical": [
+    {
+      "id": "20edb28d-5db0-4682-a3c8-7c8e0e9fcedc",
+      "kind": "timer",
+      "x": 705,
+      "y": 393,
+      "w": 280,
+      "h": 230,
+      "data": {
+        "durationMs": 60000,
+        "remainingMs": 57869,
+        "endsAt": null
+      }
+    },
+    {
+      "id": "3fc25122-33e0-44c9-926f-5cd380648e42",
+      "kind": "note",
+      "x": 347,
+      "y": 261,
+      "w": 330,
+      "h": 330,
+      "data": {
+        "text": "Correction: meeting starts at ten.",
+        "color": "light-green"
+      }
+    }
+  ],
+  "providerRequests": [],
+  "disk": {
+    "sha256": "05bf4f39ed43d1351feba2db291d431bf62d7da4457025c01f247483a5aef19d"
+  },
+  "benchmark": {
+    "boundary": "Host monotonic performance.now before real keyboard command through Playwright DOM observation; includes automation and polling overhead. Local loopback, two independent contexts, no providers, no acoustic or physical display claim.",
+    "rounds": 20,
+    "direct": {
+      "samples": 20,
+      "p50Ms": 48.484042000000045,
+      "p95Ms": 156.43179099999907,
+      "maxMs": 198.3003749999989
+    },
+    "peer": {
+      "samples": 20,
+      "p50Ms": 101.92670800000087,
+      "p95Ms": 243.20199999999932,
+      "maxMs": 370.7783750000017
+    },
+    "rawSamples": [
+      {
+        "directMs": 198.3003749999989,
+        "peerMs": 243.20199999999932
+      },
+      {
+        "directMs": 71.96891700000015,
+        "peerMs": 101.98695899999984
+      },
+      {
+        "directMs": 72.68104200000016,
+        "peerMs": 109.2043330000015
+      },
+      {
+        "directMs": 76.46008299999994,
+        "peerMs": 131.88779199999954
+      },
+      {
+        "directMs": 62.400125000000116,
+        "peerMs": 370.7783750000017
+      },
+      {
+        "directMs": 90.64450000000033,
+        "peerMs": 236.8691660000004
+      },
+      {
+        "directMs": 55.34633300000132,
+        "peerMs": 102.51079100000061
+      },
+      {
+        "directMs": 33.548917000000074,
+        "peerMs": 86.78045899999961
+      },
+      {
+        "directMs": 45.09120800000164,
+        "peerMs": 82.3963330000006
+      },
+      {
+        "directMs": 45.15216599999985,
+        "peerMs": 103.1947909999999
+      },
+      {
+        "directMs": 36.677458999998635,
+        "peerMs": 88.69970899999862
+      },
+      {
+        "directMs": 44.96995799999968,
+        "peerMs": 88.3229169999995
+      },
+      {
+        "directMs": 48.484042000000045,
+        "peerMs": 85.29524999999921
+      },
+      {
+        "directMs": 46.82004099999904,
+        "peerMs": 97.47783299999901
+      },
+      {
+        "directMs": 60.18720899999971,
+        "peerMs": 97.11458400000083
+      },
+      {
+        "directMs": 38.941624999999476,
+        "peerMs": 83.20154100000036
+      },
+      {
+        "directMs": 34.52562500000022,
+        "peerMs": 82.26341599999978
+      },
+      {
+        "directMs": 32.57929200000035,
+        "peerMs": 185.6984169999996
+      },
+      {
+        "directMs": 156.43179099999907,
+        "peerMs": 157.24675000000025
+      },
+      {
+        "directMs": 59.87883300000067,
+        "peerMs": 101.92670800000087
+      }
+    ]
+  }
+}
