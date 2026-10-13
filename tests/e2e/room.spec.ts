@@ -114,7 +114,12 @@ test('two people natively edit, drag, resize, undo, time, roll, and reload the s
     expect(Number(rolled)).toBeGreaterThanOrEqual(2);
     expect(Number(rolled)).toBeLessThanOrEqual(40);
     await expect(diceB.locator('#latest output')).toHaveText(rolled);
+    // The peer keeps its own camera. Fit the new widget above the fixed composer
+    // before clicking its iframe controls; an offscreen frame click can hit the composer.
+    await fitCanvas(river);
     await diceB.getByRole('button', { name: 'Roll dice', exact: true }).click();
+    await diceB.getByText('Shared roll history', { exact: true }).click();
+    await expect(diceB.locator('#history > div')).toHaveCount(2);
     await diceA.getByText('Shared roll history', { exact: true }).click();
     await expect(diceA.locator('#history > div')).toHaveCount(2);
     const dice = (await objects(alex, room)).find(object => object.data.capability === 'dice');
