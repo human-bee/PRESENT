@@ -1,0 +1,21 @@
+# P6: stopped-service recovery for a single writer
+
+The native server now acquires a private data-root writer lease after dotenv configuration and before importing stateful room, access, work or activity modules. A second live process is refused before it can initialize those stores. Append-only atomic lease generations preserve a killed owner and prevent competing stale reclaimers from deleting a successor. PID reuse, foreign hosts, invalid records and exhausted history fail closed. Normal shutdown saves native state before releasing ownership. This is one-host coordination, not a distributed lock.
+
+The operator CLI produces AES-256-GCM authenticated encrypted backups with a random 32-byte key. Keys and archives are private0600 files outside the data root, and are never printed. Each exact file byte sequence and directory is bound into a bounded manifest with SHA256 checks. Backups acquire the same exclusive lease and refuse a live server. The only excluded subtree is the ephemeral lease history. Access, room snapshots, assets, work receipts and workspaces are preserved as data.
+
+Restore authenticates and validates the entire manifest before creating private staging. It rejects wrong keys, tampering, unsafe paths, missing parents, duplicates, false hashes, symlinks, hardlinks, oversized files/totals and an existing destination including dangling links. Every restored file is read back and verified before the new directory is atomically published; files and directories are fsynced. It never merges into or replaces existing data. Use an operator-owned parent that is not writable by others and keep other processes away from that destination during restore. Portable Node rename is not a no-clobber transaction against a noncooperating same-user process.
+
+```sh
+node --import tsx scripts/data-backup.ts keygen --key /private/operator/backup.key
+node --import tsx scripts/data-backup.ts backup --data /private/operator/stopped-data --archive /private/operator/backup.present --key /private/operator/backup.key
+node --import tsx scripts/data-backup.ts restore --archive /private/operator/backup.present --destination /private/operator/new-data --key /private/operator/backup.key
+```
+
+Stop old server versions too: they do not participate in the new lease protocol. Configure the restored data root explicitly, retain the existing access signing secret separately, and keep executor/auth/provider configuration separate. The archive does not export environment files or recreate accounts. It does not rebind project directories, authenticate Codex, start a work turn, deploy a service or enable automatic recovery of unknown historical tasks. Saved work remains subject to its original explicit authority and baseline checks.
+
+Acceptance includes five crypto/filesystem/process tests, actual live-child refusal and SIGKILL/dead-owner recovery. A real signed two-context server story passed second-server refusal, live-backup refusal, human native correction, stopped backup/restore, exact room and image bytes, retained revoked-grant denial, unauthorized denial and browser reload. The integrated story made zero paid requests. A separate roundtrip preserved all44 exact files from P4's two genuine completed Sol6.1 jobs, including the same thread/workspace identities, without a provider call. Public receipts/screenshots are retained in docs/evidence/p6-20261012. Cloud QA includes the explicit signed restore story.
+
+Encryption uses Node's supported crypto API, with a fresh96-bit IV and authenticated format header: https://nodejs.org/docs/latest-v24.x/api/crypto.html . Filesystem operations and synchronization follow Node's native API: https://nodejs.org/docs/latest-v24.x/api/fs.html . A real power-loss or multi-host fault exercise is not claimed. Hosted licensing, actual hosted executor configuration and deployment acceptance remain the release prerequisites documented by P2.
+
+Final integrated local acceptance: **350 passed /357 total, zero failures, seven opt-in skips**, typecheck and production build passed. The seven opt-in skips are dedicated provider/browser stories, not silently failed tests; signed restore was separately enabled and passed. CLI keygen/backup/restore also passed on the44-file genuine-work snapshot. Existing upstream bundle warnings remain. CI status must be read from the exact pushed commit.
