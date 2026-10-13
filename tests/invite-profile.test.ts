@@ -67,10 +67,14 @@ test('invite HTTP/native sync: isolation, identity, assets, pending commits, med
     assert.equal((await call(url, 'GET', stranger)).status, 403);
     assert.equal((await call('/api/projects')).status, 401);
     assert.equal((await call('/api/projects', 'GET', owner)).status, 200);
-    const providers = await (await call('/api/agents', 'GET', owner)).json() as { providers: { id: string; reasoning: string[]; fast: boolean }[] };
-    assert.equal(providers.providers[0].id, 'cerebras');
-    assert.ok(providers.providers[0].reasoning.includes('low'));
-    assert.equal(providers.providers[0].fast, false);
+    const previousHome = process.env.CODEX_HOME; process.env.CODEX_HOME = join(directory, 'absent-codex-home');
+    let providers: { defaultProvider: string; providers: { id: string; reasoning: string[]; fast: boolean }[] };
+    try { providers = await (await call('/api/agents', 'GET', owner)).json(); }
+    finally { if (previousHome === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = previousHome; }
+    assert.equal(providers.defaultProvider, 'sol');
+    assert.deepEqual(providers.providers.slice(0, 3).map(provider => provider.id), ['sol', 'luna', 'codex']);
+    const cerebras = providers.providers.find(provider => provider.id === 'cerebras'); assert.ok(cerebras);
+    assert.ok(cerebras.reasoning.includes('low')); assert.equal(cerebras.fast, false);
     assert.equal((await call('/api/projects', 'POST', owner, {})).status, 403);
     assert.equal((await call('/api/work/start', 'POST', owner, { roomId: room.roomId })).status, 503);
     assert.equal((await call('/api/unknown', 'GET', owner)).status, 403);

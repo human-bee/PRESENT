@@ -78,6 +78,21 @@ function useProjects() {
   return projects;
 }
 
+function useWorkspaceAvailability() {
+  const [value, setValue] = useState<{ supported: boolean; message: string }>({ supported: false, message: 'Checking workspace execution…' });
+  useEffect(() => {
+    const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 10_000);
+    void fetch('/api/agents', { cache: 'no-store', signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error();
+      const raw = await response.json();
+      const workspace = raw?.workspace;
+      if (!controller.signal.aborted) setValue({ supported: workspace?.supported === true, message: workspace?.supported === true ? '' : typeof workspace?.reason === 'string' ? workspace.reason : 'Workspace execution is unavailable. Check this room’s configured executor.' });
+    }).catch(() => { setValue({ supported: false, message: 'Workspace execution could not be checked. Reload after the executor is available.' }); }).finally(() => window.clearTimeout(timeout));
+    return () => { window.clearTimeout(timeout); controller.abort(); };
+  }, []);
+  return value;
+}
+
 function useWorkRefresh(roomId: string, jobId: string | undefined, status: WorkStatus | undefined) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -138,6 +153,7 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
   const [requestError, setRequestError] = useState<string | null>(null);
   const [followUp, setFollowUp] = useState('');
   const projects = useProjects();
+  const workspace = useWorkspaceAvailability();
   const [projectId, setProjectId] = useState(work?.project?.id ?? '');
   const inFlight = useRef(false);
   const startRequest = useRef<{ objectId: string; prompt: string; requestId: string } | null>(null);
@@ -159,6 +175,7 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
     if (
       inFlight.current ||
       !selfId ||
+      (action !== 'cancel' && !workspace.supported) ||
       (action === 'start' ? !nextPrompt.trim() || active || !canControl : !work || !canControl)
     )
       return;
@@ -251,7 +268,7 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
               type="button"
               className="widget-primary"
               style={button}
-              disabled={pending !== null || !selfId || !nextPrompt.trim() || !canControl}
+              disabled={pending !== null || !selfId || !nextPrompt.trim() || !canControl || !workspace.supported}
               onClick={() => void request('start')}
             >
               {pending === 'start' ? 'Starting…' : work ? 'Continue work' : 'Start work'}
@@ -261,7 +278,7 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
                 type="button"
                 className="widget-quiet"
                 style={button}
-                disabled={pending !== null || !selfId || !canControl}
+                disabled={pending !== null || !selfId || !canControl || !workspace.supported}
                 title={
                   canControl
                     ? 'Resume the previous run with its original request.'
@@ -287,6 +304,7 @@ export function WorkCard({ roomId, object, patch, selfId, onOpenArtifact }: Work
           </button>
         ))}
       </div>
+      {!workspace.supported && <p aria-live="polite" style={{ margin: 0, color: '#66725f', fontSize: 12 }}>{workspace.message}</p>}
       <label style={label}>
         Title
         <input

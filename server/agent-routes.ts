@@ -5,8 +5,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { transcriptEntrySchema } from '../shared/transcript';
-import { AgentError, agentModels } from './agents/contract';
-import { codexAvailability } from './agents/codex';
+import { AgentError } from './agents/contract';
+import { discoverLaunchCapabilities } from './launch/capabilities';
 import { contribute } from './agents/contribute';
 import { fulfillRoomRequest } from './agents/fulfill-request';
 import { appendTranscript } from './agents/transcript';
@@ -41,8 +41,7 @@ export async function handleAgentRequest(req: IncomingMessage, res: ServerRespon
   try {
     if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) throw new AgentError('Open this room directly to use its agents.', 403);
     if (url.pathname === '/api/agents' && req.method === 'GET') {
-      const availability = await codexAvailability();
-      reply(res, 200, { providers: [...availability.providers, { id: 'cerebras', name: 'Qwen 3.8 · Cerebras', model: agentModels.cerebras, configured: !!process.env.CEREBRAS_API_KEY, reasoning: ['none', 'low', 'medium', 'high'], fast: false, reason: process.env.CEREBRAS_API_KEY ? undefined : 'Cerebras API key not configured.' }], voice: { configured: !!process.env.OPENAI_API_KEY, name: 'GPT-Live', model: 'gpt-live-1' } });
+      reply(res, 200, await discoverLaunchCapabilities());
     } else {
       if (req.method !== 'POST' || url.pathname === '/api/agents') throw new AgentError('Use the supported request method.', 405);
       const raw = await body(req, ['/api/voice/tool', '/api/agents/generate'].includes(url.pathname) ? 1600000 : 80000);

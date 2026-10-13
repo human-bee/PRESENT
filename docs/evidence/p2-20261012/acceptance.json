@@ -1,0 +1,170 @@
+{
+  "preparedAt": "2026-10-13T06:36:05.396Z",
+  "phase": "P2",
+  "status": "software-readiness-accepted-public-launch-blocked",
+  "sourceHead": "97c0831e18814fa1175596af7ce673cfe3146e3f",
+  "runtimeObjects": {
+    "server": "2caa6d0188c1e4b0483879c12b70bf68a338914c",
+    "src": "3f558927923b015776ebf20799e91ae3cf8b8daf",
+    "shared": "fdde777d94f6835584c0071bdd8029f8d9bac522",
+    "package.json": "f4c5a578d92e27eab927d6ae31f3903d406d0379",
+    "package-lock.json": "6fef3cb9dbae724d2b62b6825b0db6073f975e02"
+  },
+  "node": "Node v24.19.0",
+  "browser": {
+    "PLAYWRIGHT_BROWSERS_PATH": "/private/tmp/present-playwright-164",
+    "channel": null,
+    "playwright": "1.64.0",
+    "chromiumRevision": 1248,
+    "majorVersion": 156
+  },
+  "checks": [
+    {
+      "command": "npm test",
+      "tests": 321,
+      "pass": 316,
+      "fail": 0,
+      "skipped": 5
+    },
+    {
+      "command": "npm run build",
+      "passed": true
+    },
+    {
+      "command": "npm run typecheck",
+      "passed": true
+    },
+    {
+      "command": "PRESENT_LAUNCH_BROWSER=1 PRESENT_RECOVERY_BROWSER=1 node --import tsx --test tests/launch-capabilities-browser.test.ts tests/work-browser-recovery.test.ts",
+      "pass": 3,
+      "skipped": 0
+    },
+    {
+      "command": "playwright test --config tests/production-playwright.config.ts tests/e2e/work-card.spec.ts",
+      "pass": 1
+    },
+    {
+      "command": "biome lint . (two exact owned test snapshots outside ignored .release)",
+      "errors": 0,
+      "warnings": 0
+    },
+    {
+      "command": "git diff --check",
+      "passed": true
+    }
+  ],
+  "proof": [
+    "Real signed HTTP default Sol/current catalog for controlled Codex and controlled OpenAI planning.",
+    "Both signed browser cases create a native Work card and populate the actual request.",
+    "Supported Start is visibly enabled; planning-only Start disabled with meaningful visible executor/account reason.",
+    "Repeated signed browser/API/card probes reuse exactly one controlled Codex discovery process.",
+    "Capability stories never start a thread or turn.",
+    "Real process recovery browser kills the actual isolated server, shows explicit Resume and joins the exact existing controlled turn with canonical artifact completion."
+  ],
+  "scope": "Fresh signed browser contexts and production bundle with controlled read-only provider discovery; zero paid turns.",
+  "preflight": {
+    "status": "blocked",
+    "configurationSource": "Current operator process environment; not proof of remote deployment variables.",
+    "source": {
+      "requestedRevision": "97c0831e18814fa1175596af7ce673cfe3146e3f",
+      "branch": "codex/p2-launch-readiness-20261012",
+      "observedRevision": "ee35cbe523fd6f53fbe7feaabb0856d2c18dc554",
+      "exactRevision": false,
+      "health": "healthy"
+    },
+    "planning": {
+      "transport": "codex-app-server",
+      "catalogVerified": true,
+      "generationVerified": false
+    },
+    "workspace": {
+      "transport": "codex-app-server",
+      "configured": true,
+      "authenticated": true,
+      "catalogVerified": true,
+      "supported": true,
+      "status": "catalog-verified",
+      "executionVerified": false,
+      "providers": [
+        {
+          "id": "sol",
+          "name": "Sol 6.1",
+          "model": "gpt-6.1-sol",
+          "configured": true,
+          "reasoning": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "fast": true,
+          "fastDescription": "2x speed, increased usage"
+        },
+        {
+          "id": "luna",
+          "name": "Luna 6",
+          "model": "gpt-6-luna",
+          "configured": true,
+          "reasoning": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "fast": true,
+          "fastDescription": "1.5x speed"
+        },
+        {
+          "id": "codex",
+          "name": "Astra 6",
+          "model": "gpt-6-astra",
+          "configured": true,
+          "reasoning": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "fast": true,
+          "fastDescription": "2x speed, increased usage"
+        }
+      ],
+      "reason": "Account and default model catalog verified. Workspace profile and actual code execution remain unverified until a separately authorized work run."
+    },
+    "license": {
+      "buildKeyName": "VITE_TLDRAW_LICENSE_KEY",
+      "buildKeyPresent": false,
+      "alternateKeyPresent": false,
+      "validity": "unverified",
+      "productionRequired": true,
+      "documentation": "https://tldraw.dev/sdk-features/license-key"
+    },
+    "gaps": [
+      "NODE_ENV must be production for the public build.",
+      "Public hosting requires the signed invite access profile.",
+      "PRESENT_ACCESS_ORIGIN must be the exact public HTTPS origin.",
+      "A stable high-entropy access secret of at least 32 characters is required; presence/length do not verify entropy.",
+      "Both native data and access directories must be explicit absolute private durable paths.",
+      "Native data and access records must both be covered by the inspected absolute persistent mount.",
+      "Target must serve the exact requested revision; another healthy revision does not count.",
+      "Supply a legitimate VITE_TLDRAW_LICENSE_KEY at build time, then rebuild the frontend. NEXT_PUBLIC_TLDRAW_LICENSE_KEY alone is not the declared native Docker build argument.",
+      "Verify the built frontend has an active tldraw license valid for the actual public host and appropriate use. Key presence is not license validity; public browser editor acceptance remains required.",
+      "A separately authorized real planning and workspace run must verify generation, workspace profile, commands and canonical artifact publication; catalog reads do not prove execution."
+    ]
+  },
+  "hostedBrowser": {
+    "observedEditor": false,
+    "licenseMissing": true,
+    "evidence": "Fresh read-only staging browser earlier in this sprint; no deployment since."
+  },
+  "limits": [
+    "Provider-free controlled executors/catalogs; no actual provider credential/account/generation or public-host execution verification.",
+    "Public-host tldraw license/domain/build/editor and deployment exact revision remain separate unresolved launch requirements.",
+    "Full unit glob explicitly skips opt-in/live tests; required capability and recovery browser opt-ins ran separately without skips."
+  ]
+}
