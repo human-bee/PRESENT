@@ -67,7 +67,9 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Local UI, widgets, keyboard and two-person scenarios
         if: matrix.profile == 'local'
-        run: npm run test:e2e -- --max-failures=5
+        run: |
+          npm run test:e2e -- --max-failures=5
+          npx playwright test --config tests/planning-review-playwright.config.ts
       - name: Peer correction, timer, placement, reload and disk with render timings
         if: matrix.profile == 'release'
         run: npx playwright test --config tests/release-playwright.config.ts
@@ -94,6 +96,7 @@ jobs:
             /tmp/present-release-story-*/results/
             /tmp/present-recovery-browser/
             /tmp/present-launch-browser/
+            /tmp/present-planning-review-*/results/
           retention-days: 7
 
   meeting-soak:
