@@ -16,7 +16,7 @@ test('a new work card uses the supported server default with fast, low reasoning
   await page.getByRole('button', { name: 'Start work', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('The local Codex service is temporarily unavailable.');
   const accepted = workRequestSchema.parse(request);
-  expect(accepted.provider).toBe('luna');
+  expect(accepted.provider).toBe('sol');
   expect(accepted.fast).toBe(true);
   expect(accepted.reasoning).toBe('low');
   await page.getByRole('button', { name: 'Room settings', exact: true }).click();

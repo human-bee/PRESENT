@@ -100,7 +100,7 @@ test('browser native import and export preserve the human canvas and round-trip 
   const { chromium } = await import('@playwright/test');
   const baseURL = process.env.PRESENT_E2E_URL ?? 'http://127.0.0.1:4317';
   assert.ok((await fetch(`${baseURL}/api/health`)).ok, 'The existing development server must already be running.');
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ channel: process.env.PRESENT_E2E_BROWSER_CHANNEL || undefined, headless: true });
   const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, acceptDownloads: true });
   const page = await context.newPage(), roomId = randomBytes(16).toString('hex');
   try {

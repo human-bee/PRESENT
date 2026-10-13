@@ -15,10 +15,12 @@ const baseURL = process.env.PRESENT_E2E_URL ?? 'http://127.0.0.1:4318';
 assert.match(baseURL, /^http:\/\/127\.0\.0\.1:\d{4,5}$/);
 const readbackOnly = process.argv.includes('--readback');
 const preflightOnly = process.argv.includes('--preflight');
+const recoverInitial = process.argv.includes('--recover-initial');
 const continuing = readbackOnly || process.argv.includes('--continue-followup');
+assert.ok(!recoverInitial || (!continuing && !preflightOnly), 'Recovery cannot be combined with another mode.');
 const provider = process.env.PRESENT_WORK_PROVIDER ?? 'sol';
 assert.ok(['sol', 'luna', 'codex'].includes(provider), 'Choose a current work provider; legacy Spark/Terra cannot start fresh work.');
-assert.ok(readbackOnly || preflightOnly || process.env.PRESENT_LIVE_WORK === '1', 'Real subscription turns require PRESENT_LIVE_WORK=1. --preflight/--readback start no turns.');
+assert.ok(readbackOnly || preflightOnly || recoverInitial || process.env.PRESENT_LIVE_WORK === '1', 'Real subscription turns require PRESENT_LIVE_WORK=1. --preflight/--readback/--recover-initial start no turns.');
 const save = (name, data) => writeFileSync(resolve(out, name), `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 });
 const get = async path => {
   const response = await fetch(baseURL + path, { signal: AbortSignal.timeout(15000) });
@@ -36,9 +38,16 @@ if (preflightOnly) {
   process.exit(0);
 }
 mkdirSync(out, { recursive: true, mode: 0o700 });
-assert.equal(existsSync(resolve(out, 'budget.json')), continuing, 'Existing budget prevents an accidental paid rerun. Use its continuation/readback mode.');
+assert.equal(existsSync(resolve(out, 'budget.json')), continuing || recoverInitial, 'Existing budget prevents an accidental paid rerun. Use its continuation/readback/recovery mode.');
+if (recoverInitial) assert.equal(existsSync(resolve(out, 'summary.json')), false, 'Recovery requires a missing initial summary.');
 const previous = continuing ? JSON.parse(readFileSync(resolve(out, 'summary.json'), 'utf8')) : null;
-const budget = continuing ? JSON.parse(readFileSync(resolve(out, 'budget.json'), 'utf8')) : null;
+const budget = continuing || recoverInitial ? JSON.parse(readFileSync(resolve(out, 'budget.json'), 'utf8')) : null;
+if (recoverInitial) {
+  for (const [key, value] of Object.entries(affinity)) assert.equal(budget[key], value, `Saved budget ${key} affinity cannot change.`);
+  assert.equal(budget.requestsStarted, 1);
+  assert.equal(budget.maxTurns, 2);
+  assert.match(budget.roomId, /^[a-f0-9]{32}$/);
+}
 if (continuing) {
   for (const [key, value] of Object.entries(affinity)) {
     assert.equal(previous[key], value, `Saved proof ${key} affinity cannot change.`);
@@ -47,15 +56,16 @@ if (continuing) {
   assert.equal(budget.requestsStarted, readbackOnly ? 2 : 1);
 }
 const report = {
-  at: new Date().toISOString(), ...affinity, roomId: previous?.roomId ?? randomBytes(16).toString('hex'),
+  at: new Date().toISOString(), ...affinity, roomId: previous?.roomId ?? budget?.roomId ?? randomBytes(16).toString('hex'),
   maxTurns: 2, requestsStarted: budget?.requestsStarted ?? 0, status: 'running',
   separateBrowserContexts: true, physicalDevices: false, mockedModelOutputs: false,
-  mode: readbackOnly ? 'readback' : continuing ? 'continue-followup' : 'initial-and-followup',
-  newTurnsAllowed: readbackOnly ? 0 : continuing ? 1 : 2,
-  initialIngress: 'Real browser Work request typing and Start work click',
+  mode: recoverInitial ? 'recover-initial' : readbackOnly ? 'readback' : continuing ? 'continue-followup' : 'initial-and-followup',
+  newTurnsAllowed: readbackOnly || recoverInitial ? 0 : continuing ? 1 : 2,
+  initialIngress: recoverInitial ? 'Recovered durable job; original complete browser action assertion unavailable' : previous?.initialIngress ?? 'Real browser Work request typing and Start work click',
   source: { head: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), dirty: Boolean(execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim()), harnessSha256: createHash('sha256').update(readFileSync(resolve(root, 'tests/live/native-work.mjs'))).digest('hex') },
 };
-if (previous?.error) report.initialHarnessFailure = previous.error;
+if (previous?.initialHarnessFailure || previous?.error) report.initialHarnessFailure = previous.initialHarnessFailure ?? previous.error;
+if (previous?.recoveredFromDurableJob) { report.recoveredFromDurableJob = true; report.initialFullBrowserReceiptAvailable = false; }
 const prior = continuing ? readdirSync(jobsDirectory).filter(name => /^[a-f0-9]{32}\.json$/.test(name))
   .map(name => JSON.parse(readFileSync(resolve(jobsDirectory, name), 'utf8')))
   .find(job => job.roomId === report.roomId && job.jobId === previous.initial?.jobId) : null;
@@ -87,23 +97,74 @@ const inspect = job => {
   const codexHome = process.env.CODEX_HOME ?? resolve(homedir(), '.codex');
   const paths = globSync(`sessions/**/rollout-*-${stored.executionState.threadId}.jsonl`, { cwd: codexHome });
   assert.equal(paths.length, 1, 'Saved private thread must have one authoritative rollout.');
-  const events = readFileSync(resolve(codexHome, paths[0]), 'utf8').trim().split('\n').map(line => JSON.parse(line))
-    .filter(event => event.type === 'response_item').map(event => event.payload);
-  assert.ok(job.execution.commands.some(command => {
-    const call = events.find(event => event.type === 'function_call' && event.call_id === command.id);
-    const output = events.find(event => event.type === 'function_call_output' && event.call_id === command.id);
-    return JSON.stringify(call ?? {}).includes('node --test math.test.mjs') && /fail 0/.test(JSON.stringify(output)) && /pass [1-9]/.test(JSON.stringify(output));
-  }), 'Successful real test command must correlate to a provider call ID and output.');
+  const rollout = readFileSync(resolve(codexHome, paths[0]), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  const start = rollout.findIndex(event => event.type === 'event_msg' && event.payload.type === 'task_started' && event.payload.turn_id === stored.executionState.turnId);
+  assert.ok(start >= 0, 'The exact saved execution turn must exist in the private rollout.');
+  const next = rollout.findIndex((event, index) => index > start && event.type === 'event_msg' && event.payload.type === 'task_started');
+  const events = rollout.slice(start, next < 0 ? undefined : next).filter(event => event.type === 'response_item').map(event => event.payload);
+  const successfulCommand = job.execution.commands.find(command => command.exitCode === 0 && command.status === 'completed' && command.command.includes('node --test math.test.mjs'));
+  assert.ok(successfulCommand, 'The saved execution must contain the actual successful test command.');
+  const call = events.find(event => ['function_call', 'custom_tool_call'].includes(event.type) && JSON.stringify(event).includes('node --test math.test.mjs') && events.some(output => ['function_call_output', 'custom_tool_call_output'].includes(output.type) && output.call_id === event.call_id && /fail 0/.test(JSON.stringify(output)) && /pass [1-9]/.test(JSON.stringify(output))));
+  assert.ok(call, 'The real test command must have successful output joined by provider call ID in the exact saved turn.');
+  const output = events.find(event => ['function_call_output', 'custom_tool_call_output'].includes(event.type) && event.call_id === call.call_id);
+  report.executionInspectionsByJob ??= {};
+  report.executionInspectionsByJob[job.jobId] = { turnId: stored.executionState.turnId, savedCommandId: successfulCommand.id, providerCallId: call.call_id, correlation: 'Exact saved turn and test command, provider output joined by call ID', outputSha256: createHash('sha256').update(JSON.stringify(output.output)).digest('hex') };
   assert.ok(job.execution.files.some(file => file.path === 'math.mjs'));
   assert.ok(job.execution.files.some(file => file.path === 'math.test.mjs'));
   return stored.executionState;
 };
 const publicJob = job => ({ jobId: job.jobId, objectId: job.objectId, provider: job.provider, status: job.status, artifactIds: job.artifactIds, execution: job.execution });
+if (recoverInitial) {
+  const sameRoom = readdirSync(jobsDirectory).filter(name => /^[a-f0-9]{32}\.json$/.test(name)).map(name => JSON.parse(readFileSync(resolve(jobsDirectory, name), 'utf8'))).filter(job => job.roomId === report.roomId);
+  assert.equal(sameRoom.length, 1, 'Recovery requires exactly one saved job in the budget room.');
+  const initial = sameRoom[0];
+  assert.equal(initial.status, 'completed', 'Recovery requires a durable completed initial job.');
+  assert.equal(initial.provider, provider);
+  assert.equal(initial.execution?.continued, false);
+  assert.ok(typeof initial.actor === 'string' && initial.actor.length > 0, 'The original actor must be durable.');
+  const executionState = inspect(initial);
+  Object.assign(report, { status: 'initial-recovered', initial: publicJob(initial), initialActualTestsPassed: true, recoveredFromDurableJob: true, initialFullBrowserReceiptAvailable: false, initialHarnessFailure: 'Original unbounded harness interrupted after durable completed job; initial full browser receipt unavailable', actor: initial.actor, executionState, separateBrowserContexts: false, endedAt: new Date().toISOString() });
+  save('summary.json', report);
+  console.log(JSON.stringify(report, null, 2));
+  process.exit(0);
+}
+const progress = stage => {
+  save('progress.json', { at: new Date().toISOString(), roomId: report.roomId, stage, requestsStarted: report.requestsStarted });
+  console.log(`native-work: ${stage}`);
+};
+const boundedBody = async response => {
+  let timer;
+  try {
+    return await Promise.race([response.json(), new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Work start response body exceeded 15 seconds.')), 15000);
+    })]);
+  } finally { clearTimeout(timer); }
+};
+const startFromUI = async (page, button, phase) => {
+  reserve();
+  progress(`${phase}:reserved-before-click`);
+  const pending = page.waitForResponse(response => new URL(response.url()).pathname === '/api/work/start' && response.request().method() === 'POST', { timeout: 15000 }).then(async response => {
+    progress(`${phase}:response-headers`);
+    assert.equal(response.status(), 202);
+    const accepted = await boundedBody(response);
+    assert.equal(accepted.provider, provider, 'Actual UI provider must match the requested proof provider.');
+    report[phase] = publicJob(accepted);
+    save('summary.json', report);
+    progress(`${phase}:response-body-saved`);
+    return accepted;
+  });
+  // Both must succeed: saving the response while navigation settles is useful
+  // recovery evidence, but it does not replace the real browser click assertion.
+  const [accepted] = await Promise.all([pending, page.getByRole('button', { name: button, exact: true }).click()]);
+  progress(`${phase}:click-completed`);
+  return accepted;
+};
 const browser = await chromium.launch({ channel: process.env.PRESENT_E2E_BROWSER_CHANNEL || undefined, headless: true });
 try {
   const contexts = await Promise.all([browser.newContext({ viewport: { width: 1440, height: 1000 } }), browser.newContext({ viewport: { width: 1440, height: 1000 } })]);
   if (prior) await contexts[0].addInitScript(actor => sessionStorage.setItem('present:member-id', actor), prior.actor);
   const [a, b] = await Promise.all(contexts.map(context => context.newPage()));
+  for (const page of [a, b]) { page.setDefaultTimeout(10000); page.setDefaultNavigationTimeout(30000); }
   await Promise.all([a.goto(`${baseURL}/r/${report.roomId}`), b.goto(`${baseURL}/r/${report.roomId}`)]);
   await expect(a.locator('.person')).toHaveCount(2);
   const actor = await a.evaluate(() => sessionStorage.getItem('present:member-id'));
@@ -114,13 +175,7 @@ try {
     await a.getByRole('button', { name: 'Add to room', exact: true }).click();
     await a.getByRole('button', { name: 'A commitment Assign it, start work, keep the result', exact: true }).click();
     await a.getByLabel('Work request', { exact: true }).pressSequentially('Create math.mjs exporting add(a,b) that returns their sum, plus math.test.mjs using node:test and node:assert/strict with tests for positive, negative, and zero inputs. Run node --test math.test.mjs as a separate final command and fix failures. No dependencies. Return a concise Markdown deliverable describing the function and actual test result.');
-    reserve();
-    const pending = a.waitForResponse(response => new URL(response.url()).pathname === '/api/work/start' && response.request().method() === 'POST');
-    await a.getByRole('button', { name: 'Start work', exact: true }).click();
-    const response = await pending; assert.equal(response.status(), 202);
-    const accepted = await response.json();
-    assert.equal(accepted.provider, provider, 'Actual UI provider must match the requested proof provider.');
-    report.initial = publicJob(accepted); save('summary.json', report);
+    const accepted = await startFromUI(a, 'Start work', 'initial');
     initial = await waitJob(accepted.jobId);
   }
   const firstState = readbackOnly ? prior.executionState : inspect(initial);
@@ -136,11 +191,7 @@ try {
     follow = await waitJob(room.objects.find(object => object.id === initial.objectId).data.work.jobId);
   } else {
     await a.getByLabel('Work follow-up', { exact: true }).pressSequentially('Continue the existing files. Change add(a,b) to clamp negative sums to zero, preserving positive sums. Update math.test.mjs with assertions for negative sum clamping, positive sums, and zero. Run node --test math.test.mjs as a separate final command tool call (not bundled with file creation), and fix failures. Return a concise Markdown artifact stating the new behavior and actual test result.');
-    reserve();
-    const pending = a.waitForResponse(response => new URL(response.url()).pathname === '/api/work/start' && response.request().method() === 'POST');
-    await a.getByRole('button', { name: 'Continue work', exact: true }).click();
-    const response = await pending; assert.equal(response.status(), 202);
-    const accepted = await response.json(); assert.equal(accepted.provider, provider, 'Card must preserve its initial provider.');
+    const accepted = await startFromUI(a, 'Continue work', 'followup');
     follow = await waitJob(accepted.jobId);
   }
   const nextState = inspect(follow);
