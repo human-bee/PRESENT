@@ -9,3 +9,10 @@
 .room-templates input { width: 100%; margin-top: 7px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
 .room-templates input:focus-visible { outline: 2px solid #718a43; }
 .room-templates [role=alert] { color: #9c3025; }
+.room-continuity { border-bottom: 1px solid #dce2d4; padding-bottom: 18px; margin-bottom: 18px; }
+.room-continuity p, .room-continuity small { font-size: 12px; line-height: 1.5; color: #66725f; }
+.room-continuity button { margin: 4px 6px 4px 0; }
+.continuity-item { border: 1px solid #dce2d4; border-radius: 8px; padding: 9px; margin: 10px 0; }
+.continuity-item label { display: flex; align-items: center; gap: 7px; }
+.continuity-item input[type="checkbox"] { width: auto; }
+.continuity-item textarea { display: block; width: 100%; min-height: 90px; margin: 7px 0; font: inherit; resize: vertical; }

@@ -8,7 +8,9 @@ import { dataPath } from '../data-path';
 import type { RoomAccess } from './store';
 import { sessionToken } from './http';
 import { createRoomAuthorization, withRoomAuthorization } from './context';
-export function hostedTemplates(access: RoomAccess, req: IncomingMessage, res: ServerResponse) {
+import { hostedContinuity } from '../continuity/routes';
+export async function hostedTemplates(access: RoomAccess, req: IncomingMessage, res: ServerResponse) {
+  if (await hostedContinuity(access, req, res)) return true;
   const token = sessionToken(req), identity = access.identity(token);
   let sourceRoom: string | undefined;
   const handler = createTemplateRequestHandler({

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { RoomTemplate, TemplateInstallation, TemplateSummary } from '../../shared/room-template';
 import './templates.css';
+import { ContinuityPicker } from './continuity-picker';
 async function request<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, body === undefined ? undefined : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const value = await response.json();
@@ -18,6 +19,7 @@ export function TemplatePicker({ roomId, onInstalled, canSave = true }: { roomId
   useEffect(() => { let active = true; templateClient.list().then(v => { if (active) setTemplates(v); }).catch(() => { if (active) setError('Could not load templates.'); }); return () => { active = false; }; }, []);
   async function run(action: () => Promise<void>) { setBusy(true); setError(''); try { await action(); } catch (e) { setError(e instanceof Error ? e.message : 'Template request failed.'); } finally { setBusy(false); } }
   return <section className="room-templates" aria-label="Room templates">
+    <ContinuityPicker roomId={roomId} onInstalled={onInstalled}/>
     <h2>A fresh room, a familiar layout</h2>
     <p>Reuse blank notes, timer durations and native diagrams. Text, votes, results, identities and custom widgets are excluded. Timers start paused.</p>
     <ul>{templates.map(t => <li key={t.id}><span>{t.name}<small>{t.objects} instruments · {t.omissions} resets or omissions</small></span><button disabled={busy} onClick={() => void run(async () => { const result = await templateClient.instantiate(t.id); onInstalled(result.roomId); })}>Use</button></li>)}</ul>

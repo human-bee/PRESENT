@@ -1,0 +1,10 @@
+import { z } from 'zod';
+const roomId = z.string().regex(/^[a-f0-9]{48}$/);
+const shapeId = z.string().regex(/^shape:[a-zA-Z0-9_-]{1,120}$/);
+export const continuityItemSchema = z.object({ sourceObjectId: shapeId, kind: z.enum(['native-text', 'markdown-artifact']), text: z.string().min(1).max(4000), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+export const continuityPreviewRequestSchema = z.object({ sourceRoomId: roomId }).strict();
+export const continuityApplyRequestSchema = z.object({ sourceRoomId: roomId, destinationRoomId: roomId.optional(), selection: z.array(z.object({ sourceObjectId: shapeId, digest: z.string().regex(/^[a-f0-9]{64}$/), text: z.string().trim().min(1).max(4000) }).strict()).min(1).max(10) }).strict();
+export type ContinuityItem = z.infer<typeof continuityItemSchema>;
+export type ContinuityPreview = { sourceRoomId: string; items: ContinuityItem[]; omitted: number };
+export type ContinuityApply = z.infer<typeof continuityApplyRequestSchema>;
+export type ContinuityInstallation = { roomId: string; count: number };
