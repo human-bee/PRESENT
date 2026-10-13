@@ -201,7 +201,8 @@ try {
   assert.equal(nextState.model, firstState.model);
   assert.equal(follow.execution.continued, true);
   assert.notEqual(follow.execution.files.find(file => file.path === 'math.mjs').sha256, report.initial.execution.files.find(file => file.path === 'math.mjs').sha256);
-  Object.assign(report, { followup: publicJob(follow), followupActualTestsPassed: true, sameWorkspace: true, samePrivateThread: true, sameExactModel: true, followupViaRealUI: true });
+  const completeFollowupBrowserReceipt = !readbackOnly || previous?.fullFollowupBrowserReceiptAvailable === true;
+  Object.assign(report, { followup: publicJob(follow), followupActualTestsPassed: true, sameWorkspace: true, samePrivateThread: true, sameExactModel: true, followupViaRealUI: completeFollowupBrowserReceipt, fullFollowupBrowserReceiptAvailable: completeFollowupBrowserReceipt });
   const shapes = page => page.locator('.tl-shape[data-shape-id]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-shape-id')).sort());
   await expect.poll(async () => JSON.stringify(await shapes(a))).toBe(JSON.stringify(await shapes(b)));
   const canonical = await shapes(a); await Promise.all([a.reload(), b.reload()]);
@@ -225,6 +226,7 @@ try {
     const artifact = room.objects.find(object => object.id === id); assert.ok(artifact?.data.state?.markdown?.length > 30);
     for (const page of [a, b]) await expect(page.locator(`.tl-shape[data-shape-id="shape:${id}"]`).frameLocator('iframe').locator('#content')).toHaveText(artifact.data.state.markdown);
   }
-  report.sharedArtifactsRendered = true; report.status = 'passed';
+  report.sharedArtifactsRendered = true;
+  report.status = report.initialFullBrowserReceiptAvailable === false || !completeFollowupBrowserReceipt ? 'work-readback-passed-with-browser-receipt-gaps' : 'passed';
 } catch (error) { report.status = 'failed'; report.error = error.message; process.exitCode = 1; }
 finally { await browser.close(); report.endedAt = new Date().toISOString(); save('summary.json', report); console.log(JSON.stringify(report, null, 2)); }
