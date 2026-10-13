@@ -5,7 +5,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from '
 import { resolve } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 
-// Operator-run genuine provider story. Never resets a paid fence or records pixels/prompts/rollouts in traces.
+// Operator-run genuine provider story against the development shell's read-only editor probe.
+// Never resets a paid fence or records pixels/prompts/rollouts in traces.
 const readbackOnly = process.argv.includes('--readback');
 assert.ok(readbackOnly || process.env.PRESENT_LIVE_SCENE === '1', 'Real scene turns require PRESENT_LIVE_SCENE=1. --readback starts zero turns.');
 assert.equal(process.env.PRESENT_E2E_BROWSER_CHANNEL ?? '', '', 'Use version-matched managed Chromium.');
@@ -69,8 +70,10 @@ if (readbackOnly) {
     for (const page of pages) {
       page.setDefaultTimeout(15000); page.setDefaultNavigationTimeout(30000);
       await page.goto(`${baseURL}/r/${roomId}`);
+      await page.waitForFunction(() => !!window.__presentEditor);
       await expect.poll(() => page.evaluate(() => window.__presentEditor.getCurrentPageShapes().map(shape => ({ id: shape.id, x: shape.x, y: shape.y, props: shape.props })).sort((a, b) => a.id.localeCompare(b.id)))).toEqual(native(records).map(shape => ({ id: shape.id, x: shape.x, y: shape.y, props: shape.props })));
       await page.reload();
+      await page.waitForFunction(() => !!window.__presentEditor);
       await expect.poll(() => page.evaluate(() => window.__presentEditor.getCurrentPageShapes().map(shape => ({ id: shape.id, x: shape.x, y: shape.y, props: shape.props })).sort((a, b) => a.id.localeCompare(b.id)))).toEqual(native(records).map(shape => ({ id: shape.id, x: shape.x, y: shape.y, props: shape.props })));
       await expect.poll(() => page.evaluate(() => window.__presentEditor.store.allRecords().find(record => record.typeName === 'document')?.meta.scenes?.[0]?.revision)).toBe(current.revision);
     }
@@ -99,6 +102,7 @@ try {
     report.requests.push({ phase: report.progress?.phase, requestId: input.requestId, recoverOnly: input.recoverOnly === true, provider: input.provider, selection: input.selection, imageBytes: input.canvasImage?.length ?? 0, imageSha256: input.canvasImage ? hash(input.canvasImage) : null, startedAt: new Date().toISOString() }); save();
   });
   await Promise.all([a.goto(`${baseURL}/r/${roomId}`), b.goto(`${baseURL}/r/${roomId}`)]);
+  await Promise.all([a, b].map(page => page.waitForFunction(() => !!window.__presentEditor)));
   await expect(a.locator('.person')).toHaveCount(2);
   await a.getByRole('button', { name: 'Room settings', exact: true }).click();
   await a.getByLabel('Who’s making things?').selectOption(selectedProvider);
