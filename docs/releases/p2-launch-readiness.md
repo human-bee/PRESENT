@@ -33,10 +33,10 @@ The supported paths are a permitted 100-day evaluation trial, a commercial licen
 ```sh
 node --import tsx --test tests/launch-readiness.test.ts tests/invite-profile.test.ts
 npm run build
-PRESENT_LAUNCH_BROWSER=1 PRESENT_E2E_BROWSER_CHANNEL=chrome \
+PRESENT_LAUNCH_BROWSER=1 \
   node --import tsx --test tests/launch-capabilities-browser.test.ts
 ```
 
-The opt-in browser stories run the real signed production HTTP server and Chrome on fresh disposable data. They verify the actual Sol default in Settings, supported controlled Codex account/catalog discovery, and verified controlled API planning with an unavailable workspace executor. Anonymous discovery is denied. Repeated API/browser reads reuse one controlled executor probe. The fixtures reject generation endpoints/turns and use no real provider or credentials. These stories establish capability reporting, not real account access, provider generation or hosted license acceptance.
+The opt-in browser stories run the real signed production HTTP server and Playwright's matched Chromium on fresh disposable data. Set `PLAYWRIGHT_BROWSERS_PATH` if the installed matched browsers use a separate cache; leave the browser channel unset. They verify the actual Sol default in Settings, create a native work card, fill its request, and assert Start is enabled for the supported controlled Codex account/catalog and disabled with an explicit visible reason for controlled API planning without a workspace executor. Anonymous discovery is denied. Repeated API/browser reads reuse one controlled executor probe. The fixtures reject generation endpoints/turns and use no real provider or credentials. These stories establish capability reporting and control gating, not real account access, provider generation or hosted license acceptance.
 
 The next software steps are to integrate the workspace capability consumer, merge/recheck the final P1/P2 revision, then prepare the licensed frontend/runtime configuration for an explicitly authorized deployment. After deployment, verify exact revision, persistent data topology, signed browser/editor availability, actual configured planning, and separately authorized workspace execution. Sole-user launch does not require another pilot participant, team rollout, event logistics, or a second human. This phase changes no deployed service or account.

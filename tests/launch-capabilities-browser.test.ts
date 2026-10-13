@@ -41,6 +41,19 @@ for (const [index, planningOnly] of [false, true].entries()) {
       assert.deepEqual(browserCapabilities, capabilities);
       await page.getByRole('button', { name: 'Room settings', exact: true }).click();
       await expect(page.getByLabel('Who’s making things?')).toHaveValue('sol');
+      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+      await page.getByRole('button', { name: 'Add to room', exact: true }).click();
+      await page.getByRole('button', { name: 'A commitment Assign it, start work, keep the result', exact: true }).click();
+      const card = page.locator('section[aria-label="Work card"]');
+      await card.getByLabel('Work request', { exact: true }).fill('Prepare a tested controlled work receipt.');
+      const start = card.getByRole('button', { name: 'Start work', exact: true });
+      await start.scrollIntoViewIfNeeded();
+      await expect(start).toBeVisible();
+      if (planningOnly) {
+        await expect(start).toBeDisabled();
+        await expect(card.getByText(capabilities.workspace.reason, { exact: true })).toBeVisible();
+        assert.match(capabilities.workspace.reason, /Codex app-server.*ChatGPT sign-in.*API planning key does not provide it/);
+      } else await expect(start).toBeEnabled();
       const evidence = process.env.PRESENT_LAUNCH_EVIDENCE_DIRECTORY;
       if (evidence) { mkdirSync(evidence, { recursive: true }); writeFileSync(join(evidence, `capabilities-${planningOnly ? 'planning-only' : 'codex'}.json`), JSON.stringify(capabilities, null, 2)); await page.screenshot({ path: join(evidence, `browser-${planningOnly ? 'planning-only' : 'codex'}.png`) }); }
       const events = existsSync(join(home, 'events.jsonl')) ? readFileSync(join(home, 'events.jsonl'), 'utf8') : '';
