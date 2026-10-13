@@ -53,3 +53,17 @@ test('registry accepts only configured IDs and project continuation cannot switc
     assert.throws(() => jobs.start({ ...base, requestId: 'switch', objectId: first.objectId, projectId: 'other' }), /original selected project/);
   } finally { jobs.close(); await jobs.settled(); store.close(); f.close(); }
 });
+
+test('operator source selection avoids silent snapshot truncation and binds selection identity', () => {
+  const f = fixture();
+  try {
+    for (let index = 0; index < 101; index++) writeFileSync(join(f.source, `source-${index}.ts`), `export const value = ${index};\n`);
+    runGit(f.source, ['add', '--all']); runGit(f.source, ['-c', 'user.name=test', '-c', 'user.email=test@example.test', 'commit', '--quiet', '-m', 'real source fixture']);
+    assert.throws(() => f.registry.snapshot('demo'), /bounded snapshot limit/);
+    writeFileSync(join(f.root, 'projects.json'), JSON.stringify({ projects: [{ id: 'demo', name: 'Demo', directory: f.source, include: ['app.ts'] }] }));
+    const selected = f.registry.snapshot('demo'); assert.equal(selected.files, 1);
+    writeFileSync(join(f.root, 'projects.json'), JSON.stringify({ projects: [{ id: 'demo', name: 'Demo', directory: f.source, include: ['source-0.ts'] }] }));
+    assert.notEqual(f.registry.snapshot('demo').sourceFingerprint, selected.sourceFingerprint);
+    assert.throws(() => f.registry.materialize(selected, f.source), /selected project changed/);
+  } finally { f.close(); }
+});

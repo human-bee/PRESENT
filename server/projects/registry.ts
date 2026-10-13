@@ -6,11 +6,11 @@ import { z } from 'zod';
 import { dataPath } from '../data-path';
 import { projectIdSchema, projectSnapshotSchema, projectSummarySchema, type ProjectSnapshot, type ProjectSummary } from '../../shared/project-work';
 
-const registrySchema = z.object({ projects: z.array(z.object({ id: projectIdSchema, name: z.string().trim().min(1).max(120), description: z.string().max(300).default(''), directory: z.string().min(1).max(4096) }).strict()).max(32) }).strict();
+const registrySchema = z.object({ projects: z.array(z.object({ id: projectIdSchema, name: z.string().trim().min(1).max(120), description: z.string().max(300).default(''), directory: z.string().min(1).max(4096), include: z.array(z.string().min(1).max(240)).max(100).optional() }).strict()).max(32) }).strict();
 type RegisteredProject = z.infer<typeof registrySchema>['projects'][number] & { directory: string; sourceFingerprint: string };
 const MAX_FILES = 100, MAX_BYTES = 8 * 1024 * 1024, MAX_FILE_BYTES = 1024 * 1024;
-const privateName = (name: string) => /^(?:\.env(?:\.|$)|\.npmrc$|\.netrc$|\.pypirc$|id_rsa(?:\.|$)|credentials?(?:\.|$)|secrets?(?:\.|$)|tokens?(?:\.|$)|passwords?(?:\.|$)|auth(?:entication)?\.(?:json|ya?ml|toml)$)|\.(?:pem|key|p12|pfx)$/i.test(name);
-const safePath = (path: string) => path.length > 0 && path.length <= 240 && !/[\\\p{Cc}\p{Cf}]/u.test(path) && path.split('/').every(part => part && part !== '.' && part !== '..' && part !== '.git' && part !== 'node_modules');
+export const privateProjectName = (name: string) => /^(?:\.env(?:\.|$)|\.npmrc$|\.netrc$|\.pypirc$|id_rsa(?:\.|$)|credentials?(?:\.|$)|secrets?(?:\.|$)|tokens?(?:\.|$)|passwords?(?:\.|$)|auth(?:entication)?\.(?:json|ya?ml|toml)$)|\.(?:pem|key|p12|pfx)$/i.test(name);
+export const safeProjectPath = (path: string) => path.length > 0 && path.length <= 240 && !/[\\\p{Cc}\p{Cf}]/u.test(path) && path.split('/').every(part => part && part !== '.' && part !== '..' && part !== '.git' && part !== 'node_modules');
 export class ProjectRegistryError extends Error {}
 const fail = (message: string): never => { throw new ProjectRegistryError(message); };
 function git(directory: string, args: string[]): Buffer {
@@ -33,10 +33,12 @@ export class ProjectRegistry {
       if (ids.has(project.id)) fail('Project registry configuration contains duplicate IDs.'); ids.add(project.id);
       let directory = '';
       try { directory = realpathSync(project.directory); } catch { fail('A registered project source is unavailable.'); }
+      if (project.include && new Set(project.include).size !== project.include.length) fail('Project source selection contains duplicates.');
+      if (project.include?.some(path => !safeProjectPath(path) || path.split('/').some(privateProjectName))) fail('Project selection contains an unsafe path.');
       if (!resolve(directory).startsWith(sep) || !lstatSync(directory).isDirectory()) fail('A registered project source is unavailable.');
       const top = git(directory, ['rev-parse', '--show-toplevel']).toString('utf8').trim();
       if (top !== directory) fail('A registered project must point at its repository root.');
-      return { ...project, directory, sourceFingerprint: hash(directory) };
+      return { ...project, directory, sourceFingerprint: project.include ? hash({ directory, include: project.include }) : hash(directory) };
     });
   }
   list(): ProjectSummary[] { return this.projects().map(({ id, name, description }) => projectSummarySchema.parse({ id, name, description })); }
@@ -53,12 +55,13 @@ export class ProjectRegistry {
     for (const entry of entries) {
       const match = /^(100644|100755) blob ([a-f0-9]{40,64})\t(.+)$/s.exec(entry); if (!match) continue;
       const [, , blob, path] = match;
-      if (!safePath(path) || privateName(basename(path))) continue;
+      if (!safeProjectPath(path) || path.split('/').some(privateProjectName) || (project.include && !project.include.includes(path))) continue;
       const content = git(project.directory, ['cat-file', 'blob', blob]);
       if (content.length > MAX_FILE_BYTES) continue;
-      if (files.length >= MAX_FILES || bytes + content.length > MAX_BYTES) break;
+      if (files.length >= MAX_FILES || bytes + content.length > MAX_BYTES) fail('Selected project exceeds the bounded snapshot limit. Configure an explicit source selection.');
       files.push({ path, blob, bytes: content.length }); bytes += content.length;
     }
+    if (project.include && files.length !== project.include.length) fail('An explicitly selected source file is missing, unsafe or exceeds the file limit.');
     const snapshotId = hash({ id: project.id, sourceFingerprint: project.sourceFingerprint, commit, files });
     return projectSnapshotSchema.parse({ id: project.id, name: project.name, description: project.description, sourceFingerprint: project.sourceFingerprint, commit, snapshotId, files: files.length, bytes });
   }
@@ -73,15 +76,16 @@ export class ProjectRegistry {
     for (const entry of entries) {
       const match = /^(100644|100755) blob ([a-f0-9]{40,64})\t(.+)$/s.exec(entry); if (!match) continue;
       const [, mode, blob, path] = match;
-      if (!safePath(path) || privateName(basename(path))) continue;
+      if (!safeProjectPath(path) || path.split('/').some(privateProjectName) || (project.include && !project.include.includes(path))) continue;
       const content = git(project.directory, ['cat-file', 'blob', blob]);
       if (content.length > MAX_FILE_BYTES) continue;
-      if (files.length >= MAX_FILES || bytes + content.length > MAX_BYTES) break;
+      if (files.length >= MAX_FILES || bytes + content.length > MAX_BYTES) fail('Selected project exceeds the bounded snapshot limit. Configure an explicit source selection.');
       files.push({ path, blob, bytes: content.length }); bytes += content.length;
       const target = resolve(root, path); if (!target.startsWith(`${root}${sep}`)) fail('Project source contains an unsafe path.');
       const parent = resolve(target, '..');
       mkdirSync(parent, { recursive: true, mode: 0o700 }); writeFileSync(target, content, { mode: 0o600 }); if (mode === '100755') chmodSync(target, 0o700);
     }
+    if (project.include && files.length !== project.include.length) fail('An explicitly selected source file is missing, unsafe or exceeds the file limit.');
     const snapshotId = hash({ id: project.id, sourceFingerprint: project.sourceFingerprint, commit: parsed.commit, files });
     if (snapshotId !== parsed.snapshotId) fail('The selected committed source could not be reconstructed.');
   }
