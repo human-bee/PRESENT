@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -11,7 +11,7 @@ import { RoomStore } from '../server/room-store';
 
 const runGit = (cwd: string, args: string[]) => execFileSync('git', ['-C', cwd, ...args], { stdio: 'ignore' });
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'present-project-work-')), source = join(root, 'source'), destination = join(root, 'copy'), config = join(root, 'projects.json');
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'present-project-work-'))), source = join(root, 'source'), destination = join(root, 'copy'), config = join(root, 'projects.json');
   execFileSync('git', ['init', '--quiet', source]);
   writeFileSync(join(source, 'app.ts'), 'export const answer = 42;\n');
   writeFileSync(join(source, '.env'), 'PRIVATE=do-not-copy\n');
