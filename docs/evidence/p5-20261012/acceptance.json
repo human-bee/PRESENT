@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "phase": "P5",
+  "baseline": "2bdd051f90c1bb1f03d04f999389f741ae47c5a2",
+  "sourceObjects": {
+    "server/access/templates.ts": "2389f5d6e26d21eedd32f5762496593c5ce99075",
+    "server/continuity/content.ts": "70fa0fb93caf9653adb21e757d1ca22cab0ed2a2",
+    "server/continuity/routes.ts": "f93851e2adcd7a8ef19e56bdfb8cbf9f31cab6f8",
+    "shared/room-continuity.ts": "bb47b19f7fbd6faed7472d370a84a8d1f749e87e",
+    "src/templates/continuity-picker.tsx": "430d3f8e38429d0c6f98cc66edf7207304d38796",
+    "src/templates/template-picker.tsx": "e5472e432dead21101d7388de28723480c345332",
+    "src/templates/templates.css": "15cc7808ade6d7fb0e99c9d5ec9391f7702b3aef",
+    "tests/room-continuity.test.ts": "ad6070cd5a0ac7fba285b00caf5a015414575ae4",
+    "tests/room-continuity-browser.test.ts": "48bf4a7428e341480815e5cbf790a51991990434"
+  },
+  "checks": {
+    "focusedUnits": 8,
+    "typecheck": "passed",
+    "build": "passed",
+    "signedBrowser": "passed",
+    "renderedSpacing": "passed 400px x positions, 360px native note width"
+  },
+  "story": {
+    "runtime": "v24.19.0",
+    "sourceRoomId": "8cada1e242c840a377b0972e09cc2a7a5f9be74255bb1f1d",
+    "destinationRoomId": "718beaa2734dd2a8b6a0475c6beefda515ded72cbc373b28",
+    "copied": [
+      {
+        "id": "carried-c161a952-159a-4079-a6be-32e94958d9ed",
+        "x": 400,
+        "y": 0,
+        "w": 360,
+        "h": 360,
+        "title": "Carried source excerpt",
+        "pinned": false,
+        "createdBy": "",
+        "createdAt": 1791875497524,
+        "expiresAt": null,
+        "kind": "note",
+        "data": {
+          "continuity": {
+            "sourceRoomId": "8cada1e242c840a377b0972e09cc2a7a5f9be74255bb1f1d",
+            "sourceObjectId": "shape:source",
+            "sourceDigest": "f0be863859c3563996a1ecd0f8741e249f4df4e21ae320976d9a17e064c7b0eb",
+            "kind": "markdown-artifact",
+            "corrected": false,
+            "copiedAt": 1791875497524
+          },
+          "text": "# Verified source excerpt",
+          "color": "light-green"
+        }
+      },
+      {
+        "id": "carried-1d460ef9-a423-44c7-8b75-e2c8cb784e7b",
+        "x": 0,
+        "y": 0,
+        "w": 360,
+        "h": 360,
+        "title": "Carried decision or note",
+        "pinned": false,
+        "createdBy": "",
+        "createdAt": 1791875497524,
+        "expiresAt": null,
+        "kind": "note",
+        "data": {
+          "continuity": {
+            "sourceRoomId": "8cada1e242c840a377b0972e09cc2a7a5f9be74255bb1f1d",
+            "sourceObjectId": "shape:decision",
+            "sourceDigest": "60599f4163dc3ab8fc98a3356306f4472c141d49031cefb4e03a881a3b4893db",
+            "kind": "native-text",
+            "corrected": true,
+            "copiedAt": 1791875497524
+          },
+          "text": "Corrected decision carried explicitly",
+          "color": "light-green"
+        }
+      }
+    ]
+  }
+}

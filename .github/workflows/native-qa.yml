@@ -79,6 +79,7 @@ jobs:
           npx playwright test --config tests/access-playwright.config.ts
           npm run build
           PRESENT_RECOVERY_BROWSER=1 PRESENT_LAUNCH_BROWSER=1 PRESENT_RECOVERY_EVIDENCE_DIRECTORY=/tmp/present-recovery-browser PRESENT_LAUNCH_EVIDENCE_DIRECTORY=/tmp/present-launch-browser node --import tsx --test tests/work-browser-recovery.test.ts tests/launch-capabilities-browser.test.ts
+          PRESENT_CONTINUITY_BROWSER=1 PRESENT_CONTINUITY_EVIDENCE_DIRECTORY=/tmp/present-continuity-browser node --import tsx --test tests/room-continuity-browser.test.ts
       - name: Production bundle and UI latency
         if: matrix.profile == 'production'
         run: |
@@ -97,6 +98,7 @@ jobs:
             /tmp/present-recovery-browser/
             /tmp/present-launch-browser/
             /tmp/present-planning-review-*/results/
+            /tmp/present-continuity-browser/
           retention-days: 7
 
   meeting-soak:
