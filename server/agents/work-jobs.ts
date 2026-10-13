@@ -17,6 +17,7 @@ import { ProjectRegistry, ProjectRegistryError } from '../projects/registry';
 import { captureRoomAuthorization, inviteAuthorizationEnforced, requireRoomAuthorization } from '../access/context';
 import { WorkAuthorizations } from '../access/work-authorization';
 import { AccessError } from '../access/store';
+import { roleAllows } from '../../shared/room-access';
 
 type WorkStore = Pick<RoomStore, 'getRoom' | 'applyOperation' | 'transactCanvas' | 'flush'> & Partial<Pick<RoomStore, 'getCanvasRecords'>>;
 type Options = { directory?: string; store?: WorkStore; run?: WorkspaceRunner; generate?: typeof generateWithCodex; now?: () => number; persist?: (path: string, content: string) => void; projects?: ProjectRegistry };
@@ -92,6 +93,33 @@ export class WorkJobs {
     try { requireRoomAuthorization(job.roomId, 'tools'); this.publish(job); }
     catch { /* The durable terminal state survives revoked access or a failed room write. */ }
   }
+  private completedArtifact(job: StoredWorkJob) {
+    const room = this.store.getRoom(job.roomId), card = room.objects.find(object => object.id === job.objectId);
+    const work = record(card?.data.work), artifact = room.objects.find(object => object.id === artifactId(job));
+    return job.output && artifact?.data.sourceJobId === job.jobId && artifact.data.commitToken === job.commitToken && work.jobId === job.jobId && work.status === 'completed' && Array.isArray(work.artifactIds) && work.artifactIds.includes(artifact.id) ? { artifact, work } : undefined;
+  }
+  /** Restore receipts only under the initiating participant's current tools grant. */
+  private reconcile(job: StoredWorkJob) {
+    if (activeStatus(job.status) || job.status === 'completed') return;
+    this.authorizeActor(job.roomId, job.actor);
+    const room = this.store.getRoom(job.roomId), card = room.objects.find(object => object.id === job.objectId);
+    const work = record(card?.data.work);
+    if (work.jobId !== job.jobId || this.heads.get(`${job.roomId}:${job.objectId}`)?.jobId !== job.jobId) return;
+    const completed = this.completedArtifact(job);
+    if (completed) {
+      // The canonical transaction already committed. Preserve it, including any
+      // subsequent edits, and repair only the private completion receipt.
+      this.store.flush();
+      const finished = { ...job, status: 'completed' as const, artifactIds: [completed.artifact.id], completedAt: typeof work.completedAt === 'number' ? work.completedAt : this.now(), error: null };
+      this.save(finished); Object.assign(job, finished);
+    } else {
+      const document = this.store.getCanvasRecords?.(job.roomId).find(item => item.typeName === 'document');
+      const requests = record(record(document?.meta).present).requests;
+      const committed = Array.isArray(requests) && requests.some(pair => Array.isArray(pair) && pair[0] === `work:${job.jobId}:complete`);
+      if (work.status === 'completed' || committed) throw new AgentError('The committed artifact or its work card was changed or removed. Saved work is retained; resolve the conflicting completion before resuming.', 409);
+      if (job.status === 'interrupted' && activeStatus(work.status as WorkJob['status'])) { this.publish(job); this.store.flush(); }
+    }
+  }
   private authorizeActor(roomId: string, actor: string) {
     const grant = requireRoomAuthorization(roomId, 'tools');
     if (grant && grant.userId !== actor) throw new AccessError('Work identity must match the signed room member.');
@@ -104,8 +132,10 @@ export class WorkJobs {
     return job;
   }
   get(roomId: string, jobId: string): WorkJob {
-    requireRoomAuthorization(roomId, 'read');
-    const job = this.require(roomId, jobId), target = this.target(job);
+    const grant = requireRoomAuthorization(roomId, 'read');
+    const job = this.require(roomId, jobId);
+    if (!grant || (grant.userId === job.actor && roleAllows(grant.role, 'tools'))) this.reconcile(job);
+    const target = this.target(job);
     return structuredClone(workJobSchema.parse({ ...job, ...(target ? { title: target.title, owner: ownerOf(target.data.owner, job.owner) } : {}) }));
   }
   start(raw: unknown): WorkJob {
@@ -125,7 +155,7 @@ export class WorkJobs {
     if (prior && prior.actor !== input.actor) throw new AgentError('Only this card’s initiating participant can continue its local workspace.', 403);
     if (existing && (activeStatus(record(existing.data.work).status as WorkJob['status']) || (prior && (activeStatus(prior.status) || this.running.has(prior.jobId))))) throw new AgentError('This card already has active work.', 409);
     if (prior?.executionState && ['dispatching', 'running'].includes(prior.executionState.phase)) throw new AgentError('Resume the interrupted run before starting a follow-up in this workspace.', 409);
-    let project;
+    let project: StoredWorkJob['project'];
     try {
       if (prior?.project) {
         if (input.projectId !== prior.project.id) throw new AgentError('Continue this card with its original selected project.', 409);
@@ -165,6 +195,7 @@ export class WorkJobs {
     this.authorizeActor(roomId, actor);
     const job = this.require(roomId, jobId, actor);
     if (this.closed) throw new AgentError('The work queue is stopping.', 503);
+    this.reconcile(job);
     if (activeStatus(job.status) || job.status === 'completed') return this.get(roomId, jobId);
     if (this.running.has(jobId)) throw new AgentError('Cancellation is still finishing. Try again shortly.', 409);
     if (record(this.target(job)?.data.work).jobId !== jobId || this.heads.get(`${roomId}:${job.objectId}`)?.jobId !== jobId) throw new AgentError('The original work card is missing or now belongs to another job.', 409);
@@ -205,6 +236,7 @@ export class WorkJobs {
       const indices = records.filter((record): record is TLShape => record.typeName === 'shape' && record.parentId === target.parentId).map(shape => shape.index).sort();
       return { creates: [objectToShape(artifact, { parentId: target.parentId, index: getIndexAbove(indices.at(-1)) })], updates: [patchNativeShape(target, { data: { work: workSummary(finished) } })] };
     }, { requestId: `work:${job.jobId}:complete` });
+    if (!this.completedArtifact(job)) throw new AgentError('The committed artifact or its work card was changed or removed. Saved work is retained; completion cannot be confirmed.', 409);
     // Do not durably claim completion while the artifact exists only in the room's debounce buffer.
     this.store.flush();
     Object.assign(job, finished); this.save(job);

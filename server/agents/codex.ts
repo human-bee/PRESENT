@@ -1,6 +1,8 @@
 import { accessSync, constants, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
+import { reserveNativeSceneTurn } from './native-scene-budget';
+import { traceRequest } from './request-trace';
 import { AgentError, agentModels, widgetInstructions, widgetOutputSchema } from './contract';
 import { CodexWire, record, type WireMessage } from './codex-wire';
 import { generateWithOpenAI, openAIAvailability, usesOpenAIResponses } from './openai-responses';
@@ -141,11 +143,16 @@ export async function generateWithCodex(prompt: string, signal: AbortSignal, pro
       wire.listeners.add(listener);
     });
     void completion.catch(() => {});
+    signal.throwIfAborted();
+    reserveNativeSceneTurn(started.model);
+    traceRequest('provider_dispatch', { model: started.model, modelSource: 'confirmed', transport: 'codex' });
     const turn = await wire.request<{ turn: { id: string } }>('turn/start', { threadId, environments: [], input: [{ type: 'text', text: prompt, text_elements: [] }, ...(profile?.image ? [{ type: 'image', url: profile.image }] : [])], effort, serviceTierForTurn: serviceTier, outputSchema: profile?.outputSchema ?? widgetOutputSchema });
     turnId = turn.turn.id;
     for (const message of early) listener?.(message);
     if (signal.aborted) abort();
-    return await completion;
+    const text = await completion;
+    traceRequest('provider_result', { model: started.model, modelSource: 'confirmed', transport: 'codex' });
+    return text;
   } finally {
     signal.removeEventListener('abort', abort);
     if (listener) wire.listeners.delete(listener);

@@ -1,0 +1,157 @@
+{
+  "preparedAt": "2026-10-13T06:32:44.897Z",
+  "phase": "P1",
+  "status": "accepted-local-native-journey",
+  "sourceHead": "689ad9385f63bb9be7d0bf2282cab4bc6d6cee18",
+  "storyHead": "a879675498a449cfd80a3438a469086bdf0ca842",
+  "runtimeObjects": {
+    "server": "b3bd633d76ca286a88ef06a7cab793d12de7a802",
+    "src": "123a54e449838c006a8d1e8dbc7bb42a29f87252",
+    "shared": "fdde777d94f6835584c0071bdd8029f8d9bac522",
+    "package.json": "f4c5a578d92e27eab927d6ae31f3903d406d0379",
+    "package-lock.json": "6fef3cb9dbae724d2b62b6825b0db6073f975e02",
+    "tsconfig.json": "b4d1a1a41679bb840a262de0f39ccf8627ad44e6",
+    "vite.config.ts": "d14b81db57256d262a9ae9c0844edf94eeb8447a"
+  },
+  "runtimeIdenticalToStory": true,
+  "node": "v24.19.0",
+  "browser": "156.0.8078.4",
+  "provider": "codex",
+  "model": "gpt-6-astra",
+  "modelOutputMocked": false,
+  "contexts": 2,
+  "physicalDevices": false,
+  "paidTurnStarts": 4,
+  "maxTurnStarts": 6,
+  "source": "Self-authored diagram fixture; actual selected pixels; no operator content",
+  "playbackVerified": true,
+  "manualCorrectionPreserved": true,
+  "sameSceneAndAnnotationIdentity": true,
+  "sourceImagePreserved": true,
+  "peersAndReloadMatch": true,
+  "diskNativeShapesMatch": true,
+  "diskSha256": "67d3fce78c1ca3ad9e46015b6abd93d4f3a93b984f9e469984ebfaa018fb7d83",
+  "recoveryNewTurns": 0,
+  "readback": {
+    "newTurns": 0,
+    "peersDiskAndReloadMatch": true,
+    "originalHarnessStatus": "passed",
+    "completedBrowserJourney": true
+  },
+  "generationPhases": [
+    {
+      "phase": "initial-scene",
+      "requestId": "3fbcd20f-b313-481d-b6f9-e6073053c3f4:0",
+      "browserCommandToFinishedUIWallMs": 56421.061582999995,
+      "clock": "Host monotonic performance.now; includes Playwright and UI observation; sampleSize=1",
+      "actualReservedTurns": 1
+    },
+    {
+      "phase": "revision",
+      "requestId": "a295ef4c-5879-4887-9cc1-a7044af7f6d4:0",
+      "browserCommandToFinishedUIWallMs": 31633.532333000003,
+      "clock": "Host monotonic performance.now; includes Playwright and UI observation; sampleSize=1",
+      "actualReservedTurns": 2
+    },
+    {
+      "phase": "explicit-continuation",
+      "requestId": "95975fd5-8d9a-4567-a5e0-a9651c562f7a:0",
+      "browserCommandToFinishedUIWallMs": 26158.39795900001,
+      "clock": "Host monotonic performance.now; includes Playwright and UI observation; sampleSize=1",
+      "actualReservedTurns": 4
+    }
+  ],
+  "benchmark": {
+    "clock": "One host monotonic performance.now, browser keyboard to text DOM; includes automation/assertion overhead, two contexts on one host",
+    "direct": {
+      "n": 20,
+      "rawMs": [
+        25.617541999999958,
+        21.02770800000144,
+        12.354208000004292,
+        20.071374999999534,
+        16.917249999998603,
+        11.920791999997164,
+        12.708874999996624,
+        18.5570000000007,
+        20.887415999997756,
+        34.10450000000128,
+        36.32154199999786,
+        33.27566599999409,
+        35.54545900000085,
+        32.482124999994994,
+        33.6203749999986,
+        22.753333000000566,
+        18.283084000002418,
+        19.777792000000773,
+        18.707458000004408,
+        18.468165999998746
+      ],
+      "p50Ms": 20.071374999999534,
+      "p95Ms": 35.54545900000085,
+      "maxMs": 36.32154199999786
+    },
+    "peer": {
+      "n": 20,
+      "rawMs": [
+        53.15083299999969,
+        25.377082999999402,
+        38.489708000000974,
+        45.82304199999635,
+        93.7253339999952,
+        40.15654199999699,
+        37.61633299999812,
+        43.845666000001074,
+        58.0122080000001,
+        59.6887080000015,
+        74.14800000000105,
+        58.41604099999677,
+        60.97812499999418,
+        46.64091699999699,
+        58.64416699999856,
+        57.45591700000659,
+        42.975916999996116,
+        58.38404199999786,
+        34.143958000000566,
+        31.785250000000815
+      ],
+      "p50Ms": 46.64091699999699,
+      "p95Ms": 74.14800000000105,
+      "maxMs": 93.7253339999952
+    }
+  },
+  "checks": {
+    "fullUnit": {
+      "total": 317,
+      "passed": 314,
+      "failed": 0,
+      "skipped": 3
+    },
+    "typecheck": "passed",
+    "build": "passed",
+    "requestRecoveryFocused": {
+      "passed": 8
+    },
+    "imageStopRecoveryBrowser": {
+      "passed": 3
+    },
+    "signedProcessAndBrowserRecovery": {
+      "passed": 5,
+      "executor": "controlled actual subprocess; no paid output"
+    },
+    "decisions": {
+      "realRequests": 20,
+      "version": "jev-1.13.0",
+      "rawCorrect": 18,
+      "gatedCorrect": 20,
+      "scope": "purposive synthetic pilot; not calibrated production accuracy"
+    }
+  },
+  "limitations": [
+    "Single-host browser observations include automation and assertions, not physical/WAN experience.",
+    "Paid visual journey uses the development editor probe; production bundle capability/control stories are accepted separately.",
+    "No public deployment or license claim.",
+    "A sourced comparison/correction and full session-cost measurement remain outside this receipt.",
+    "Original P0 coding-response receipt gaps remain explicit in P0 evidence."
+  ]
+}

@@ -1,3 +1,4 @@
+import { traceRequest } from './agents/request-trace';
 import { dataPath } from './data-path';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
@@ -76,12 +77,13 @@ export class RoomStore {
     const entry = this.load(id); entry.listeners.add(listener);
     return () => entry.listeners.delete(listener);
   }
-  private transact(id: string, input: unknown, actor: string, text: string, callback: (transaction: TLSyncStorageTransaction<TLRecord>) => void, requestId?: string): RoomState {
+  private transact(id: string, input: unknown, actor: string, text: string, callback: (transaction: TLSyncStorageTransaction<TLRecord>) => void, requestId?: string, causalRequestId?: string): RoomState {
     if (!actor || actor.length > 100 || (requestId !== undefined && !/^[\w:.-]{1,100}$/.test(requestId))) throw new RoomError('Invalid operation identity.');
     const encoded = finiteJson(input);
     if (Buffer.byteLength(encoded) > 256_000) throw new RoomError('This operation is too large.', 413);
     const digest = createHash('sha256').update(encoded).digest('hex'), entry = this.load(id);
     this.expire(id, entry);
+    let replayed = false;
     entry.storage.transaction(transaction => {
       const original = transaction.get(DOCUMENT_ID);
       if (original?.typeName !== 'document') throw new RoomError('Missing native document.', 500);
@@ -89,7 +91,7 @@ export class RoomStore {
       const requests = new Map<string, string>(Array.isArray(present.requests) ? present.requests.filter((pair): pair is [string, string] => Array.isArray(pair) && pair.length === 2 && pair.every(value => typeof value === 'string')) : []);
       if (requestId && requests.has(requestId)) {
         if (requests.get(requestId) !== digest) throw new RoomError('Request ID already belongs to a different operation.', 409);
-        return;
+        replayed = true; return;
       }
       callback(transaction);
       const document = transaction.get(DOCUMENT_ID);
@@ -99,20 +101,21 @@ export class RoomStore {
       transaction.set(document.id, { ...document, meta: { ...document.meta, present: { ...object(document.meta.present), events, requests: [...requests].slice(-500) } as JsonObject } });
     }, { id: requestId });
     this.changed(id, entry, requestId);
+    if (actor !== 'scene:preview') traceRequest('transaction_committed', { clock: entry.storage.getClock(), transactionId: requestId, replayed }, id, causalRequestId ?? requestId);
     return this.getRoom(id);
   }
-  applyOperation(id: string, input: unknown, actor: string, options: { requestId?: string } = {}): RoomState {
+  applyOperation(id: string, input: unknown, actor: string, options: { requestId?: string; causalRequestId?: string } = {}): RoomState {
     const parsed = operationSchema.safeParse(input);
     if (!parsed.success) throw new RoomError('Invalid room operation.');
     const operation = parsed.data;
     const descriptions = { put: 'Added an object', patch: 'Updated an object', increment: 'Updated widget state', remove: 'Removed an object', rename: 'Renamed the room' };
-    return this.transact(id, operation, actor, descriptions[operation.type], transaction => applyDtoOperation(transaction, operation, actor, this.now()), options.requestId);
+    return this.transact(id, operation, actor, descriptions[operation.type], transaction => applyDtoOperation(transaction, operation, actor, this.now()), options.requestId, options.causalRequestId);
   }
-  mutateCanvas(id: string, mutation: NativeMutation, actor: string, options: { requestId?: string } = {}): RoomState {
-    return this.transact(id, mutation, actor, 'Updated the canvas', transaction => applyNativeMutation(transaction, mutation), options.requestId);
+  mutateCanvas(id: string, mutation: NativeMutation, actor: string, options: { requestId?: string; causalRequestId?: string } = {}): RoomState {
+    return this.transact(id, mutation, actor, 'Updated the canvas', transaction => applyNativeMutation(transaction, mutation), options.requestId, options.causalRequestId);
   }
-  transactCanvas(id: string, input: unknown, actor: string, build: (records: TLRecord[]) => NativeMutation, options: { requestId?: string } = {}): RoomState {
-    return this.transact(id, input, actor, 'Updated the canvas', transaction => applyNativeMutation(transaction, build(copy([...transaction.values()]))), options.requestId);
+  transactCanvas(id: string, input: unknown, actor: string, build: (records: TLRecord[]) => NativeMutation, options: { requestId?: string; causalRequestId?: string } = {}): RoomState {
+    return this.transact(id, input, actor, 'Updated the canvas', transaction => applyNativeMutation(transaction, build(copy([...transaction.values()]))), options.requestId, options.causalRequestId);
   }
   private changed(id: string, entry: Entry, requestId?: string) {
     const clock = entry.storage.getClock();
@@ -168,9 +171,9 @@ export const getRoom = (id: string) => store.getRoom(id);
 export const getTldrawRoom = (id: string) => store.getTldrawRoom(id);
 export const getRoomSnapshot = (id: string) => store.getRoomSnapshot(id);
 export const getCanvasRecords = (id: string) => store.getCanvasRecords(id);
-export const applyOperation = (id: string, operation: unknown, actor: string, options?: { requestId?: string }) => store.applyOperation(id, operation, actor, options);
-export const mutateCanvas = (id: string, mutation: NativeMutation, actor: string, options?: { requestId?: string }) => store.mutateCanvas(id, mutation, actor, options);
-export const transactCanvas = (id: string, input: unknown, actor: string, build: (records: TLRecord[]) => NativeMutation, options?: { requestId?: string }) => store.transactCanvas(id, input, actor, build, options);
+export const applyOperation = (id: string, operation: unknown, actor: string, options?: { requestId?: string; causalRequestId?: string }) => store.applyOperation(id, operation, actor, options);
+export const mutateCanvas = (id: string, mutation: NativeMutation, actor: string, options?: { requestId?: string; causalRequestId?: string }) => store.mutateCanvas(id, mutation, actor, options);
+export const transactCanvas = (id: string, input: unknown, actor: string, build: (records: TLRecord[]) => NativeMutation, options?: { requestId?: string; causalRequestId?: string }) => store.transactCanvas(id, input, actor, build, options);
 export const subscribeRoom = (id: string, listener: Listener) => store.subscribeRoom(id, listener);
 export const sweepExpired = () => store.sweepExpired();
 export const closeRoomStore = () => store.close();

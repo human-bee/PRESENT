@@ -23,6 +23,6 @@ test('a reload restores the original request identity and recovers its result', 
   await page.getByRole('button', { name: 'Recover result' }).click();
   await expect(page.getByText('Recovered the previous result')).toBeVisible();
   expect(requests).toHaveLength(2);
-  expect(requests[1]).toEqual(requests[0]);
+  expect(requests[1]).toEqual({ ...requests[0], recoverOnly: true });
   await expect(page.getByRole('button', { name: 'Recover result' })).toHaveCount(0);
 });

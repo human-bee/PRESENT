@@ -1,5 +1,9 @@
 import { hostedUnavailable } from '../access/context';
-import { requestTrace } from './request-trace';
+import { withRequestTrace, traceRequest, traceAbortSignal } from './request-trace';
+import { agentModels } from '../../shared/agent-models';
+import { nativeSceneSmokeRoom } from './native-scene-budget';
+import { usesOpenAIResponses } from './openai-responses';
+import { DECISIONS_MODEL } from './choice-judgments';
 import { searchWeb } from './web-search';
 import { searchWebImages, importWebImage, type WebImage } from './web-images';
 import { researchScene } from '../scenes/research';
@@ -63,17 +67,22 @@ export async function runRoomRequest(raw: unknown, signal?: AbortSignal) {
   if (!parsed.success) throw new AgentError('A valid request and room are required.', 400);
   const input = parsed.data, requestId = input.requestId ?? randomUUID();
   if (inFlight.size >= 2 || inFlight.has(input.roomId)) throw new AgentError('An agent is already working here. Try again when it finishes.', 429);
+  return withRequestTrace({ roomId: input.roomId, requestId, provider: input.provider, signal }, () => runAcceptedRoomRequest(input, requestId, signal));
+}
+
+async function runAcceptedRoomRequest(input: z.infer<typeof requestSchema>, requestId: string, signal?: AbortSignal) {
+  const smokeSceneOnly = nativeSceneSmokeRoom(input.roomId);
+  if (smokeSceneOnly && (input.decisions !== 'off' || input.provider === 'cerebras' || usesOpenAIResponses())) throw new AgentError('The fenced scene smoke requires Codex transport with Decisions off. No provider was dispatched.', 409);
   let before = getRoom(input.roomId);
   const activeScenes = readScenes(getCanvasRecords(input.roomId)).filter(s => !input.pageId || s.pageId === input.pageId);
   let beforeRecords = getCanvasRecords(input.roomId);
   if (input.selection.some(id => !beforeRecords.some(record => record.typeName === 'shape' && record.id === `shape:${id}`))) throw new AgentError('Your selected object changed. Select it again.', 409);
   let canvas = readCanvas(input.roomId, input.pageId, input.selection);
-  const controller = new AbortController(), cancel = () => controller.abort();
+  const controller = new AbortController(), cancel = () => controller.abort(signal?.reason ?? new DOMException('Caller cancelled', 'AbortError'));
+  traceAbortSignal(controller.signal);
   signal?.addEventListener('abort', cancel, { once: true });
-  const timeout = setTimeout(cancel, 180_000), started = performance.now();
+  const timeout = setTimeout(() => controller.abort(new DOMException('Request deadline exceeded', 'TimeoutError')), 180_000), started = performance.now();
   inFlight.add(input.roomId);
-  const trace = (stage: string, extra: { error?: string; nodes?: number; tracks?: number } = {}) => requestTrace({ roomId: input.roomId, requestId, provider: input.provider, stage, elapsedMs: Math.round(performance.now() - started), ...extra });
-  trace('started');
   const preview = scenePreview(input.roomId, canvas.pageId, requestId);
   try {
     if (signal?.aborted) cancel();
@@ -85,12 +94,17 @@ export async function runRoomRequest(raw: unknown, signal?: AbortSignal) {
       const shapes = beforeRecords.filter((record): record is TLShape => record.typeName === 'shape' && input.selection.includes(record.id.slice(6)));
       const widget = shapes.length === 1 ? before.objects.find(o => o.id === input.selection[0] && o.kind === 'widget') : undefined;
       const context = { request: input.prompt, pageId: canvas.pageId, shapes, widget };
+      traceRequest('planning', { transport: 'typesafe' });
+      traceRequest('provider_dispatch', { model: DECISIONS_MODEL, modelSource: 'requested', transport: 'typesafe' });
       const fast = await routeFastRoom(context, activeScenes, controller.signal);
+      if (fast.kind !== 'defer') traceRequest('provider_result', { model: DECISIONS_MODEL, modelSource: 'confirmed', transport: 'typesafe' });
       if (fast.kind === 'reactive') {
+        traceRequest('validated');
         const applied = applyReactive(input.roomId, fast.decision, context, input.actor, requestId);
         return { kind: fast.decision.batch ? 'canvas' : 'widget', ...applied, decision: fast.decision, provider: input.provider, elapsedMs: Math.round(performance.now() - started) };
       }
       if (fast.kind === 'playback') {
+        traceRequest('validated');
         controlScene(input.roomId, fast.decision.control);
         return { kind: 'scene_control', provider: input.provider, providerName: 'Jev', elapsedMs: Math.round(performance.now() - started), modelMs: fast.decision.modelMs };
       }
@@ -118,11 +132,14 @@ export async function runRoomRequest(raw: unknown, signal?: AbortSignal) {
       let requestPrompt = prompt;
       let result: RoomIntent | undefined;
       for (let attempt = 0, repairs = 0; attempt < 3; attempt++) {
+        traceRequest('planning', { attempt: attempt + 1 });
         preview.clean();
         const generationProfile = { ...profile, outputSchema: bindSceneIds(sceneEvidence ? sceneOnlyOutputSchema : profile.outputSchema, activeScenes.map(s => s.id)), onDelta: activeScenes.length ? undefined : preview.delta };
+        if (input.provider === 'cerebras') traceRequest('provider_dispatch', { model: agentModels.cerebras, modelSource: 'requested', transport: 'cerebras', attempt: attempt + 1 });
         const text = input.provider === 'cerebras' ? await generateWithCerebras(requestPrompt, controller.signal, generationProfile, input) : await generateWithCodex(requestPrompt, controller.signal, input.provider, { ...generationProfile, image: input.canvasImage }, input);
         try {
           const candidate = parseRoomIntent(text);
+          if (smokeSceneOnly && candidate.kind !== 'scene' && candidate.kind !== 'scene_control') throw new AgentError('The fenced smoke accepts only native scene plans or scene controls. No delegated provider or work was dispatched.', 409);
           if (candidate.kind === 'video_search' || (candidate.kind === 'video' && !videoCandidates && !input.prompt.includes(candidate.url))) {
             if (videoCandidates) throw new AgentError('No video was selected from search results.');
             const found = await searchWeb(candidate.kind === 'video_search' ? candidate.query : input.prompt, true, controller.signal);
@@ -146,9 +163,10 @@ export async function runRoomRequest(raw: unknown, signal?: AbortSignal) {
             validateScene(candidate.plan);
             if (candidate.sceneId && !activeScenes.some(s => s.id === candidate.sceneId)) throw new Error(`Use an exact supplied sceneId: ${activeScenes.map(s => s.id).join(', ')}; null creates a new scene.`);
           }
+          traceRequest('validated', candidate.kind === 'scene' ? { nodes: candidate.plan.nodes.length, tracks: candidate.plan.tracks.length } : {});
           result = candidate; break;
         } catch (e) {
-          trace('planning_error', { error: e instanceof Error ? e.message : 'Unknown planning error' });
+          traceRequest('validation_failed', { errorCode: 'validation', attempt: attempt + 1 });
           if (e instanceof AgentError) throw e;
           if (repairs++) throw new AgentError(`The model's scene failed validation: ${e instanceof Error ? e.message : 'invalid response'}. Your canvas is unchanged.`);
           requestPrompt = JSON.stringify({ original: JSON.parse(prompt), sceneEvidence, rejectedResponse: text, contractError: e instanceof Error ? e.message : 'Invalid schema', instruction: 'Return a complete corrected result. Do not rewrite the user intent. Fix the contract error and check all other nodes/tracks.' });
@@ -157,6 +175,7 @@ export async function runRoomRequest(raw: unknown, signal?: AbortSignal) {
       if (!result) throw new AgentError('The scene did not complete within its planning budget.');
       intent = result;
     }
+    if (decision && decision.route !== 'defer') traceRequest('validated');
     if (controller.signal.aborted) throw new AgentError('The request was cancelled. Your room is unchanged.', 408);
     if (intent.kind === 'video_search') throw new AgentError('Video search did not produce a selection.');
     if (intent.kind === 'image_search') throw new AgentError('Image search did not produce a selection.');
@@ -173,8 +192,8 @@ export async function runRoomRequest(raw: unknown, signal?: AbortSignal) {
     }
     preview.clean();
     if (intent.kind === 'scene') {
-      const scene = applyScene(input.roomId, canvas.pageId, intent.plan, intent.sceneId, beforeRecords, input.prompt, input.provider, sceneEvidence);
-      trace('scene_committed', { nodes: scene.plan.nodes.length, tracks: scene.plan.tracks.length });
+      const scene = applyScene(input.roomId, canvas.pageId, intent.plan, intent.sceneId, beforeRecords, input.prompt, input.provider, sceneEvidence, requestId);
+      traceRequest('scene_committed', { nodes: scene.plan.nodes.length, tracks: scene.plan.tracks.length, transactionId: scene.revision });
       forgetSceneRun(input.roomId, scene.id);
       if (intent.plan.autoplay) controlScene(input.roomId, { sceneId: scene.id, action: 'play' });
       return { kind: intent.kind, preview: preview.metrics(), sceneId: scene.id, objectIds: Object.values(scene.shapeIds).map(id => id.slice(6)), provider: input.provider, elapsedMs: Math.round(performance.now() - started), explanation: scene.plan.explanation };
@@ -215,7 +234,6 @@ export async function runRoomRequest(raw: unknown, signal?: AbortSignal) {
     }
     return { kind: intent.kind, objectId: objectIds[0], objectIds, decision, decisionFailure, elapsedMs: Math.round(performance.now() - started), provider: input.provider };
   } catch (error) {
-    trace('failed', { error: controller.signal.aborted ? 'Request cancelled or timed out' : error instanceof Error ? error.message : 'Unknown failure' });
     if (controller.signal.aborted) throw new AgentError('The request was cancelled or timed out.', 408);
     throw error;
   } finally { preview.clean(); clearTimeout(timeout); signal?.removeEventListener('abort', cancel); inFlight.delete(input.roomId); }

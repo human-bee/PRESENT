@@ -1,3 +1,4 @@
+import { traceRequest } from './request-trace';
 import { agentModels, agentNames, currentCodexProviders, isCurrentCodexProvider, type CodexProvider, type GenerationOptions, type ProviderAvailability } from '../../shared/agent-models';
 import { AgentError, widgetInstructions, widgetOutputSchema } from './contract';
 import type { StructuredProfile } from './codex';
@@ -46,6 +47,7 @@ export function completedResponseText(response: Record<string, unknown>, model: 
     }
   }
   if (!text || text.length > 400000) throw failure();
+  traceRequest('provider_result', { model: returned, modelSource: 'confirmed', transport: 'openai' });
   return text;
 }
 export async function readResponsesStream(response: Response, model: string, onDelta: (text: string) => void): Promise<string> {
@@ -89,6 +91,7 @@ export async function generateWithOpenAI(prompt: string, signal: AbortSignal, pr
   const effort = options.reasoning ?? 'low';
   if (!efforts(provider).includes(effort)) throw failure('This model does not support the selected API reasoning effort.', 400);
   signal.throwIfAborted();
+  traceRequest('provider_dispatch', { model: agentModels[provider], modelSource: 'requested', transport: 'openai' });
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST', signal: AbortSignal.any([signal, AbortSignal.timeout(180000)]),
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },

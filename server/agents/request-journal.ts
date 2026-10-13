@@ -17,6 +17,10 @@ const receiptSchema = z.object({
 type Receipt = z.infer<typeof receiptSchema>;
 type Options = { directory?: string; maxEntries?: number };
 
+export class RequestRecoveryError extends AgentError {
+  constructor(message: string, public requestState: 'running' | 'interrupted' | 'failed' | 'missing') { super(message, 409); }
+}
+
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, canonical(v)]));
@@ -28,6 +32,26 @@ const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(ca
 export class RequestJournal {
   private active = new Map<string, { fingerprint: string; result: Promise<object> }>();
   constructor(private options: Options = {}) {}
+
+  /** Read an existing result without reserving, waiting for, or dispatching work. */
+  recover<T extends object>(identity: Identity, input: unknown): T & { requestId: string; replayed: true } {
+    identity = identitySchema.parse(identity);
+    const key = digest(identity), fingerprint = digest(input);
+    const pending = this.active.get(key);
+    const conflict = () => new AgentError('This request identity belongs to different content. Check the saved instruction before starting a new request.', 409);
+    if (pending) {
+      if (pending.fingerprint !== fingerprint) throw conflict();
+      throw new RequestRecoveryError('The earlier request is still running. Check the room before continuing.', 'running');
+    }
+    const file = join(this.options.directory ?? dataPath('agent-requests'), `${key}.json`);
+    if (!existsSync(file)) throw new RequestRecoveryError('No saved result exists for this request. Start a new continuation if you still need it.', 'missing');
+    let saved: Receipt;
+    try { saved = receiptSchema.parse(JSON.parse(readFileSync(file, 'utf8'))); }
+    catch { throw new AgentError('This request receipt could not be read. Check the room before starting another request.', 409); }
+    if (saved.fingerprint !== fingerprint) throw conflict();
+    if (saved.status === 'completed' && saved.result) return { ...saved.result as T, requestId: identity.requestId, replayed: true };
+    throw new RequestRecoveryError(saved.status === 'running' ? 'The earlier process ended without a completed receipt. Inspect the room before starting a new continuation.' : 'The earlier request failed. Check the room before continuing.', saved.status === 'running' ? 'interrupted' : 'failed');
+  }
 
   async run<T extends object>(identity: Identity, input: unknown, execute: () => Promise<T>): Promise<T & { requestId: string; replayed: boolean }> {
     identity = identitySchema.parse(identity);
