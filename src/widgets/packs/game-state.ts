@@ -21,6 +21,8 @@ export function rollValues(sides: number, samples: number[]): number[] {
 
 /** The provided sample stream makes shuffle behavior reproducible in tests. */
 export function shuffleOrder(ids: string[], samples: number[]): Record<string, number> {
+  // The whitespace check also rejects final line breaks allowed by the $ anchor.
+  if (ids.some((id) => !/^[\w-]{1,100}$/.test(id) || /\s/.test(id))) throw new Error('Invalid shuffle.');
   if (new Set(ids).size !== ids.length || samples.length < Math.max(0, ids.length - 1) || samples.some((sample) => !Number.isFinite(sample) || sample < 0 || sample >= 1)) throw new Error('Invalid shuffle.');
   const next = [...ids];
   for (let index = next.length - 1; index > 0; index--) {
