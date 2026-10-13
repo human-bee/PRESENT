@@ -1,11 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { configuredAccess, assertAccessOrigin, sessionToken, watchAuthorization, AccessError } from './index';
+import { type configuredAccess, assertAccessOrigin, sessionToken, watchAuthorization, AccessError } from './index';
 import { prepareAccessDispatch, dispatchAuthorized } from './dispatch';
 import { hostedTemplates } from './templates';
 import { mediaRevocations } from '../media-routes';
 import { json } from '../http';
-import { agentModels } from '../../shared/agent-models';
-import { openAIAvailability, usesOpenAIResponses } from '../agents/openai-responses';
+import { discoverLaunchCapabilities } from '../launch/capabilities';
 
 export function createInviteProfile(alpha: NonNullable<ReturnType<typeof configuredAccess>>) {
   let streams = 0;
@@ -42,9 +41,7 @@ export function createInviteProfile(alpha: NonNullable<ReturnType<typeof configu
     }
     if (url.pathname === '/api/agents' && req.method === 'GET') {
       alpha.access.identity(sessionToken(req));
-      // Bounded API discovery only. Never start a local Codex process in hosted mode.
-      const api = usesOpenAIResponses() ? await openAIAvailability() : { providers: [] };
-      json(res, 200, { defaultProvider: usesOpenAIResponses() ? 'luna' : 'cerebras', providers: [...api.providers, { id: 'cerebras', name: 'Cerebras', model: agentModels.cerebras, configured: !!process.env.CEREBRAS_API_KEY, reasoning: ['none', 'low', 'medium', 'high'], fast: false, reason: process.env.CEREBRAS_API_KEY ? undefined : 'Cerebras API key not configured.' }], voice: { configured: !!process.env.OPENAI_API_KEY, name: 'GPT-Live', model: 'gpt-live-1' } }); return;
+      json(res, 200, await discoverLaunchCapabilities()); return;
     }
     if (url.pathname === '/api/activity/connectors' && req.method === 'GET') {
       alpha.access.identity(sessionToken(req)); json(res, 200, { linear: { configured: !!process.env.LINEAR_API_KEY }, youtube: { configured: !!process.env.YOUTUBE_API_KEY } }); return;
