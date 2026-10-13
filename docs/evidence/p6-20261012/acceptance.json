@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "phase": "P6",
+  "baseline": "2a7d47416ab47880f9100c5a65e50d3ad904a3f3",
+  "sourceObjects": {
+    "server/index.ts": "af9bf77ac42fa46a2d0506c431d1ef0fad4e3f6b",
+    "server/operations/writer-lock.ts": "c57df0fdabfe7b94f1958a1a7cac58a2a8c9b766",
+    "server/operations/data-backup.ts": "a42ab1691c826ef173fa47ed11c4fd166f7a6e33",
+    "scripts/data-backup.ts": "5e2215c31bc889047823042e589bd651fb58cd13",
+    "tests/data-backup.test.ts": "c9a47b21d40012959f16b092b2fd2253ce2b014d",
+    "tests/data-backup-browser.test.ts": "ec89128e8cb0642066cf60000989ae987dba20d4"
+  },
+  "checks": {
+    "unit": {
+      "passed": 350,
+      "failed": 0,
+      "skipped": 7,
+      "total": 357
+    },
+    "typecheck": "passed",
+    "productionBuild": "passed",
+    "cryptoFilesystemProcess": {
+      "passed": 5
+    },
+    "signedRestoreBrowser": {
+      "passed": 1
+    },
+    "operatorCLI": "keygen, backup, restore passed"
+  },
+  "signedStory": {
+    "runtime": "v24.19.0",
+    "browser": "156.0.8078.4",
+    "actualServer": true,
+    "secondWriterRejected": true,
+    "liveBackupRejected": true,
+    "nativePeerCorrection": true,
+    "revokedGrantStillDenied": true,
+    "assetBytesExact": true,
+    "roomSnapshotExact": true,
+    "reloadPassed": true,
+    "paidRequests": 0,
+    "backup": {
+      "files": 4,
+      "directories": 5,
+      "bytes": 3369,
+      "manifestSha256": "e945998224bf6803566764a3d037d10919e01633fc77f6f500d0aff98c259067",
+      "archiveSha256": "b3a6f42e1010a76002b9b36304945ecb7c111ae8d2a2514183bbfda1c2c9be8b"
+    },
+    "restore": {
+      "files": 4,
+      "directories": 5,
+      "bytes": 3369,
+      "manifestSha256": "e945998224bf6803566764a3d037d10919e01633fc77f6f500d0aff98c259067"
+    }
+  },
+  "genuineWorkRoundtrip": {
+    "version": 1,
+    "actualPaidWorkPreserved": true,
+    "filesExact": 44,
+    "completedJobs": 2,
+    "sameThreadAndWorkspacePreserved": true,
+    "providerCallsDuringBackup": 0,
+    "backup": {
+      "files": 44,
+      "directories": 32,
+      "bytes": 129685,
+      "manifestSha256": "31888520c6ea7bf318cb33aaf98865fc7798a7e97e370073df088c0e0ba2b72f",
+      "archiveSha256": "11adc930c74e7f979cd4102783ae9f2aea5f76de5f728fdafd95b7e65512337a"
+    },
+    "restore": {
+      "files": 44,
+      "directories": 32,
+      "bytes": 129685,
+      "manifestSha256": "31888520c6ea7bf318cb33aaf98865fc7798a7e97e370073df088c0e0ba2b72f"
+    }
+  }
+}
