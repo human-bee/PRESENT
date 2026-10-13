@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "phase": "P3",
+  "checkedBaseline": "770e106b741fedfb1734a95b0ab3f654fa6ff762",
+  "sourceObjects": {
+    "src/app.tsx": "d5d3dda2fe0f4fb7634ec06d6d0a46dc746aedea",
+    "src/onboarding/planning-review.ts": "e40bd959dfdb9d4686c768ac761dba0b9803b49e",
+    "tests/planning-review.test.ts": "5cdaf17be11e83bc3981e2db2f820d6bfe5f96de",
+    "tests/e2e/planning-review.spec.ts": "eea35b9feb3fe0d92ab2d77181cedff71c0e91d6",
+    "tests/planning-review-playwright.config.ts": "272cda4497a314a5f40ae46a8bf8f0f132d89b9b"
+  },
+  "checks": {
+    "unit": {
+      "pass": 317,
+      "fail": 0,
+      "skipped": 5,
+      "total": 322
+    },
+    "typecheck": "passed",
+    "build": "passed",
+    "focusedBrowser": {
+      "passed": 2,
+      "failed": 0
+    },
+    "scopedRecommendedLint": "passed"
+  },
+  "story": {
+    "at": "2026-10-13T06:43:21.986Z",
+    "roomId": "14c73617dcab89fe0970ad80e51b9e47",
+    "runtime": {
+      "node": "v24.19.0",
+      "browser": "156.0.8078.4"
+    },
+    "contexts": 2,
+    "physicalDevices": false,
+    "observationOptIn": true,
+    "observationContentFree": true,
+    "observations": {
+      "version": 1,
+      "joins": 1,
+      "returns": 0,
+      "artifacts": 1,
+      "corrections": 1,
+      "reportedDone": 1,
+      "firstArtifactMs": 0,
+      "firstCorrectionMs": 822,
+      "firstReportedDoneMs": 888
+    },
+    "afterReturn": {
+      "version": 1,
+      "joins": 2,
+      "returns": 1,
+      "artifacts": 1,
+      "corrections": 1,
+      "reportedDone": 1,
+      "firstArtifactMs": 0,
+      "firstCorrectionMs": 822,
+      "firstReportedDoneMs": 888
+    },
+    "canonicalObjects": 3,
+    "diskVerified": true,
+    "paidRequests": 0,
+    "timings": {
+      "samples": 1,
+      "clock": "host performance.now; includes browser automation/DOM polling, loopback only",
+      "starterVisibleMs": 2690.459583,
+      "peerCorrectionMs": 72.28316600000016
+    },
+    "limits": "A scripted provider-free journey proves controls, shared state and persistence. Done is participant-reported; return includes reload. No actual retention, usefulness or completed-work claim."
+  }
+}
