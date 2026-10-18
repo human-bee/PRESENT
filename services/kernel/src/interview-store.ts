@@ -87,7 +87,7 @@ export function saveInterviewDocument(record: InterviewRecord, doc: Y.Doc, actor
   const changed = briefFields.filter((field) => before.fields[field] !== snapshot.fields[field]);
   const field = changed.at(-1);
   if (Object.values(snapshot.fields).some((value) => value.length > 20000)
-    || snapshot.transcripts.length > 500 || snapshot.suggestions.length > 500 || snapshot.studio.assets.length > 40) {
+    || snapshot.transcripts.length > 1000 || snapshot.suggestions.length > 1000 || snapshot.studio.assets.length > 40) {
     throw new InterviewError(413, 'This brief has reached its document limit.');
   }
   const encoded = encodeState(doc);

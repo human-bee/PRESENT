@@ -20,7 +20,8 @@ export async function POST(request: Request, context: { params: Promise<{ briefI
       if (!process.env.OPENAI_API_KEY) throw new InterviewError(503, 'The listening agent is not connected to OpenAI yet.');
       const previous = record.processed[transcriptId];
       if (previous && (previous.complete || Date.now() - previous.startedAt < 30000)) return null;
-      if (Object.values(record.processed).filter((item) => Date.now() - item.startedAt < 60000).length >= 12) {
+      // Server VAD may split one spoken answer into several final utterances.
+      if (Object.values(record.processed).filter((item) => Date.now() - item.startedAt < 60000).length >= 45) {
         throw new InterviewError(429, 'The agent is catching up. Try this note again shortly.');
       }
       if (!consumeWindowedLimit('open-brief:model', 60, 60000).ok) throw new InterviewError(429, 'The listening agent is busy. Your note is saved; try again shortly.');
