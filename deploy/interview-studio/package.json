@@ -1,0 +1,33 @@
+{
+  "name": "present-interview-studio",
+  "version": "0.1.0",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "next build --webpack",
+    "start": "next start --hostname 0.0.0.0",
+    "listener": "tsx --tsconfig tsconfig.json src/lib/agents/interview-listener.ts start"
+  },
+  "dependencies": {
+    "@livekit/agents": "1.0.44",
+    "@livekit/agents-plugin-openai": "1.0.44",
+    "@livekit/components-react": "2.9.15",
+    "@livekit/rtc-node": "^0.13.18",
+    "@supabase/supabase-js": "2.78.0",
+    "dotenv": "^16.5.0",
+    "livekit-client": "2.15.14",
+    "livekit-server-sdk": "2.14.0",
+    "lucide-react": "0.552.0",
+    "next": "^16.1.6",
+    "openai": "^6.22.0",
+    "pdfjs-dist": "^5.7.284",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
+    "tsx": "4.20.6",
+    "undici": "^6.29.1",
+    "yjs": "^13.6.29",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": { "@types/node": "^24.10.0", "@types/react": "19.2.2", "@types/react-dom": "19.2.2", "typescript": "^5.9.3" }
+}

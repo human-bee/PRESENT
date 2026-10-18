@@ -8,7 +8,7 @@ export type RequestUserResult =
 function readBearerToken(req: NextRequest): string | null {
   const header = req.headers.get('authorization') || req.headers.get('Authorization');
   if (!header) return null;
-  const match = header.match(/^Bearer\\s+(.+)$/i);
+  const match = header.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || null;
 }
 
