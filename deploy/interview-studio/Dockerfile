@@ -20,6 +20,7 @@ COPY deploy/interview-studio/tsconfig.json deploy/interview-studio/next.config.t
 COPY deploy/interview-studio/layout.tsx ./src/app/layout.tsx
 COPY deploy/interview-studio/home.tsx ./src/app/page.tsx
 COPY deploy/interview-studio/bootstrap.mjs deploy/interview-studio/start.sh ./
+COPY deploy/interview-studio/smoke.ts ./smoke.ts
 RUN mkdir -p src/app/healthz && printf 'export function GET(){return Response.json({status:"ok",service:"interview-studio"})}' > src/app/healthz/route.ts
 RUN npm run build
 CMD ["sh", "start.sh"]
