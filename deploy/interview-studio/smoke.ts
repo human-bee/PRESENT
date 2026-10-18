@@ -8,14 +8,18 @@ import { synthesizeInterviewSpeech } from '@/lib/agents/interview-speech';
 import * as Y from 'yjs';
 
 const directory = path.join(process.cwd(), '.present');
-const sessionFile = path.join(directory, 'smoke-session.json');
-const reportFile = path.join(directory, 'smoke-result.json');
+const sessionFile = path.join(directory, 'smoke-v2-session.json');
+const reportFile = path.join(directory, 'smoke-v2-result.json');
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const origin = `http://127.0.0.1:${process.env.PORT || '8080'}`;
 type Session = { id: string; token: string; candidateToken: string };
 
 async function prepare() {
   if (fs.existsSync(sessionFile)) return;
+  if (process.env.INTERVIEW_SMOKE_SESSION) {
+    fs.writeFileSync(sessionFile, process.env.INTERVIEW_SMOKE_SESSION, { mode: 0o600 });
+    return;
+  }
   const { token, interview } = await createInterview({ name: 'Synthetic smoke test', title: 'Engineer', company: 'Private QA', roleContext: 'Fictional infrastructure test only.', research: '', sourceUrl: '' }, false);
   fs.writeFileSync(sessionFile, JSON.stringify({ id: interview.id, token, candidateToken: interview.candidateToken }), { mode: 0o600 });
 }
@@ -46,6 +50,7 @@ async function run() {
     if (!ready) throw new Error('Web did not start');
     checks.health = true;
     checks.publicPage = (await fetch(`${origin}/interviews`)).status === 200;
+    if (process.env.INTERVIEW_PUBLIC_ORIGIN) checks.httpsPage = (await fetch(`${process.env.INTERVIEW_PUBLIC_ORIGIN}/interviews`, { signal: AbortSignal.timeout(15000) })).status === 200;
     checks.unauthorizedDenied = (await fetch(`${origin}/api/interviews/${session.id}`)).status === 404;
     const candidate = await api('', session.candidateToken);
     checks.candidateHasNoRecruiterCapability = !('candidateToken' in candidate.interview);
@@ -120,10 +125,11 @@ async function run() {
     const snapshot = readBrief(doc); doc.destroy();
     checks.work = snapshot.fields.work;
     checks.caveatPreserved = /human|approv/i.test(snapshot.fields.work);
+    checks.numbersPreserved = /\b(eight|8)\b/i.test(snapshot.fields.work) && /\b(eighteen|18)\b/i.test(snapshot.fields.work) && /\b(three|3)\b/i.test(snapshot.fields.work);
     checks.acceptedPatches = final.pipeline.flatMap((trace: { patches: unknown[] }) => trace.patches);
     checks.decisionTimings = final.pipeline.map((trace: { state: string; savedAt: number; decisionStartedAt: number }) => ({ state: trace.state, decisionAndSaveMs: trace.savedAt - trace.decisionStartedAt }));
     checks.browserRendering = 'Not measured by this headless media test.';
-    if (transcripts.length < 2 || processingFailed || !snapshot.fields.work) throw new Error('Voice-to-document test incomplete');
+    if (transcripts.length < 2 || processingFailed || !checks.caveatPreserved || !checks.numbersPreserved || checks.httpsPage === false) throw new Error('Voice-to-document test incomplete');
     checks.passed = true;
   } catch (error) {
     checks.passed = false; checks.failedStage = stage;
