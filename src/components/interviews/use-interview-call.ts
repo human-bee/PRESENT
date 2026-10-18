@@ -80,7 +80,7 @@ export function useInterviewCall({ interview, token, sharedDocument, onTranscrip
         try {
           const data = JSON.parse(new TextDecoder().decode(payload));
           if (data.type !== 'live_transcription' || !data.is_final || !data.text?.trim()) return;
-          void receiveTranscript({ id: data.event_id, speaker: data.speaker, text: data.text,
+          void receiveTranscript({ id: data.event_id, speaker: data.speaker, role: data.role, text: data.text,
             timestamp: data.timestamp, example: false, origin: 'live', ...(data.audioTiming ? { audioTiming: data.audioTiming } : {}) }).catch((failure: Error) => receiveError(failure.message));
         } catch { receiveError('One transcript could not be read. The brief is still saved.'); }
       });

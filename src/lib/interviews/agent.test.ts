@@ -1,5 +1,5 @@
 /** @jest-environment node */
-import { bindCurrentUtteranceSuggestions, buildSuggestionInput, validateSuggestions } from './agent';
+import { bindCurrentUtteranceSuggestions, buildSuggestionInput, suggestFromTranscript, validateSuggestions } from './agent';
 import { createBriefDocument, exampleProfile } from './seed';
 import { readBrief } from './document';
 
@@ -7,11 +7,17 @@ const transcript = { id: 'candidate-1', text: 'I built the API. Ana owned the UI
 const suggestion = { field: 'work', text: 'Built the API; Ana owned the UI.', quote: 'I built the API. Ana owned the UI.', transcriptId: 'candidate-1' };
 
 describe('interview agent evidence contract', () => {
+  it('never asks the model to turn a recruiter question into candidate evidence', async () => {
+    const doc = createBriefDocument(exampleProfile, false);
+    await expect(suggestFromTranscript(readBrief(doc), { ...transcript, role: 'recruiter', speaker: 'Recruiter', text: 'What did you personally build?' })).resolves.toEqual([]);
+    doc.destroy();
+  });
   it('binds model output to the current server-owned utterance ID while validating its quote', () => {
     const current = { ...transcript, id: '8f0962aa-7f7e-47cc-b2a7-e2568aa73283' };
-    const { transcriptId: _id, ...addition } = suggestion;
+    const { transcriptId: _id, quote: _quote, ...addition } = suggestion;
     expect(bindCurrentUtteranceSuggestions({ suggestions: [addition] }, current)[0].transcriptId).toBe(current.id);
-    expect(bindCurrentUtteranceSuggestions({ suggestions: [{ ...addition, quote: 'An invented quote.' }] }, current)).toEqual([]);
+    expect(bindCurrentUtteranceSuggestions({ suggestions: [addition] }, current)[0].quote).toBe(current.text);
+    expect(() => bindCurrentUtteranceSuggestions({ suggestions: [{ ...addition, quote: 'An invented quote.' }] }, current)).toThrow();
     expect(() => bindCurrentUtteranceSuggestions({ suggestions: [suggestion] }, current)).toThrow();
   });
   it('keeps exact transcript evidence on a proposed addition', () => {

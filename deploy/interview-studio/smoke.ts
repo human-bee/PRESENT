@@ -1,15 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AudioFrame, AudioSource, LocalAudioTrack, ParticipantKind, Room, RoomEvent, TrackPublishOptions, TrackSource } from '@livekit/rtc-node';
-import { createInterview } from '@present/kernel/interview-store';
+import { createInterview, withInterviewStore } from '@present/kernel/interview-store';
 import { readBrief } from '@/lib/interviews/document';
 import { createInterviewOpenAI } from '@/lib/agents/interview-openai';
 import { synthesizeInterviewSpeech } from '@/lib/agents/interview-speech';
 import * as Y from 'yjs';
 
 const directory = path.join(process.cwd(), '.present');
-const sessionFile = path.join(directory, 'smoke-v3-session.json');
-const reportFile = path.join(directory, 'smoke-v3-result.json');
+const sessionFile = path.join(directory, 'smoke-v4-session.json');
+const reportFile = path.join(directory, 'smoke-v4-result.json');
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const origin = `http://127.0.0.1:${process.env.PORT || '8080'}`;
 type Session = { id: string; token: string; candidateToken: string };
@@ -17,6 +17,11 @@ type Session = { id: string; token: string; candidateToken: string };
 async function prepare() {
   if (fs.existsSync(sessionFile)) return;
   if (process.env.INTERVIEW_SMOKE_SESSION) {
+    const session = JSON.parse(process.env.INTERVIEW_SMOKE_SESSION) as Session;
+    const seed = JSON.parse(Buffer.from(process.env.INTERVIEW_BOOTSTRAP_STATE!, 'base64').toString('utf8'));
+    // Reset only the generated QA room before this new test; preserve the separate human-test room.
+    if (!seed[session.id]) throw new Error('QA seed is missing');
+    await withInterviewStore((records) => { records[session.id] = seed[session.id]; });
     fs.writeFileSync(sessionFile, process.env.INTERVIEW_SMOKE_SESSION, { mode: 0o600 });
     return;
   }
@@ -69,7 +74,7 @@ async function run() {
           if (data.type !== 'live_transcription' || !data.is_final || !data.text?.trim()) return;
           transcripts.push({ speaker: data.speaker, text: data.text, receivedAt: Date.now() });
           pending = pending.then(async () => {
-            await api('', session.token, { action: 'note', transcript: { id: data.event_id, speaker: data.speaker, text: data.text, timestamp: data.timestamp, origin: 'live', example: false } });
+            await api('', session.token, { action: 'note', transcript: { id: data.event_id, speaker: data.speaker, role: data.role, text: data.text, timestamp: data.timestamp, origin: 'live', example: false } });
             await api('/agent', session.token, { transcriptId: data.event_id, draft: true });
           }).catch(() => { processingFailed = true; });
         } catch { processingFailed = true; }
@@ -128,10 +133,11 @@ async function run() {
     checks.work = snapshot.fields.work;
     checks.caveatPreserved = /human|approv/i.test(snapshot.fields.work);
     checks.numbersPreserved = /\b(eight|8)\b/i.test(snapshot.fields.work) && /\b(eighteen|18)\b/i.test(snapshot.fields.work) && /\b(three|3)\b/i.test(snapshot.fields.work);
+    checks.noRecruiterQuestionsInWork = !/candidate was asked|what did you|what impact/i.test(snapshot.fields.work);
     checks.acceptedPatches = final.pipeline.flatMap((trace: { patches: unknown[] }) => trace.patches);
     checks.decisionTimings = final.pipeline.map((trace: { state: string; savedAt: number; decisionStartedAt: number }) => ({ state: trace.state, decisionAndSaveMs: trace.savedAt - trace.decisionStartedAt }));
     checks.browserRendering = 'Not measured by this headless media test.';
-    if (transcripts.length < 2 || processingFailed || !checks.twoSpeakerAttribution || !checks.caveatPreserved || !checks.numbersPreserved) throw new Error('Voice-to-document test incomplete');
+    if (transcripts.length < 2 || processingFailed || !checks.twoSpeakerAttribution || !checks.caveatPreserved || !checks.numbersPreserved || !checks.noRecruiterQuestionsInWork) throw new Error('Voice-to-document test incomplete');
     checks.passed = true;
   } catch (error) {
     checks.passed = false; checks.failedStage = stage;

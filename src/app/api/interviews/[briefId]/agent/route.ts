@@ -30,11 +30,12 @@ export async function POST(request: Request, context: { params: Promise<{ briefI
         const snapshot = readBrief(doc);
         const transcript = snapshot.transcripts.find((item) => item.id === transcriptId);
         if (!transcript) throw new InterviewError(404, 'Conversation note not found.');
+        if (transcript.role === 'recruiter' || transcript.speaker === 'Recruiter') return null;
         record.processed[transcriptId] = { startedAt: Date.now(), complete: false };
         const traceId = randomUUID();
         record.pipeline = [...(record.pipeline ?? []).slice(-39), {
           id: traceId, transcriptId, origin: transcript.origin === 'live' ? 'live' : transcript.origin === 'audio-replay' ? 'audio-test' : 'manual',
-          input: transcript.text, model: process.env.INTERVIEW_AGENT_MODEL || 'gpt-4.1-mini', state: 'running', receivedAt: Date.now(),
+          input: transcript.text, model: process.env.INTERVIEW_AGENT_MODEL || 'gpt-4.1', state: 'running', receivedAt: Date.now(),
           speechEndedAt: transcript.audioTiming?.speechEndedAt, transcribedAt: transcript.audioTiming?.transcribedAt,
           speechGeneration: transcript.audioTiming?.generation,
           decisionStartedAt: Date.now(), patches: [], widgetTargets: [],

@@ -41,6 +41,7 @@ export type BriefSource = z.infer<typeof briefSourceSchema>;
 export const interviewTranscriptSchema = z.object({
   id: z.string().min(1).max(160),
   speaker: z.string().min(1).max(120),
+  role: interviewRoleSchema.optional(),
   text: z.string().trim().min(1).max(4000),
   timestamp: z.number().finite().nonnegative(),
   example: z.boolean().default(false),

@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 type TranscriptionPayload = {
   type: 'live_transcription'; event_id: string; text: string; speaker: string;
   timestamp: number; is_final: true; server_generated: true;
+  role: 'candidate' | 'recruiter';
 };
 type Options = { room: Room; onTranscript: (payload: TranscriptionPayload) => void };
 
@@ -58,6 +59,7 @@ export class InterviewTranscriber {
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (event) => {
       if (!event.isFinal || !event.transcript.trim() || !this.permitted() || this.sessions.get(participant.identity) !== session) return;
       this.options.onTranscript({ type: 'live_transcription', event_id: randomUUID(), text: event.transcript.trim(),
+        role: participant.identity.startsWith('candidate-') ? 'candidate' : 'recruiter',
         speaker: participant.name || participant.identity, timestamp: Date.now(), is_final: true, server_generated: true });
     });
     session.on(voice.AgentSessionEventTypes.Error, () => console.warn('[interview-listener] A transcription session failed.'));
