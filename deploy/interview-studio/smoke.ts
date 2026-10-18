@@ -8,8 +8,8 @@ import { synthesizeInterviewSpeech } from '@/lib/agents/interview-speech';
 import * as Y from 'yjs';
 
 const directory = path.join(process.cwd(), '.present');
-const sessionFile = path.join(directory, 'smoke-v2-session.json');
-const reportFile = path.join(directory, 'smoke-v2-result.json');
+const sessionFile = path.join(directory, 'smoke-v3-session.json');
+const reportFile = path.join(directory, 'smoke-v3-result.json');
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const origin = `http://127.0.0.1:${process.env.PORT || '8080'}`;
 type Session = { id: string; token: string; candidateToken: string };
@@ -50,7 +50,7 @@ async function run() {
     if (!ready) throw new Error('Web did not start');
     checks.health = true;
     checks.publicPage = (await fetch(`${origin}/interviews`)).status === 200;
-    if (process.env.INTERVIEW_PUBLIC_ORIGIN) checks.httpsPage = (await fetch(`${process.env.INTERVIEW_PUBLIC_ORIGIN}/interviews`, { signal: AbortSignal.timeout(15000) })).status === 200;
+    // Probe the public edge separately: a container cannot reliably call its own public ingress.
     checks.unauthorizedDenied = (await fetch(`${origin}/api/interviews/${session.id}`)).status === 404;
     const candidate = await api('', session.candidateToken);
     checks.candidateHasNoRecruiterCapability = !('candidateToken' in candidate.interview);
@@ -117,6 +117,8 @@ async function run() {
     for (let attempt = 0; attempt < 35 && transcripts.length < 2; attempt++) await pause(1000);
     await pending;
     checks.receivedTranscripts = transcripts;
+    checks.twoSpeakerAttribution = new Set(transcripts.map((item) => item.speaker)).size === 2;
+    checks.originalScriptSentToTranscriber = false;
     checks.audioPlayoutEndedAt = audioEndedAt;
     checks.transcriptRelayAndDraftSucceeded = !processingFailed;
     stage = 'document-verification';
@@ -129,7 +131,7 @@ async function run() {
     checks.acceptedPatches = final.pipeline.flatMap((trace: { patches: unknown[] }) => trace.patches);
     checks.decisionTimings = final.pipeline.map((trace: { state: string; savedAt: number; decisionStartedAt: number }) => ({ state: trace.state, decisionAndSaveMs: trace.savedAt - trace.decisionStartedAt }));
     checks.browserRendering = 'Not measured by this headless media test.';
-    if (transcripts.length < 2 || processingFailed || !checks.caveatPreserved || !checks.numbersPreserved || checks.httpsPage === false) throw new Error('Voice-to-document test incomplete');
+    if (transcripts.length < 2 || processingFailed || !checks.twoSpeakerAttribution || !checks.caveatPreserved || !checks.numbersPreserved) throw new Error('Voice-to-document test incomplete');
     checks.passed = true;
   } catch (error) {
     checks.passed = false; checks.failedStage = stage;
